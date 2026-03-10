@@ -1,0 +1,13 @@
+name = "samrumantimer"
+main = ".open-next/worker.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "samrumantimer-db"
+database_id = "b892f151-04e9-40f9-bd2a-214fd685000a"
