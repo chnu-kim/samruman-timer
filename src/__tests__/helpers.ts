@@ -72,6 +72,16 @@ export function createPostRequestRaw(
   });
 }
 
+export function createDeleteRequest(
+  url: string,
+  headers?: Record<string, string>
+): NextRequest {
+  return new NextRequest(new URL(url, "http://localhost:3000"), {
+    method: "DELETE",
+    headers: headers ? new Headers(headers) : undefined,
+  });
+}
+
 // ─── Response Parser ───
 
 export async function parseJson(response: Response) {

@@ -46,7 +46,7 @@ export const POST = withErrorHandler(async (
       owner_user_id: string;
     }>();
 
-  if (!row) {
+  if (!row || row.status === "DELETED") {
     return NextResponse.json(
       { error: { code: "NOT_FOUND", message: "타이머를 찾을 수 없습니다" } },
       { status: 404 }

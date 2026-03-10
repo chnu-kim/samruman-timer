@@ -8,7 +8,7 @@ export const GET = withErrorHandler(async () => {
   const rows = await db
     .prepare(
       `SELECT p.id, p.name, p.description, u.nickname AS owner_nickname,
-              (SELECT COUNT(*) FROM timers t WHERE t.project_id = p.id) AS timer_count,
+              (SELECT COUNT(*) FROM timers t WHERE t.project_id = p.id AND t.status != 'DELETED') AS timer_count,
               p.created_at
        FROM projects p
        JOIN users u ON u.id = p.owner_user_id

@@ -27,7 +27,7 @@ export const GET = withErrorHandler(async (
     .prepare(
       `SELECT id, title, description, base_remaining_seconds, last_calculated_at, status, scheduled_start_at, created_at
        FROM timers
-       WHERE project_id = ?
+       WHERE project_id = ? AND status != 'DELETED'
        ORDER BY created_at DESC`
     )
     .bind(projectId)
@@ -116,7 +116,7 @@ export const POST = withErrorHandler(async (
 
   // 프로젝트당 타이머 1개 제약
   const existing = await db
-    .prepare("SELECT COUNT(*) as cnt FROM timers WHERE project_id = ?")
+    .prepare("SELECT COUNT(*) as cnt FROM timers WHERE project_id = ? AND status != 'DELETED'")
     .bind(projectId)
     .first<{ cnt: number }>();
 

@@ -42,7 +42,7 @@ CREATE TABLE timers (
   description TEXT,
   base_remaining_seconds INTEGER NOT NULL DEFAULT 0,
   last_calculated_at TEXT NOT NULL DEFAULT (datetime('now')),
-  status TEXT NOT NULL DEFAULT 'RUNNING' CHECK (status IN ('RUNNING', 'EXPIRED', 'SCHEDULED')),
+  status TEXT NOT NULL DEFAULT 'RUNNING' CHECK (status IN ('RUNNING', 'EXPIRED', 'SCHEDULED', 'DELETED')),
   scheduled_start_at TEXT,
   created_by TEXT NOT NULL REFERENCES users(id),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -56,7 +56,7 @@ CREATE TABLE timers (
 CREATE TABLE timer_logs (
   id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
   timer_id TEXT NOT NULL REFERENCES timers(id),
-  action_type TEXT NOT NULL CHECK (action_type IN ('CREATE', 'ADD', 'SUBTRACT', 'EXPIRE', 'REOPEN', 'ACTIVATE')),
+  action_type TEXT NOT NULL CHECK (action_type IN ('CREATE', 'ADD', 'SUBTRACT', 'EXPIRE', 'REOPEN', 'ACTIVATE', 'DELETE')),
   actor_name TEXT NOT NULL,
   actor_user_id TEXT REFERENCES users(id),
   delta_seconds INTEGER NOT NULL DEFAULT 0,
@@ -82,6 +82,7 @@ CREATE INDEX idx_projects_owner ON projects(owner_user_id);
 migrations/
   0001_initial.sql    — 초기 스키마 (4개 테이블 + 인덱스)
   0002_scheduled_start.sql — 예약 시작 기능 (scheduled_start_at, SCHEDULED 상태, ACTIVATE 액션)
+  0003_soft_delete.sql     — 소프트 삭제 (DELETED 상태, DELETE 액션)
 ```
 
 ### 규칙

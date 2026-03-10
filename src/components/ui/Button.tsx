@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "secondary" | "ghost";
+  variant?: "primary" | "secondary" | "ghost" | "danger";
   size?: "sm" | "md" | "lg";
 }
 
@@ -12,6 +12,8 @@ const variantStyles: Record<NonNullable<ButtonProps["variant"]>, string> = {
     "border border-foreground/20 bg-transparent hover:bg-foreground/5",
   ghost:
     "bg-transparent hover:bg-foreground/10",
+  danger:
+    "bg-red-600 text-white hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800",
 };
 
 const sizeStyles: Record<NonNullable<ButtonProps["size"]>, string> = {

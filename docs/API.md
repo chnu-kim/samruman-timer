@@ -242,6 +242,28 @@ CHZZK OAuth 콜백을 처리한다.
 - 조회 시 예약 활성화 감지 → 만료 감지 로직 체이닝 실행 (TIMER-LOGIC.md 참조)
 - `SCHEDULED` 상태: `remainingSeconds`는 `baseRemainingSeconds` (고정값)
 
+### DELETE /api/timers/[id]
+
+타이머를 소프트 삭제한다 (status를 DELETED로 변경).
+
+- **인증**: 필요 (프로젝트 소유자만)
+- **동작**:
+  - 타이머 status를 `DELETED`로 업데이트
+  - `DELETE` 액션 로그 기록 (before_seconds에 삭제 시점 잔여 시간, after_seconds=0)
+  - 삭제된 타이머는 목록/조회에서 필터링됨
+- **에러**:
+  - `401`: 인증 없음
+  - `404`: 타이머 없음 또는 이미 삭제됨
+  - `403`: 프로젝트 소유자 아님
+- **응답**: `200 OK`
+```json
+{
+  "data": {
+    "id": "timer_id"
+  }
+}
+```
+
 ### POST /api/timers/[id]/modify
 
 타이머 시간을 증감한다.

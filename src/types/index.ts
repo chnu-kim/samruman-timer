@@ -1,7 +1,7 @@
 // ─── 유니온/enum 타입 ───
 
-export type TimerStatus = "RUNNING" | "EXPIRED" | "SCHEDULED";
-export type ActionType = "CREATE" | "ADD" | "SUBTRACT" | "EXPIRE" | "REOPEN" | "ACTIVATE";
+export type TimerStatus = "RUNNING" | "EXPIRED" | "SCHEDULED" | "DELETED";
+export type ActionType = "CREATE" | "ADD" | "SUBTRACT" | "EXPIRE" | "REOPEN" | "ACTIVATE" | "DELETE";
 export type ModifyAction = "ADD" | "SUBTRACT";
 export type GraphMode = "remaining" | "cumulative" | "frequency";
 

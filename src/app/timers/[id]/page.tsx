@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { CountdownDisplay } from "@/components/timer/CountdownDisplay";
 import { TimerControls } from "@/components/timer/TimerControls";
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
 import { Pagination } from "@/components/ui/Pagination";
 import { cn } from "@/lib/utils";
 import { GraphModeSelector } from "@/components/graph/GraphModeSelector";
@@ -32,6 +31,7 @@ const ACTION_TYPE_LABELS: Record<ActionType, string> = {
   EXPIRE: "만료",
   REOPEN: "재시작",
   ACTIVATE: "활성화",
+  DELETE: "삭제",
 };
 
 const ACTION_TYPE_BADGE_VARIANT: Record<ActionType, "create" | "add" | "subtract" | "expire" | "reopen" | "activate"> = {
@@ -41,6 +41,7 @@ const ACTION_TYPE_BADGE_VARIANT: Record<ActionType, "create" | "add" | "subtract
   EXPIRE: "expire",
   REOPEN: "reopen",
   ACTIVATE: "activate",
+  DELETE: "expire",
 };
 
 const FILTER_ACTIONS: ActionType[] = ["CREATE", "ADD", "SUBTRACT", "EXPIRE", "REOPEN", "ACTIVATE"];
@@ -73,7 +74,9 @@ function formatDateTime(iso: string): string {
 
 export default function TimerDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const timerId = params.id;
+  const [deleting, setDeleting] = useState(false);
 
   const [timer, setTimer] = useState<TimerDetailResponse | null>(null);
   const [user, setUser] = useState<MeResponse | null>(null);
@@ -228,9 +231,42 @@ export default function TimerDetailPage() {
               {timer.createdBy.nickname} · {formatDateTime(timer.createdAt)}
             </p>
           </div>
-          <Badge variant={statusBadgeVariant} className="shrink-0 mt-1">
-            {statusLabel}
-          </Badge>
+          <div className="flex items-center gap-2 shrink-0 mt-1">
+            <Badge variant={statusBadgeVariant}>
+              {statusLabel}
+            </Badge>
+            {isOwner && (
+              <button
+                disabled={deleting}
+                aria-label="타이머 삭제"
+                title="타이머 삭제"
+                onClick={async () => {
+                  if (!window.confirm("정말로 이 타이머를 삭제하시겠습니까?")) return;
+                  setDeleting(true);
+                  try {
+                    const res = await fetch(`/api/timers/${timerId}`, { method: "DELETE" });
+                    if (res.ok) {
+                      router.push(`/projects/${timer.projectId}`);
+                    } else {
+                      setDeleting(false);
+                    }
+                  } catch {
+                    setDeleting(false);
+                  }
+                }}
+                className={cn(
+                  "rounded-lg p-1.5 transition-colors",
+                  deleting
+                    ? "opacity-50 cursor-not-allowed"
+                    : "text-foreground/30 hover:text-red-500 hover:bg-red-500/10"
+                )}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM8 9h8v10H8V9zm7.5-5l-1-1h-5l-1 1H5v2h14V4h-3.5z" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* 카운트다운 */}

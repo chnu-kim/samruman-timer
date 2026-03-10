@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDB, withErrorHandler } from "@/lib/db";
+import { getDB, generateId, nowISO, withErrorHandler } from "@/lib/db";
 import { calculateRemaining, detectExpiry, detectScheduledActivation } from "@/lib/timer";
 import type { Timer } from "@/types";
 
@@ -38,7 +38,7 @@ export const GET = withErrorHandler(async (
       creator_nickname: string;
     }>();
 
-  if (!row) {
+  if (!row || row.status === "DELETED") {
     return NextResponse.json(
       { error: { code: "NOT_FOUND", message: "타이머를 찾을 수 없습니다" } },
       { status: 404 }
@@ -86,5 +86,84 @@ export const GET = withErrorHandler(async (
       createdAt: checked.createdAt,
       updatedAt: checked.updatedAt,
     },
+  });
+});
+
+export const DELETE = withErrorHandler(async (
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) => {
+  const { id } = await params;
+  const userId = request.headers.get("x-user-id");
+  if (!userId) {
+    return NextResponse.json(
+      { error: { code: "UNAUTHORIZED", message: "인증이 필요합니다" } },
+      { status: 401 }
+    );
+  }
+
+  const db = await getDB();
+
+  const row = await db
+    .prepare(
+      `SELECT t.id, t.base_remaining_seconds, t.last_calculated_at, t.status,
+              p.owner_user_id
+       FROM timers t
+       JOIN projects p ON p.id = t.project_id
+       WHERE t.id = ?`
+    )
+    .bind(id)
+    .first<{
+      id: string;
+      base_remaining_seconds: number;
+      last_calculated_at: string;
+      status: string;
+      owner_user_id: string;
+    }>();
+
+  if (!row || row.status === "DELETED") {
+    return NextResponse.json(
+      { error: { code: "NOT_FOUND", message: "타이머를 찾을 수 없습니다" } },
+      { status: 404 }
+    );
+  }
+  if (row.owner_user_id !== userId) {
+    return NextResponse.json(
+      { error: { code: "FORBIDDEN", message: "프로젝트 소유자만 타이머를 삭제할 수 있습니다" } },
+      { status: 403 }
+    );
+  }
+
+  const logId = generateId();
+  const now = nowISO();
+  const rawNickname = request.headers.get("x-user-nickname") ?? "unknown";
+  let nickname: string;
+  try {
+    nickname = decodeURIComponent(rawNickname);
+  } catch {
+    nickname = rawNickname;
+  }
+
+  const beforeSeconds = row.status === "RUNNING"
+    ? calculateRemaining(row.base_remaining_seconds, row.last_calculated_at)
+    : row.status === "SCHEDULED"
+    ? row.base_remaining_seconds
+    : 0;
+
+  await db.batch([
+    db
+      .prepare(
+        "UPDATE timers SET status = 'DELETED', updated_at = ? WHERE id = ?"
+      )
+      .bind(now, id),
+    db
+      .prepare(
+        "INSERT INTO timer_logs (id, timer_id, action_type, actor_name, actor_user_id, delta_seconds, before_seconds, after_seconds, created_at) VALUES (?, ?, 'DELETE', ?, ?, 0, ?, 0, ?)"
+      )
+      .bind(logId, id, nickname, userId, beforeSeconds, now),
+  ]);
+
+  return NextResponse.json({
+    data: { id },
   });
 });
