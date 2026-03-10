@@ -1,36 +1,32 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 삼루먼 타이머
 
-## Getting Started
+치지직 스트리머용 방송 연장 카운트다운 타이머.
 
-First, run the development server:
+시청자 후원에 따라 시간을 추가/차감하고, 변경 이력을 로그와 그래프로 시각화한다. OBS 브라우저 소스로 방송 화면에 표시 가능.
+
+## 시작하기
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+cp .env.example .env
+pnpm db:migrate:local
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 스크립트
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+pnpm dev              # 개발 서버
+pnpm test             # 테스트
+pnpm run deploy       # Cloudflare 배포
+pnpm db:migrate       # DB 마이그레이션 (원격)
+pnpm db:migrate:local # DB 마이그레이션 (로컬)
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 기술 스택
 
-## Learn More
+Next.js 16 · React 19 · TypeScript · Tailwind CSS v4 · Recharts · Cloudflare D1 · CHZZK OAuth
 
-To learn more about Next.js, take a look at the following resources:
+## 문서
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+설계 문서는 [`docs/`](docs/) 참고.
