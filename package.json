@@ -21,7 +21,8 @@
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "recharts": "^3.8.0"
+    "recharts": "^3.8.0",
+    "wrangler": "^4.71.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260310.1",
