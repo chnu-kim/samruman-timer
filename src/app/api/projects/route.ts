@@ -12,6 +12,7 @@ export const GET = withErrorHandler(async () => {
               p.created_at
        FROM projects p
        JOIN users u ON u.id = p.owner_user_id
+       WHERE p.status != 'DELETED'
        ORDER BY p.created_at DESC`
     )
     .all<{

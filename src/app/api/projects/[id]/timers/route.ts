@@ -12,11 +12,11 @@ export const GET = withErrorHandler(async (
 
   // 프로젝트 존재 확인
   const project = await db
-    .prepare("SELECT id FROM projects WHERE id = ?")
+    .prepare("SELECT id, status FROM projects WHERE id = ?")
     .bind(projectId)
-    .first();
+    .first<{ id: string; status: string }>();
 
-  if (!project) {
+  if (!project || project.status === "DELETED") {
     return NextResponse.json(
       { error: { code: "NOT_FOUND", message: "프로젝트를 찾을 수 없습니다" } },
       { status: 404 }
@@ -97,11 +97,11 @@ export const POST = withErrorHandler(async (
   // 프로젝트 소유자 확인
   const db = await getDB();
   const project = await db
-    .prepare("SELECT owner_user_id FROM projects WHERE id = ?")
+    .prepare("SELECT owner_user_id, status FROM projects WHERE id = ?")
     .bind(projectId)
-    .first<{ owner_user_id: string }>();
+    .first<{ owner_user_id: string; status: string }>();
 
-  if (!project) {
+  if (!project || project.status === "DELETED") {
     return NextResponse.json(
       { error: { code: "NOT_FOUND", message: "프로젝트를 찾을 수 없습니다" } },
       { status: 404 }

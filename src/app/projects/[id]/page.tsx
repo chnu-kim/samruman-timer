@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { TimerCard } from "@/components/timer/TimerCard";
 import { CreateTimerForm } from "@/components/timer/CreateTimerForm";
 import { Button } from "@/components/ui/Button";
@@ -14,6 +14,7 @@ import type {
 
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const projectId = params.id;
 
   const [project, setProject] = useState<ProjectDetailResponse | null>(null);
@@ -21,6 +22,7 @@ export default function ProjectDetailPage() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<MeResponse | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchTimers = useCallback(async () => {
     try {
@@ -95,13 +97,47 @@ export default function ProjectDetailPage() {
   return (
     <section>
       <div>
-        <h1 className="text-2xl font-bold">{project.name}</h1>
-        {project.description && (
-          <p className="mt-1 text-foreground/60">{project.description}</p>
-        )}
-        <p className="mt-1 text-sm text-foreground/40">
-          {project.owner.nickname}
-        </p>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-2xl font-bold">{project.name}</h1>
+            {project.description && (
+              <p className="mt-1 text-foreground/60">{project.description}</p>
+            )}
+            <p className="mt-1 text-sm text-foreground/40">
+              {project.owner.nickname}
+            </p>
+          </div>
+          {isOwner && (
+            <button
+              disabled={deleting}
+              aria-label="프로젝트 삭제"
+              title="프로젝트 삭제"
+              onClick={async () => {
+                if (!window.confirm("정말로 이 프로젝트를 삭제하시겠습니까?\n하위 타이머도 함께 삭제됩니다.")) return;
+                setDeleting(true);
+                try {
+                  const res = await fetch(`/api/projects/${projectId}`, { method: "DELETE" });
+                  if (res.ok) {
+                    router.push("/projects");
+                  } else {
+                    setDeleting(false);
+                  }
+                } catch {
+                  setDeleting(false);
+                }
+              }}
+              className={
+                deleting
+                  ? "rounded-lg p-1.5 opacity-50 cursor-not-allowed shrink-0 mt-1"
+                  : "rounded-lg p-1.5 text-foreground/30 hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0 mt-1"
+              }
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM8 9h8v10H8V9zm7.5-5l-1-1h-5l-1 1H5v2h14V4h-3.5z" />
+              </svg>
+            </button>
+          )}
+        </div>
         {isOwner && timers.length === 0 && (
           <Button
             variant="secondary"

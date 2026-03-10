@@ -27,6 +27,7 @@ CREATE TABLE projects (
   name TEXT NOT NULL,
   description TEXT,
   owner_user_id TEXT NOT NULL REFERENCES users(id),
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'DELETED')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -83,6 +84,7 @@ migrations/
   0001_initial.sql    — 초기 스키마 (4개 테이블 + 인덱스)
   0002_scheduled_start.sql — 예약 시작 기능 (scheduled_start_at, SCHEDULED 상태, ACTIVATE 액션)
   0003_soft_delete.sql     — 소프트 삭제 (DELETED 상태, DELETE 액션)
+  0004_project_soft_delete.sql — 프로젝트 소프트 삭제 (status 컬럼 추가)
 ```
 
 ### 규칙

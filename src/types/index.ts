@@ -1,5 +1,6 @@
 // ─── 유니온/enum 타입 ───
 
+export type ProjectStatus = "ACTIVE" | "DELETED";
 export type TimerStatus = "RUNNING" | "EXPIRED" | "SCHEDULED" | "DELETED";
 export type ActionType = "CREATE" | "ADD" | "SUBTRACT" | "EXPIRE" | "REOPEN" | "ACTIVATE" | "DELETE";
 export type ModifyAction = "ADD" | "SUBTRACT";
@@ -21,6 +22,7 @@ export interface Project {
   name: string;
   description: string | null;
   ownerUserId: string;
+  status: ProjectStatus;
   createdAt: string;
   updatedAt: string;
 }
