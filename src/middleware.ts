@@ -9,6 +9,8 @@ const PROTECTED_ROUTES: { method: string; pattern: RegExp }[] = [
   { method: "POST", pattern: /^\/api\/projects\/[^/]+\/timers$/ },
   { method: "POST", pattern: /^\/api\/timers\/[^/]+\/modify$/ },
   { method: "POST", pattern: /^\/api\/auth\/logout$/ },
+  { method: "DELETE", pattern: /^\/api\/projects\/[^/]+$/ },
+  { method: "DELETE", pattern: /^\/api\/timers\/[^/]+$/ },
 ];
 
 export async function middleware(request: NextRequest) {
