@@ -24,20 +24,21 @@ export function ProjectCard({ project, className }: ProjectCardProps) {
     <Link href={`/projects/${project.id}`} className="flex">
       <article
         className={cn(
-          "flex w-full flex-col border border-foreground/20 rounded-xl p-5 transition-colors hover:border-foreground/40",
+          "flex w-full flex-col border border-border rounded-xl p-5 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5",
           className,
         )}
+        style={{ animation: "fade-in 0.2s ease-out forwards" }}
       >
         {/* 상단: 제목 + 설명 (가변 영역) */}
         <div className="flex-1 min-h-0">
           <h3 className="font-bold">{project.name}</h3>
-          <p className="mt-1 text-sm text-foreground/60 line-clamp-2 min-h-[2.5rem]">
+          <p className="mt-1 text-sm text-muted-foreground line-clamp-2 min-h-[2.5rem]">
             {project.description || "\u00A0"}
           </p>
         </div>
 
         {/* 하단: 메타 정보 (고정 영역) */}
-        <div className="mt-3 flex items-center gap-3 text-xs text-foreground/40">
+        <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
           <span>{project.ownerNickname}</span>
           <span>{formatDate(project.createdAt)}</span>
         </div>

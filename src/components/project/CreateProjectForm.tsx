@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { useToast } from "@/components/ui/Toast";
 import type { ApiSuccessResponse, ApiErrorResponse, ProjectCreateResponse } from "@/types";
 
 interface CreateProjectFormProps {
@@ -12,6 +13,7 @@ interface CreateProjectFormProps {
 
 export function CreateProjectForm({ onSuccess }: CreateProjectFormProps) {
   const router = useRouter();
+  const { toast } = useToast();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
@@ -36,6 +38,7 @@ export function CreateProjectForm({ onSuccess }: CreateProjectFormProps) {
       }
 
       const json = (await res.json()) as ApiSuccessResponse<ProjectCreateResponse>;
+      toast("프로젝트가 생성되었습니다.", "success");
       if (onSuccess) {
         onSuccess(json.data.id);
       } else {
@@ -65,7 +68,7 @@ export function CreateProjectForm({ onSuccess }: CreateProjectFormProps) {
         maxLength={500}
         placeholder="프로젝트 설명 (선택)"
       />
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>}
       <Button type="submit" disabled={loading || !name.trim()}>
         {loading ? "생성 중..." : "프로젝트 만들기"}
       </Button>
