@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { logger } from "@/lib/logger";
 
 export async function getDB(): Promise<D1Database> {
   const { env } = await getCloudflareContext();
@@ -25,7 +26,12 @@ export function withErrorHandler<Args extends unknown[]>(
     try {
       return await handler(...args);
     } catch (error) {
-      console.error("[API Error]", error);
+      const request = args[0];
+      logger.error("Unhandled API error", {
+        requestId: request instanceof NextRequest ? request.headers.get("x-request-id") ?? undefined : undefined,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       return NextResponse.json(
         { error: { code: "INTERNAL_ERROR", message: "서버 오류가 발생했습니다" } },
         { status: 500 }

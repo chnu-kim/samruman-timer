@@ -40,6 +40,7 @@ export async function exchangeCode(
       code,
       state,
     }),
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!res.ok) {
@@ -55,7 +56,7 @@ export async function exchangeCode(
 
   if (!data.accessToken) {
     throw new Error(
-      `CHZZK token response missing accessToken: ${JSON.stringify(json)}`
+      `CHZZK token response missing accessToken`
     );
   }
 
@@ -70,6 +71,7 @@ export async function getUserInfo(
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!res.ok) {
@@ -83,7 +85,7 @@ export async function getUserInfo(
 
   if (!data.id && !data.channelId) {
     throw new Error(
-      `CHZZK user response missing id: ${JSON.stringify(json)}`
+      `CHZZK user response missing id`
     );
   }
 

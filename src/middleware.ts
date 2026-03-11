@@ -11,6 +11,10 @@ const PROTECTED_ROUTES: { method: string; pattern: RegExp }[] = [
   { method: "POST", pattern: /^\/api\/auth\/logout$/ },
   { method: "DELETE", pattern: /^\/api\/projects\/[^/]+$/ },
   { method: "DELETE", pattern: /^\/api\/timers\/[^/]+$/ },
+  { method: "PATCH", pattern: /^\/api\/projects\/[^/]+$/ },
+  { method: "PATCH", pattern: /^\/api\/timers\/[^/]+$/ },
+  { method: "GET", pattern: /^\/api\/projects\/mine$/ },
+  { method: "GET", pattern: /^\/api\/projects\/others$/ },
 ];
 
 export async function middleware(request: NextRequest) {
@@ -22,6 +26,10 @@ export async function middleware(request: NextRequest) {
   for (const h of INTERNAL_HEADERS) {
     headers.delete(h);
   }
+
+  // 요청 추적용 requestId 생성
+  const requestId = crypto.randomUUID();
+  headers.set("x-request-id", requestId);
 
   const isProtected = PROTECTED_ROUTES.some(
     (route) => route.method === method && route.pattern.test(pathname)

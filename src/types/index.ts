@@ -132,6 +132,11 @@ export interface ProjectListItem {
   createdAt: string;
 }
 
+export interface ProjectListResponse {
+  projects: ProjectListItem[];
+  pagination: Pagination;
+}
+
 export interface ProjectCreateResponse {
   id: string;
   name: string;
@@ -186,6 +191,7 @@ export interface TimerDetailResponse {
     id: string;
     nickname: string;
   };
+  projectOwnerId: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -239,6 +245,45 @@ export type GraphResponse =
   | { mode: "remaining"; points: RemainingGraphPoint[] }
   | { mode: "cumulative"; points: CumulativeGraphPoint[] }
   | { mode: "frequency"; buckets: FrequencyGraphBucket[] };
+
+// ─── API 응답 타입: Stats ───
+
+export interface StatsSummary {
+  totalAddedSeconds: number;
+  totalSubtractedSeconds: number;
+  netAddedSeconds: number;
+  totalEvents: number;
+  uniqueDonors: number;
+  peakHour: number | null;
+}
+
+export interface TopDonor {
+  actorName: string;
+  totalSeconds: number;
+  eventCount: number;
+}
+
+export interface HourlyDistribution {
+  hour: number;
+  eventCount: number;
+  adds: number;
+  subtracts: number;
+  addedSeconds: number;
+}
+
+export interface DailyActivity {
+  date: string;
+  eventCount: number;
+  addedSeconds: number;
+  subtractedSeconds: number;
+}
+
+export interface ProjectStatsResponse {
+  summary: StatsSummary;
+  topDonors: TopDonor[];
+  hourlyDistribution: HourlyDistribution[];
+  dailyActivity: DailyActivity[];
+}
 
 // ─── Auth 타입 ───
 

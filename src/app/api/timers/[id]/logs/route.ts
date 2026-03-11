@@ -31,12 +31,12 @@ export const GET = withErrorHandler(async (
   let whereClause = "WHERE timer_id = ?";
   const binds: (string | number)[] = [timerId];
 
-  const VALID_ACTIONS = new Set(["CREATE", "ADD", "SUBTRACT", "EXPIRE", "REOPEN"]);
+  const VALID_ACTIONS = new Set(["CREATE", "ADD", "SUBTRACT", "EXPIRE", "REOPEN", "ACTIVATE", "DELETE"]);
   if (actionTypeFilter) {
     const types = actionTypeFilter.split(",").map((t) => t.trim());
     if (types.some((t) => !VALID_ACTIONS.has(t))) {
       return NextResponse.json(
-        { error: { code: "BAD_REQUEST", message: "유효하지 않은 actionType입니다. 허용: CREATE, ADD, SUBTRACT, EXPIRE, REOPEN" } },
+        { error: { code: "BAD_REQUEST", message: "유효하지 않은 actionType입니다. 허용: CREATE, ADD, SUBTRACT, EXPIRE, REOPEN, ACTIVATE, DELETE" } },
         { status: 400 }
       );
     }

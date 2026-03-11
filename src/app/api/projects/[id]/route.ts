@@ -53,6 +53,120 @@ export const GET = withErrorHandler(async (
   });
 });
 
+export const PATCH = withErrorHandler(async (
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) => {
+  const { id } = await params;
+  const userId = request.headers.get("x-user-id");
+  if (!userId) {
+    return NextResponse.json(
+      { error: { code: "UNAUTHORIZED", message: "인증이 필요합니다" } },
+      { status: 401 }
+    );
+  }
+
+  const db = await getDB();
+
+  const row = await db
+    .prepare("SELECT id, owner_user_id, status FROM projects WHERE id = ?")
+    .bind(id)
+    .first<{ id: string; owner_user_id: string; status: string }>();
+
+  if (!row || row.status === "DELETED") {
+    return NextResponse.json(
+      { error: { code: "NOT_FOUND", message: "프로젝트를 찾을 수 없습니다" } },
+      { status: 404 }
+    );
+  }
+  if (row.owner_user_id !== userId) {
+    return NextResponse.json(
+      { error: { code: "FORBIDDEN", message: "프로젝트 소유자만 수정할 수 있습니다" } },
+      { status: 403 }
+    );
+  }
+
+  let body: { name?: string; description?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { error: { code: "BAD_REQUEST", message: "유효한 JSON 본문이 필요합니다" } },
+      { status: 400 }
+    );
+  }
+  const updates: string[] = [];
+  const binds: (string | null)[] = [];
+
+  if (body.name !== undefined) {
+    const name = body.name.trim();
+    if (!name) {
+      return NextResponse.json(
+        { error: { code: "BAD_REQUEST", message: "프로젝트 이름은 비어있을 수 없습니다" } },
+        { status: 400 }
+      );
+    }
+    updates.push("name = ?");
+    binds.push(name);
+  }
+  if (body.description !== undefined) {
+    updates.push("description = ?");
+    binds.push(body.description.trim() || null);
+  }
+
+  if (updates.length === 0) {
+    return NextResponse.json(
+      { error: { code: "BAD_REQUEST", message: "변경할 필드가 없습니다" } },
+      { status: 400 }
+    );
+  }
+
+  const now = nowISO();
+  updates.push("updated_at = ?");
+  binds.push(now);
+  binds.push(id);
+
+  await db
+    .prepare(`UPDATE projects SET ${updates.join(", ")} WHERE id = ?`)
+    .bind(...binds)
+    .run();
+
+  const updated = await db
+    .prepare(
+      `SELECT p.id, p.name, p.description, p.created_at, p.updated_at,
+              u.id AS owner_id, u.nickname AS owner_nickname, u.profile_image_url AS owner_profile_image_url
+       FROM projects p
+       JOIN users u ON u.id = p.owner_user_id
+       WHERE p.id = ?`
+    )
+    .bind(id)
+    .first<{
+      id: string;
+      name: string;
+      description: string | null;
+      created_at: string;
+      updated_at: string;
+      owner_id: string;
+      owner_nickname: string;
+      owner_profile_image_url: string | null;
+    }>();
+
+  return NextResponse.json({
+    data: {
+      id: updated!.id,
+      name: updated!.name,
+      description: updated!.description,
+      owner: {
+        id: updated!.owner_id,
+        nickname: updated!.owner_nickname,
+        profileImageUrl: updated!.owner_profile_image_url,
+      },
+      createdAt: updated!.created_at,
+      updatedAt: updated!.updated_at,
+    },
+  });
+});
+
 export const DELETE = withErrorHandler(async (
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

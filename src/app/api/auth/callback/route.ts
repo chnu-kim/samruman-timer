@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { exchangeCode, getUserInfo } from "@/lib/chzzk";
 import { signJwt } from "@/lib/auth";
 import { getDB, generateId, nowISO, withErrorHandler } from "@/lib/db";
+import { logger } from "@/lib/logger";
 
 export const GET = withErrorHandler(async (request: NextRequest) => {
   const baseUrl = process.env.BASE_URL!;
@@ -69,7 +70,9 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
 
     return response;
   } catch (error) {
-    console.error("[Auth Callback Error]", error);
+    logger.error("Auth callback failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.redirect(`${baseUrl}/login?error=auth_failed`);
   }
 });

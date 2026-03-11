@@ -4,10 +4,7 @@ import { getDB, withErrorHandler } from "@/lib/db";
 import type { MeResponse } from "@/types";
 
 export const GET = withErrorHandler(async (request: NextRequest) => {
-  const sessionCookie = request.cookies.get("session")?.value;
-  console.log("[Auth /me] session cookie present:", !!sessionCookie);
   const jwtUser = await getCurrentUser(request);
-  console.log("[Auth /me] jwtUser:", jwtUser);
   if (!jwtUser) {
     return NextResponse.json(
       { error: { code: "UNAUTHORIZED", message: "인증이 필요합니다" } },
