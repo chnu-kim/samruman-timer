@@ -14,14 +14,15 @@ export function TimerCard({ timer, className }: TimerCardProps) {
     <Link href={`/timers/${timer.id}`} className="flex">
       <article
         className={cn(
-          "flex w-full flex-col border border-foreground/20 rounded-xl p-5 transition-colors hover:border-foreground/40",
+          "flex w-full flex-col border border-border rounded-xl p-5 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5",
           className,
         )}
+        style={{ animation: "fade-in 0.2s ease-out" }}
       >
         {/* 상단: 제목 + 설명 (가변 영역) */}
         <div className="flex-1 min-h-0">
           <h3 className="font-bold">{timer.title}</h3>
-          <p className="mt-1 text-sm text-foreground/60 line-clamp-2 min-h-[2.5rem]">
+          <p className="mt-1 text-sm text-muted-foreground line-clamp-2 min-h-[2.5rem]">
             {timer.description || "\u00A0"}
           </p>
         </div>

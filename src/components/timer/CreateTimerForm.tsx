@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/components/ui/Toast";
 import type { ApiSuccessResponse, ApiErrorResponse, TimerCreateResponse } from "@/types";
 
 function formatRelativeTime(targetMs: number): string {
@@ -44,7 +45,7 @@ function range(start: number, end: number): number[] {
 }
 
 const selectClass =
-  "appearance-none border border-foreground/20 rounded-lg px-3 py-2 bg-background text-foreground text-center outline-none focus:ring-2 focus:ring-foreground/20 transition-colors cursor-pointer";
+  "appearance-none border border-border rounded-lg px-3 py-2 bg-background text-foreground text-center outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors cursor-pointer";
 
 interface SelectFieldProps {
   value: number;
@@ -71,7 +72,7 @@ function SelectField({ value, options, onChange, suffix, label, pad = 0, width =
           </option>
         ))}
       </select>
-      <span className="text-sm text-foreground/40 select-none">{suffix}</span>
+      <span className="text-sm text-muted-foreground select-none">{suffix}</span>
     </div>
   );
 }
@@ -82,6 +83,7 @@ interface CreateTimerFormProps {
 }
 
 export function CreateTimerForm({ projectId, onSuccess }: CreateTimerFormProps) {
+  const { toast } = useToast();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [hours, setHours] = useState(0);
@@ -225,6 +227,7 @@ export function CreateTimerForm({ projectId, onSuccess }: CreateTimerFormProps) 
       }
 
       const json = (await res.json()) as ApiSuccessResponse<TimerCreateResponse>;
+      toast("타이머가 생성되었습니다.", "success");
       onSuccess?.(json.data.id);
     } catch {
       setError("타이머 생성에 실패했습니다.");
@@ -264,8 +267,9 @@ export function CreateTimerForm({ projectId, onSuccess }: CreateTimerFormProps) 
             onChange={(e) => setHours(Number(e.target.value))}
             className="w-20 text-center"
             placeholder="시"
+            aria-label="시간"
           />
-          <span className="text-sm text-foreground/40">시</span>
+          <span className="text-sm text-muted-foreground">시</span>
           <Input
             type="number"
             min={0}
@@ -274,8 +278,9 @@ export function CreateTimerForm({ projectId, onSuccess }: CreateTimerFormProps) 
             onChange={(e) => setMinutes(Number(e.target.value))}
             className="w-20 text-center"
             placeholder="분"
+            aria-label="분"
           />
-          <span className="text-sm text-foreground/40">분</span>
+          <span className="text-sm text-muted-foreground">분</span>
           <Input
             type="number"
             min={0}
@@ -284,8 +289,9 @@ export function CreateTimerForm({ projectId, onSuccess }: CreateTimerFormProps) 
             onChange={(e) => setSeconds(Number(e.target.value))}
             className="w-20 text-center"
             placeholder="초"
+            aria-label="초"
           />
-          <span className="text-sm text-foreground/40">초</span>
+          <span className="text-sm text-muted-foreground">초</span>
         </div>
       </div>
 
@@ -400,7 +406,7 @@ export function CreateTimerForm({ projectId, onSuccess }: CreateTimerFormProps) 
         )}
       </div>
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>}
       <Button type="submit" disabled={loading || !title.trim()}>
         {loading ? "생성 중..." : "타이머 만들기"}
       </Button>

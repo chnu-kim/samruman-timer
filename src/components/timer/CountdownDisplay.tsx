@@ -62,11 +62,12 @@ export function CountdownDisplay({
   return (
     <div className="flex flex-col">
       <span
+        role="timer"
         className={cn(
           size === "large"
             ? "text-5xl sm:text-6xl font-mono font-bold tracking-tight"
             : "text-lg font-mono font-semibold",
-          isExpired && "text-foreground/40",
+          isExpired && "text-muted-foreground",
           isScheduled && "text-purple-600 dark:text-purple-400",
           className,
         )}
@@ -76,7 +77,7 @@ export function CountdownDisplay({
       </span>
       {/* compact: 항상 서브텍스트 높이를 확보하여 카드 높이 일관성 유지 */}
       {size === "compact" && (
-        <span className="text-xs text-purple-500 dark:text-purple-400 min-h-[1rem] mt-0.5">
+        <span className="text-xs text-purple-600 dark:text-purple-400 min-h-[1rem] mt-0.5">
           {isScheduled && scheduledStartAt
             ? `시작 대기 중 · ${new Date(scheduledStartAt).toLocaleString("ko-KR")}`
             : "\u00A0"}
@@ -84,7 +85,7 @@ export function CountdownDisplay({
       )}
       {/* large: 예약 시에만 서브텍스트 표시 */}
       {size === "large" && isScheduled && scheduledStartAt && (
-        <span className="text-sm text-purple-500 dark:text-purple-400 mt-1">
+        <span className="text-sm text-purple-600 dark:text-purple-400 mt-1">
           시작 대기 중 · {new Date(scheduledStartAt).toLocaleString("ko-KR")}
         </span>
       )}
