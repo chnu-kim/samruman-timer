@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "./Button";
+import { ChevronLeftIcon, ChevronRightIcon } from "./Icons";
 
 interface PaginationProps {
   page: number;
@@ -16,10 +17,12 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
         size="sm"
         disabled={page <= 1}
         onClick={() => onPageChange(page - 1)}
+        aria-label="이전 페이지"
       >
-        이전
+        <ChevronLeftIcon className="w-4 h-4" />
+        <span className="ml-1">이전</span>
       </Button>
-      <span className="text-sm text-foreground/60">
+      <span className="text-sm text-muted-foreground">
         {page} / {totalPages}
       </span>
       <Button
@@ -27,8 +30,10 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
         size="sm"
         disabled={page >= totalPages}
         onClick={() => onPageChange(page + 1)}
+        aria-label="다음 페이지"
       >
-        다음
+        <span className="mr-1">다음</span>
+        <ChevronRightIcon className="w-4 h-4" />
       </Button>
     </div>
   );

@@ -7,9 +7,9 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantStyles: Record<NonNullable<ButtonProps["variant"]>, string> = {
   primary:
-    "bg-foreground text-background hover:opacity-80",
+    "bg-accent text-accent-foreground hover:bg-accent-hover",
   secondary:
-    "border border-foreground/20 bg-transparent hover:bg-foreground/5",
+    "border border-border bg-transparent hover:bg-foreground/5",
   ghost:
     "bg-transparent hover:bg-foreground/10",
   danger:
@@ -34,6 +34,7 @@ export function Button({
     <button
       className={cn(
         "inline-flex items-center justify-center rounded-lg font-medium transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         variantStyles[variant],
         sizeStyles[size],
         disabled && "opacity-50 cursor-not-allowed",
