@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { signJwt, verifyJwt, createSessionCookie, deleteSessionCookie } from "@/lib/auth";
+import { NextRequest } from "next/server";
+import { signJwt, verifyJwt, getCurrentUser, createSessionCookie, deleteSessionCookie } from "@/lib/auth";
 
 describe("JWT auth", () => {
   beforeEach(() => {
@@ -46,6 +47,49 @@ describe("JWT auth", () => {
     await expect(
       signJwt({ userId: "u", chzzkUserId: "c", nickname: "n" })
     ).rejects.toThrow("JWT_SECRET is not set");
+  });
+});
+
+describe("getCurrentUser", () => {
+  beforeEach(() => {
+    vi.stubEnv("JWT_SECRET", "test-secret-key-at-least-32-chars-long!");
+  });
+
+  it("쿠키에 유효한 JWT → user payload 반환", async () => {
+    const payload = { userId: "user-1", chzzkUserId: "chzzk-1", nickname: "테스터" };
+    const token = await signJwt(payload);
+    const req = new NextRequest(new URL("http://localhost:3000/api/test"), {
+      headers: { cookie: `session=${token}` },
+    });
+    const user = await getCurrentUser(req);
+    expect(user).not.toBeNull();
+    expect(user!.userId).toBe("user-1");
+    expect(user!.chzzkUserId).toBe("chzzk-1");
+    expect(user!.nickname).toBe("테스터");
+  });
+
+  it("쿠키 없음 → null 반환", async () => {
+    const req = new NextRequest(new URL("http://localhost:3000/api/test"));
+    const user = await getCurrentUser(req);
+    expect(user).toBeNull();
+  });
+
+  it("잘못된 JWT → null 반환", async () => {
+    const req = new NextRequest(new URL("http://localhost:3000/api/test"), {
+      headers: { cookie: "session=invalid.token.here" },
+    });
+    const user = await getCurrentUser(req);
+    expect(user).toBeNull();
+  });
+
+  it("다른 쿠키명 → null 반환", async () => {
+    const payload = { userId: "user-1", chzzkUserId: "chzzk-1", nickname: "테스터" };
+    const token = await signJwt(payload);
+    const req = new NextRequest(new URL("http://localhost:3000/api/test"), {
+      headers: { cookie: `other=${token}` },
+    });
+    const user = await getCurrentUser(req);
+    expect(user).toBeNull();
   });
 });
 

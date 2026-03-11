@@ -16,9 +16,11 @@
 
 ```
 src/
+  middleware.ts                           — 인증 미들웨어 (JWT 검증, 보호 라우트)
+
   app/
     layout.tsx                          — 루트 레이아웃
-    page.tsx                            — 홈 (→ 프로젝트 목록)
+    page.tsx                            — 홈 (→ /projects 리다이렉트)
     globals.css                         — Tailwind CSS 설정
 
     (auth)/
@@ -30,7 +32,9 @@ src/
       [id]/page.tsx                     — 프로젝트 상세
 
     timers/
-      [id]/page.tsx                     — 타이머 상세
+      [id]/
+        page.tsx                        — 타이머 상세
+        overlay/page.tsx                — OBS 오버레이 페이지
 
     api/
       auth/
@@ -40,12 +44,14 @@ src/
         me/route.ts                     — 현재 사용자 정보
       projects/
         route.ts                        — 프로젝트 목록/생성
+        mine/route.ts                   — 내 프로젝트 목록
+        others/route.ts                 — 다른 사용자 프로젝트 목록
         [id]/
-          route.ts                      — 프로젝트 상세
+          route.ts                      — 프로젝트 상세/수정/삭제
           timers/route.ts               — 타이머 목록/생성
       timers/
         [id]/
-          route.ts                      — 타이머 상세
+          route.ts                      — 타이머 상세/수정/삭제
           modify/route.ts               — 시간 증감
           logs/route.ts                 — 로그 조회
           graph/route.ts                — 그래프 데이터
@@ -55,6 +61,7 @@ src/
       CountdownDisplay.tsx              — 큰 카운트다운 숫자 표시
       TimerControls.tsx                 — 시간 증감 버튼, 입력 필드
       TimerCard.tsx                     — 타이머 목록용 카드
+      CreateTimerForm.tsx               — 타이머 생성 폼
     project/                            — 프로젝트 관련 컴포넌트
       ProjectCard.tsx                   — 프로젝트 목록용 카드
       CreateProjectForm.tsx             — 프로젝트 생성 폼
@@ -66,11 +73,24 @@ src/
     layout/                             — 레이아웃 컴포넌트
       Header.tsx                        — 상단 네비게이션
       Footer.tsx                        — 하단 푸터
+    providers/                          — 컨텍스트 프로바이더
+      ThemeProvider.tsx                 — 다크/라이트 테마 프로바이더
     ui/                                 — 공통 UI 컴포넌트
-      Button.tsx
-      Badge.tsx
-      Pagination.tsx
-      Input.tsx
+      Button.tsx                        — 버튼
+      Badge.tsx                         — 상태 배지
+      Pagination.tsx                    — 페이지네이션
+      Input.tsx                         — 입력 필드
+      Spinner.tsx                       — 로딩 스피너
+      Skeleton.tsx                      — 스켈레톤 로딩
+      ErrorState.tsx                    — 에러 상태 표시
+      ThemeToggle.tsx                   — 테마 토글 버튼
+      Toast.tsx                         — 토스트 알림
+      Icons.tsx                         — 공통 아이콘
+      EditableText.tsx                  — 인라인 편집 텍스트
+      ConfirmDialog.tsx                 — 확인 다이얼로그
+
+  hooks/
+    useKeyboardShortcuts.ts             — 키보드 단축키 훅
 
   lib/
     db.ts                               — D1 데이터베이스 헬퍼
@@ -81,10 +101,11 @@ src/
   types/
     index.ts                            — 공통 타입 정의
 
-proxy.ts                               — 인증 프록시
-
 migrations/
   0001_initial.sql                      — 초기 DB 스키마
+  0002_scheduled_start.sql              — 예약 시작 기능
+  0003_soft_delete.sql                  — 타이머 소프트 삭제
+  0004_project_soft_delete.sql          — 프로젝트 소프트 삭제
 
 wrangler.toml                           — Cloudflare Workers 설정
 ```
@@ -107,7 +128,7 @@ wrangler.toml                           — Cloudflare Workers 설정
 
 ```
 클라이언트 → POST /api/timers/[id]/modify { action, deltaSeconds, actorName }
-  → 프록시: JWT 검증 → 소유자 확인
+  → 미들웨어: JWT 검증 → 소유자 확인
   → 서버: 현재 remaining 계산
   → 서버: 새 remaining 계산 (ADD/SUBTRACT)
   → 서버: DB 업데이트 (baseRemainingSeconds, lastCalculatedAt, status)

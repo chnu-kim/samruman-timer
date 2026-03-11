@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { calculateRemaining, detectExpiry, modifyTimer } from "@/lib/timer";
+import { calculateRemaining, detectScheduledActivation, detectExpiry, modifyTimer } from "@/lib/timer";
 import type { Timer } from "@/types";
 
 // ─── calculateRemaining ───
@@ -25,6 +25,86 @@ describe("calculateRemaining", () => {
     // 밀리초 차이로 0~1초 오차 가능
     expect(result).toBeGreaterThanOrEqual(499);
     expect(result).toBeLessThanOrEqual(500);
+  });
+});
+
+// ─── detectScheduledActivation ───
+
+describe("detectScheduledActivation", () => {
+  function createMockDB() {
+    const preparedStatement = {
+      bind: vi.fn().mockReturnThis(),
+      run: vi.fn().mockResolvedValue({}),
+      first: vi.fn().mockResolvedValue(null),
+      all: vi.fn().mockResolvedValue({ results: [] }),
+    };
+    return {
+      prepare: vi.fn().mockReturnValue(preparedStatement),
+      batch: vi.fn().mockResolvedValue([]),
+      _stmt: preparedStatement,
+    } as unknown as D1Database & { _stmt: typeof preparedStatement };
+  }
+
+  function makeTimer(overrides: Partial<Timer> = {}): Timer {
+    return {
+      id: "timer-1",
+      projectId: "proj-1",
+      title: "Test Timer",
+      description: null,
+      baseRemainingSeconds: 3600,
+      lastCalculatedAt: new Date().toISOString(),
+      status: "SCHEDULED",
+      scheduledStartAt: new Date(Date.now() - 10_000).toISOString(),
+      createdBy: "user-1",
+      createdAt: "2025-01-01T00:00:00Z",
+      updatedAt: "2025-01-01T00:00:00Z",
+      ...overrides,
+    };
+  }
+
+  it("SCHEDULED + scheduledStartAt 경과 → RUNNING 전환 + DB batch 호출", async () => {
+    const db = createMockDB();
+    const timer = makeTimer({
+      scheduledStartAt: new Date(Date.now() - 10_000).toISOString(), // 10초 전
+    });
+    const result = await detectScheduledActivation(db, timer);
+    expect(result.status).toBe("RUNNING");
+    expect(result.lastCalculatedAt).toBe(timer.scheduledStartAt);
+    expect(db.batch).toHaveBeenCalledTimes(1);
+  });
+
+  it("SCHEDULED + scheduledStartAt 미경과 → 상태 변경 없음", async () => {
+    const db = createMockDB();
+    const timer = makeTimer({
+      scheduledStartAt: new Date(Date.now() + 60_000).toISOString(), // 미래
+    });
+    const result = await detectScheduledActivation(db, timer);
+    expect(result.status).toBe("SCHEDULED");
+    expect(db.batch).not.toHaveBeenCalled();
+  });
+
+  it("RUNNING 타이머 → 아무 작업 없음", async () => {
+    const db = createMockDB();
+    const timer = makeTimer({ status: "RUNNING" });
+    const result = await detectScheduledActivation(db, timer);
+    expect(result.status).toBe("RUNNING");
+    expect(db.batch).not.toHaveBeenCalled();
+  });
+
+  it("scheduledStartAt null → 아무 작업 없음", async () => {
+    const db = createMockDB();
+    const timer = makeTimer({ scheduledStartAt: null });
+    const result = await detectScheduledActivation(db, timer);
+    expect(result.status).toBe("SCHEDULED");
+    expect(db.batch).not.toHaveBeenCalled();
+  });
+
+  it("EXPIRED 타이머 → 아무 작업 없음", async () => {
+    const db = createMockDB();
+    const timer = makeTimer({ status: "EXPIRED" });
+    const result = await detectScheduledActivation(db, timer);
+    expect(result.status).toBe("EXPIRED");
+    expect(db.batch).not.toHaveBeenCalled();
   });
 });
 

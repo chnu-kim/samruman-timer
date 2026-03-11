@@ -82,6 +82,20 @@ export function createDeleteRequest(
   });
 }
 
+export function createPatchRequest(
+  url: string,
+  body: unknown,
+  headers?: Record<string, string>
+): NextRequest {
+  const allHeaders = new Headers(headers);
+  allHeaders.set("content-type", "application/json");
+  return new NextRequest(new URL(url, "http://localhost:3000"), {
+    method: "PATCH",
+    headers: allHeaders,
+    body: JSON.stringify(body),
+  });
+}
+
 // ─── Response Parser ───
 
 export async function parseJson(response: Response) {

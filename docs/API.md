@@ -127,6 +127,48 @@ CHZZK OAuth 콜백을 처리한다.
 }
 ```
 
+### GET /api/projects/mine
+
+내 프로젝트 목록을 조회한다.
+
+- **인증**: 필요
+- **응답**:
+```json
+{
+  "data": [
+    {
+      "id": "project_id",
+      "name": "프로젝트 이름",
+      "description": "설명",
+      "ownerNickname": "소유자 닉네임",
+      "timerCount": 3,
+      "createdAt": "2025-01-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+### GET /api/projects/others
+
+다른 사용자의 프로젝트 목록을 조회한다.
+
+- **인증**: 필요
+- **응답**:
+```json
+{
+  "data": [
+    {
+      "id": "project_id",
+      "name": "프로젝트 이름",
+      "description": "설명",
+      "ownerNickname": "소유자 닉네임",
+      "timerCount": 3,
+      "createdAt": "2025-01-01T00:00:00Z"
+    }
+  ]
+}
+```
+
 ### GET /api/projects/[id]
 
 프로젝트 상세 정보를 조회한다.
@@ -322,6 +364,57 @@ CHZZK OAuth 콜백을 처리한다.
       "afterSeconds": 7200,
       "createdAt": "2025-01-01T00:00:00Z"
     }
+  }
+}
+```
+
+---
+
+## 통계 API
+
+### GET /api/projects/[id]/stats
+
+프로젝트의 타이머 활동 통계를 반환한다.
+
+- **인증**: 불필요
+- **쿼리 파라미터**:
+  - `donorLimit` (number, 기본값 10, 최대 50): 상위 후원자 수
+- **응답**:
+```json
+{
+  "data": {
+    "summary": {
+      "totalAddedSeconds": 7200,
+      "totalSubtractedSeconds": 1800,
+      "netAddedSeconds": 5400,
+      "totalEvents": 15,
+      "uniqueDonors": 5,
+      "peakHour": 14
+    },
+    "topDonors": [
+      {
+        "actorName": "닉네임",
+        "totalSeconds": 3600,
+        "eventCount": 3
+      }
+    ],
+    "hourlyDistribution": [
+      {
+        "hour": 14,
+        "eventCount": 8,
+        "adds": 5,
+        "subtracts": 3,
+        "addedSeconds": 3600
+      }
+    ],
+    "dailyActivity": [
+      {
+        "date": "2025-01-01",
+        "eventCount": 10,
+        "addedSeconds": 5000,
+        "subtractedSeconds": 1000
+      }
+    ]
   }
 }
 ```

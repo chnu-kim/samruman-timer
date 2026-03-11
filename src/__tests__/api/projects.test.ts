@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createMockDB, createPostRequest, createPostRequestRaw, parseJson } from "../helpers";
+import { createMockDB, createGetRequest, createPostRequest, createPostRequestRaw, parseJson } from "../helpers";
 
 // getDB mock
 vi.mock("@/lib/db", async (importOriginal) => {
@@ -13,6 +13,7 @@ import { GET, POST } from "@/app/api/projects/route";
 describe("GET /api/projects", () => {
   it("프로젝트 목록을 반환한다", async () => {
     const db = createMockDB();
+    db._stmt.first.mockResolvedValue({ cnt: 1 });
     db._stmt.all.mockResolvedValue({
       results: [
         {
@@ -27,13 +28,15 @@ describe("GET /api/projects", () => {
     });
     vi.mocked(getDB).mockResolvedValue(db as unknown as D1Database);
 
-    const res = await GET();
+    const req = createGetRequest("/api/projects");
+    const res = await GET(req as never);
     const body = await parseJson(res);
 
     expect(res.status).toBe(200);
-    expect(body.data).toHaveLength(1);
-    expect(body.data[0].ownerNickname).toBe("유저1");
-    expect(body.data[0].timerCount).toBe(2); // 0 또는 1만 실제 가능하지만 API는 그대로 반환
+    expect(body.data.projects).toHaveLength(1);
+    expect(body.data.projects[0].ownerNickname).toBe("유저1");
+    expect(body.data.projects[0].timerCount).toBe(2);
+    expect(body.data.pagination).toEqual({ page: 1, limit: 12, total: 1, totalPages: 1 });
   });
 });
 
