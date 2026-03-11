@@ -13,13 +13,13 @@ function LoginContent() {
         <h1 className="text-2xl font-bold tracking-tight text-foreground">
           삼루먼타이머
         </h1>
-        <p className="mt-2 text-sm text-foreground/60">
+        <p className="mt-2 text-sm text-muted-foreground">
           CHZZK 계정으로 로그인하세요
         </p>
       </div>
 
       {error && (
-        <div className="rounded-lg bg-red-50 p-3 text-center text-sm text-red-700 dark:bg-red-900/30 dark:text-red-400">
+        <div className="rounded-lg bg-red-50 p-3 text-center text-sm text-red-700 dark:bg-red-900/30 dark:text-red-400" role="alert">
           로그인에 실패했습니다. 다시 시도해주세요.
         </div>
       )}

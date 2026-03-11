@@ -17,7 +17,7 @@ const MODES: { value: GraphMode; label: string }[] = [
 
 export function GraphModeSelector({ mode, onModeChange, className }: GraphModeSelectorProps) {
   return (
-    <div className={cn("flex gap-1 rounded-lg bg-foreground/5 p-1", className)} role="tablist" aria-label="그래프 모드">
+    <div className={cn("flex gap-1 rounded-lg bg-muted p-1", className)} role="tablist" aria-label="그래프 모드">
       {MODES.map((m) => (
         <button
           key={m.value}
@@ -26,9 +26,10 @@ export function GraphModeSelector({ mode, onModeChange, className }: GraphModeSe
           onClick={() => onModeChange(m.value)}
           className={cn(
             "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
             mode === m.value
-              ? "bg-foreground text-background"
-              : "text-foreground/60 hover:text-foreground hover:bg-foreground/10",
+              ? "bg-accent text-accent-foreground"
+              : "text-muted-foreground hover:text-foreground hover:bg-foreground/10",
           )}
         >
           {m.label}
