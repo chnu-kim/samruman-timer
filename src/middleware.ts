@@ -15,6 +15,7 @@ const PROTECTED_ROUTES: { method: string; pattern: RegExp }[] = [
   { method: "PATCH", pattern: /^\/api\/timers\/[^/]+$/ },
   { method: "GET", pattern: /^\/api\/projects\/mine$/ },
   { method: "GET", pattern: /^\/api\/projects\/others$/ },
+  { method: "GET", pattern: /^\/api\/projects\/[^/]+\/stats$/ },
 ];
 
 export async function middleware(request: NextRequest) {

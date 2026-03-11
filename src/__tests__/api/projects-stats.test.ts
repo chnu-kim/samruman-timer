@@ -14,9 +14,12 @@ describe("GET /api/projects/[id]/stats", () => {
     vi.clearAllMocks();
   });
 
-  const callGET = (projectId: string, query = "") =>
+  const callGET = (projectId: string, query = "", userId = "owner1") =>
     GET(
-      createGetRequest(`/api/projects/${projectId}/stats${query ? `?${query}` : ""}`),
+      createGetRequest(
+        `/api/projects/${projectId}/stats${query ? `?${query}` : ""}`,
+        { "x-user-id": userId }
+      ),
       { params: Promise.resolve({ id: projectId }) }
     );
 
@@ -31,10 +34,21 @@ describe("GET /api/projects/[id]/stats", () => {
     expect(json.error.code).toBe("NOT_FOUND");
   });
 
+  it("소유자가 아닌 경우 403", async () => {
+    const db = createMockDB();
+    db._stmt.first.mockResolvedValueOnce({ id: "proj1", owner_user_id: "owner1" });
+    vi.mocked(getDB).mockResolvedValue(db as unknown as D1Database);
+
+    const res = await callGET("proj1", "", "other-user");
+    expect(res.status).toBe(403);
+    const json = await parseJson(res);
+    expect(json.error.code).toBe("FORBIDDEN");
+  });
+
   it("프로젝트 존재 + 로그 없음 → 200 + 0 값", async () => {
     const db = createMockDB();
     db._stmt.first
-      .mockResolvedValueOnce({ id: "proj1" })
+      .mockResolvedValueOnce({ id: "proj1", owner_user_id: "owner1" })
       .mockResolvedValueOnce({
         total_added: 0,
         total_subtracted: 0,
@@ -65,7 +79,7 @@ describe("GET /api/projects/[id]/stats", () => {
   it("프로젝트 존재 + 로그 있음 → 200 + 정상 데이터", async () => {
     const db = createMockDB();
     db._stmt.first
-      .mockResolvedValueOnce({ id: "proj1" })
+      .mockResolvedValueOnce({ id: "proj1", owner_user_id: "owner1" })
       .mockResolvedValueOnce({
         total_added: 7200,
         total_subtracted: 1800,
@@ -117,7 +131,7 @@ describe("GET /api/projects/[id]/stats", () => {
   it("donorLimit 파라미터 적용", async () => {
     const db = createMockDB();
     db._stmt.first
-      .mockResolvedValueOnce({ id: "proj1" })
+      .mockResolvedValueOnce({ id: "proj1", owner_user_id: "owner1" })
       .mockResolvedValueOnce({
         total_added: 0,
         total_subtracted: 0,
@@ -132,7 +146,6 @@ describe("GET /api/projects/[id]/stats", () => {
 
     await callGET("proj1", "donorLimit=5");
 
-    // The topDonors query bind should include donorLimit=5
     const allBindArgs = db._stmt.bind.mock.calls.flat();
     expect(allBindArgs).toContain(5);
   });
@@ -140,7 +153,7 @@ describe("GET /api/projects/[id]/stats", () => {
   it("donorLimit 최대 50 제한", async () => {
     const db = createMockDB();
     db._stmt.first
-      .mockResolvedValueOnce({ id: "proj1" })
+      .mockResolvedValueOnce({ id: "proj1", owner_user_id: "owner1" })
       .mockResolvedValueOnce({
         total_added: 0,
         total_subtracted: 0,
@@ -155,7 +168,6 @@ describe("GET /api/projects/[id]/stats", () => {
 
     await callGET("proj1", "donorLimit=100");
 
-    // donorLimit should be clamped to 50
     const allBindArgs = db._stmt.bind.mock.calls.flat();
     expect(allBindArgs).toContain(50);
     expect(allBindArgs).not.toContain(100);

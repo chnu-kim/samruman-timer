@@ -12,16 +12,26 @@ export const GET = withErrorHandler(async (
 
   const db = await getDB();
 
+  const userId = request.headers.get("x-user-id");
+
   // 프로젝트 존재 확인
   const project = await db
-    .prepare("SELECT id FROM projects WHERE id = ? AND status != 'DELETED'")
+    .prepare("SELECT id, owner_user_id FROM projects WHERE id = ? AND status != 'DELETED'")
     .bind(projectId)
-    .first();
+    .first<{ id: string; owner_user_id: string }>();
 
   if (!project) {
     return NextResponse.json(
       { error: { code: "NOT_FOUND", message: "프로젝트를 찾을 수 없습니다" } },
       { status: 404 }
+    );
+  }
+
+  // 소유자만 통계 조회 가능
+  if (project.owner_user_id !== userId) {
+    return NextResponse.json(
+      { error: { code: "FORBIDDEN", message: "프로젝트 소유자만 통계를 볼 수 있습니다" } },
+      { status: 403 }
     );
   }
 

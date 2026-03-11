@@ -333,14 +333,16 @@ export default function TimerDetailPage() {
             <Badge variant={statusBadgeVariant}>
               {statusLabel}
             </Badge>
-            <Link
-              href={`/projects/${timer.projectId}/stats`}
-              aria-label="프로젝트 통계"
-              title="프로젝트 통계"
-              className="rounded-lg p-1.5 min-h-11 min-w-11 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <ChartBarIcon className="w-5 h-5" />
-            </Link>
+            {isOwner && (
+              <Link
+                href={`/projects/${timer.projectId}/stats`}
+                aria-label="프로젝트 통계"
+                title="프로젝트 통계"
+                className="rounded-lg p-1.5 min-h-11 min-w-11 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <ChartBarIcon className="w-5 h-5" />
+              </Link>
+            )}
             <button
               onClick={handleCopyLink}
               aria-label="링크 복사"

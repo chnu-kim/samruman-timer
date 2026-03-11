@@ -24,6 +24,7 @@ export default function ProjectStatsPage() {
   const [stats, setStats] = useState<ProjectStatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const fetchData = useCallback(async () => {
     try {
@@ -31,6 +32,12 @@ export default function ProjectStatsPage() {
         fetch(`/api/projects/${projectId}`),
         fetch(`/api/projects/${projectId}/stats`),
       ]);
+
+      if (statsRes.status === 401 || statsRes.status === 403) {
+        setError(true);
+        setErrorMessage("프로젝트 소유자만 통계를 볼 수 있습니다.");
+        return;
+      }
 
       if (!projectRes.ok || !statsRes.ok) {
         setError(true);
@@ -64,8 +71,8 @@ export default function ProjectStatsPage() {
   if (error || !project || !stats) {
     return (
       <ErrorState
-        message="통계 데이터를 불러오는데 실패했습니다."
-        onRetry={() => {
+        message={errorMessage || "통계 데이터를 불러오는데 실패했습니다."}
+        onRetry={errorMessage ? undefined : () => {
           setError(false);
           setLoading(true);
           fetchData();
