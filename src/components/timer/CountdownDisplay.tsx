@@ -12,7 +12,7 @@ interface CountdownDisplayProps {
   className?: string;
 }
 
-function formatTime(totalSeconds: number): string {
+export function formatTime(totalSeconds: number): string {
   const s = Math.max(0, totalSeconds);
   const days = Math.floor(s / 86400);
   const hours = Math.floor((s % 86400) / 3600);

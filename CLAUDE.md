@@ -76,3 +76,11 @@ This is a fresh Next.js 16 app using the App Router with TypeScript, React 19, a
 - **Skill**: `/plan-feature` — 시장 분석 + 경쟁사 비교 기반 기능 기획
 - **Agent**: `product-planner` — 데이터 기반 기획자 에이전트 (시장, 경쟁사, 사용자, 갭, 수익화, 기술, UX, 분석 8개 카테고리)
 - **Rule**: `.claude/rules/product-planning.md` — 전 에이전트 적용 기획 규칙
+
+## Git 워크플로우
+
+- **Skill**: `/commit` — 변경 분석 → Conventional Commits 한국어 커밋 메시지 생성 → 빌드 검증 → 커밋
+- **Agent**: `git-committer` — 커밋 타입 판별/메시지 생성 전문 에이전트
+- **Skill**: `/push` — 현재 브랜치 원격 푸시 (main/master 보호, 미커밋 변경 감지)
+- **Skill**: `/create-pr` — 변경 분석 → PR 제목(영어)/본문(한국어) 생성 → `gh pr create`
+- **Agent**: `pr-creator` — PR 분석/생성 전문 에이전트
