@@ -58,3 +58,21 @@ This is a fresh Next.js 16 app using the App Router with TypeScript, React 19, a
 - **Skill**: `/integration-test` — 통합 테스트 작성 및 실행
 - **Agent**: `unit-test-runner` — 테스트 실행/실패 분석 전문 에이전트
 - **Agent**: `integration-test-writer` — 통합 테스트 작성 전문 에이전트
+
+## UI/UX 품질
+
+- **Skill**: `/ui-review` — UI/UX 품질 감사 + 이슈 수정
+- **Agent**: `ui-ux-reviewer` — 결벽증 디자이너 에이전트 (접근성, 다크모드, 반응형 등 8개 카테고리)
+- **Rule**: `.claude/rules/ui-quality.md` — 전 에이전트 적용 UI 품질 규칙
+
+## 보안
+
+- **Skill**: `/security-review` — 보안 취약점 8개 카테고리 감사 + 이슈 수정
+- **Agent**: `security-reviewer` — 편집증적 보안 관리자 에이전트 (인증, 인가, 인젝션, 경계, 에러, 헤더, 의존성, 시크릿)
+- **Rule**: `.claude/rules/security.md` — 전 에이전트 적용 보안 규칙
+
+## 기획
+
+- **Skill**: `/plan-feature` — 시장 분석 + 경쟁사 비교 기반 기능 기획
+- **Agent**: `product-planner` — 데이터 기반 기획자 에이전트 (시장, 경쟁사, 사용자, 갭, 수익화, 기술, UX, 분석 8개 카테고리)
+- **Rule**: `.claude/rules/product-planning.md` — 전 에이전트 적용 기획 규칙
