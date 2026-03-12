@@ -79,6 +79,30 @@ export function TimerCardGridSkeleton({ count = 6 }: { count?: number }) {
   );
 }
 
+export function ProjectDetailSkeleton() {
+  return (
+    <section className="space-y-6">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1 space-y-2">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-4 w-48" />
+          <Skeleton className="h-3 w-32" />
+        </div>
+        <div className="flex items-center gap-1 shrink-0 mt-1">
+          <Skeleton className="h-11 w-11 rounded-lg" />
+          <Skeleton className="h-11 w-11 rounded-lg" />
+        </div>
+      </div>
+      <div className="rounded-xl border border-border p-5">
+        <div className="flex items-center justify-between gap-4">
+          <Skeleton className="h-10 w-36" />
+          <Skeleton className="h-6 w-16 rounded-full" />
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function StatsPageSkeleton() {
   return (
     <div className="space-y-8">

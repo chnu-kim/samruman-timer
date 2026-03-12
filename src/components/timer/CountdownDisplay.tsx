@@ -1,21 +1,21 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { cn } from "@/lib/utils";
+import { cn, formatDateTime } from "@/lib/utils";
 import type { TimerStatus } from "@/types";
 
 interface CountdownDisplayProps {
   remainingSeconds: number;
   status: TimerStatus;
   scheduledStartAt?: string | null;
+  createdAt?: string;
   size?: "compact" | "large";
   className?: string;
 }
 
 export function formatTime(totalSeconds: number): string {
   const s = Math.max(0, totalSeconds);
-  const days = Math.floor(s / 86400);
-  const hours = Math.floor((s % 86400) / 3600);
+  const hours = Math.floor(s / 3600);
   const minutes = Math.floor((s % 3600) / 60);
   const seconds = s % 60;
 
@@ -23,9 +23,6 @@ export function formatTime(totalSeconds: number): string {
   const mm = String(minutes).padStart(2, "0");
   const ss = String(seconds).padStart(2, "0");
 
-  if (days > 0) {
-    return `${days}d ${hh}:${mm}:${ss}`;
-  }
   return `${hh}:${mm}:${ss}`;
 }
 
@@ -33,6 +30,7 @@ export function CountdownDisplay({
   remainingSeconds,
   status,
   scheduledStartAt,
+  createdAt,
   size = "compact",
   className,
 }: CountdownDisplayProps) {
@@ -58,6 +56,16 @@ export function CountdownDisplay({
 
   const isExpired = status === "EXPIRED" || (status !== "SCHEDULED" && displayed <= 0);
   const isScheduled = status === "SCHEDULED";
+  const isRunning = status === "RUNNING" && displayed > 0;
+
+  const startedAt = scheduledStartAt ?? createdAt;
+  const elapsedSeconds = isRunning && startedAt
+    ? Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)
+    : 0;
+
+  const endTimeText = isRunning
+    ? `종료 예정 · ${formatDateTime(new Date(Date.now() + displayed * 1000).toISOString())}${elapsedSeconds > 0 ? ` (${formatTime(elapsedSeconds)} 경과)` : ""}`
+    : null;
 
   return (
     <div className="flex flex-col">
@@ -79,14 +87,19 @@ export function CountdownDisplay({
       {size === "compact" && (
         <span className="text-xs text-purple-600 dark:text-purple-400 min-h-[1rem] mt-0.5">
           {isScheduled && scheduledStartAt
-            ? `시작 대기 중 · ${new Date(scheduledStartAt).toLocaleString("ko-KR")}`
+            ? `시작 대기 중 · ${formatDateTime(scheduledStartAt)}`
             : "\u00A0"}
         </span>
       )}
-      {/* large: 예약 시에만 서브텍스트 표시 */}
+      {/* large: 예약/실행 시 서브텍스트 표시 */}
       {size === "large" && isScheduled && scheduledStartAt && (
         <span className="text-sm text-purple-600 dark:text-purple-400 mt-1">
-          시작 대기 중 · {new Date(scheduledStartAt).toLocaleString("ko-KR")}
+          시작 대기 중 · {formatDateTime(scheduledStartAt)}
+        </span>
+      )}
+      {size === "large" && endTimeText && (
+        <span className="text-sm text-muted-foreground mt-1">
+          {endTimeText}
         </span>
       )}
     </div>

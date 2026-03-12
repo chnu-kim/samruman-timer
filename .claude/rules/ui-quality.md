@@ -1,12 +1,24 @@
+---
+paths:
+  - src/components/**
+  - "src/app/(auth)/**"
+  - src/app/projects/**
+  - src/app/timers/**
+---
+
 # UI 품질 규칙
 
 UI 코드 수정 시 모든 에이전트가 적용하는 규칙.
+
+참조 문서: `docs/UI.md` — 페이지 구성, 컴포넌트 계층, 그래프 설계
 
 ## 색상
 
 - 하드코딩 금지 → `bg-background`/`text-foreground`/`border-border` 등 디자인 토큰 사용
 - 상태 색상은 반드시 `dark:` 변형 포함
 - 색상만으로 상태 구분 금지 — 텍스트 또는 아이콘 병행 필수
+- 로그 액션 색상: CREATE(파랑), ADD(초록), SUBTRACT(빨강), EXPIRE(회색), REOPEN(노랑)
+- 상태 뱃지: RUNNING(초록), EXPIRED(빨강) — 색상 + 텍스트 병행
 
 ## 접근성
 
@@ -15,6 +27,7 @@ UI 코드 수정 시 모든 에이전트가 적용하는 규칙.
 - Toast → 에러: `role="alert"`, 성공/정보: `role="status"`
 - 폼 요소 → `<label>` 연결 필수
 - 모달/다이얼로그 → focus trap, Escape 닫기
+- 시맨틱 HTML, 키보드 네비게이션
 
 ## 반응형
 
@@ -38,3 +51,15 @@ UI 코드 수정 시 모든 에이전트가 적용하는 규칙.
 - `stroke-width` 2 통일
 - 컨텍스트별 일관된 크기 (버튼 내 16px, 독립 24px 등)
 - stroke vs fill 혼용 금지
+
+## 컴포넌트
+
+- 컴포넌트 디렉토리: `timer/`, `project/`, `graph/`, `layout/`, `ui/`
+- 그래프: Recharts 사용 (LineChart, AreaChart, BarChart)
+- 스타일링: Tailwind CSS v4
+
+## 페이지
+
+- 카운트다운: 클라이언트에서 1초마다 갱신, 주기적으로 서버 재조회 동기화
+- 잔여 시간 표시: `HH:MM:SS` 또는 `Dd HH:MM:SS`
+- 스타일링: Tailwind CSS v4 (CSS-first, `globals.css`에서 설정)

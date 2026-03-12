@@ -20,7 +20,14 @@ const PRESETS = [
   { label: "10시간", seconds: 36000 },
 ];
 
+const QUICK_PRESETS = [
+  { label: "+1h", seconds: 3600 },
+  { label: "+5h", seconds: 18000 },
+  { label: "+10h", seconds: 36000 },
+];
+
 const RECENT_ACTORS_KEY = "recentActors";
+const DEFAULT_ACTOR_KEY = "defaultActorName";
 const MAX_RECENT_ACTORS = 10;
 
 function getRecentActors(): string[] {
@@ -41,6 +48,18 @@ function saveRecentActor(name: string) {
   localStorage.setItem(RECENT_ACTORS_KEY, JSON.stringify(next));
 }
 
+function getDefaultActor(): string {
+  try {
+    return localStorage.getItem(DEFAULT_ACTOR_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function saveDefaultActor(name: string) {
+  localStorage.setItem(DEFAULT_ACTOR_KEY, name);
+}
+
 export function TimerControls({ timerId, status, onModified, className }: TimerControlsProps) {
   const { toast } = useToast();
   const [actorName, setActorName] = useState("");
@@ -51,9 +70,16 @@ export function TimerControls({ timerId, status, onModified, className }: TimerC
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [recentActors, setRecentActors] = useState<string[]>([]);
+  const [defaultActor, setDefaultActor] = useState("");
+  const [quickMode, setQuickMode] = useState(false);
 
   useEffect(() => {
     setRecentActors(getRecentActors());
+    const saved = getDefaultActor();
+    setDefaultActor(saved);
+    if (saved) {
+      setActorName(saved);
+    }
   }, []);
 
   const totalSeconds = hours * 3600 + minutes * 60 + seconds;
@@ -102,6 +128,17 @@ export function TimerControls({ timerId, status, onModified, className }: TimerC
     addPreset(presetSeconds);
   }
 
+  // 빠른 적용 모드: 프리셋 탭 한 번으로 즉시 적용
+  async function handleQuickApply(presetSeconds: number) {
+    const actor = actorName.trim() || defaultActor;
+    if (!actor) {
+      setError("닉네임을 먼저 입력해주세요.");
+      toast("닉네임을 먼저 입력해주세요.", "error");
+      return;
+    }
+    await submitModify(selectedAction, presetSeconds, actor);
+  }
+
   async function handleSubmit() {
     if (!actorName.trim()) {
       setError("시청자 닉네임을 입력해주세요.");
@@ -114,8 +151,19 @@ export function TimerControls({ timerId, status, onModified, className }: TimerC
     await submitModify(selectedAction, totalSeconds, actorName.trim());
   }
 
-  function toggleAction() {
-    setSelectedAction((prev) => (prev === "ADD" ? "SUBTRACT" : "ADD"));
+  function handleSetDefault() {
+    const name = actorName.trim();
+    if (name) {
+      saveDefaultActor(name);
+      setDefaultActor(name);
+      toast("기본 닉네임이 설정되었습니다", "success");
+    }
+  }
+
+  function handleClearDefault() {
+    saveDefaultActor("");
+    setDefaultActor("");
+    toast("기본 닉네임이 해제되었습니다", "success");
   }
 
   if (status === "SCHEDULED") {
@@ -138,7 +186,7 @@ export function TimerControls({ timerId, status, onModified, className }: TimerC
           onChange={(e) => setActorName(e.target.value)}
           required
           maxLength={50}
-          placeholder="시간 변경을 요청한 시청자"
+          placeholder={defaultActor ? `기본: ${defaultActor}` : "시간 변경을 요청한 시청자"}
           list="recent-actors"
         />
         <datalist id="recent-actors">
@@ -146,6 +194,26 @@ export function TimerControls({ timerId, status, onModified, className }: TimerC
             <option key={name} value={name} />
           ))}
         </datalist>
+        <div className="mt-1.5 flex items-center gap-2">
+          {actorName.trim() && actorName.trim() !== defaultActor && (
+            <button
+              type="button"
+              onClick={handleSetDefault}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              기본 닉네임으로 설정
+            </button>
+          )}
+          {defaultActor && (
+            <button
+              type="button"
+              onClick={handleClearDefault}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              기본 닉네임 해제
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 추가/차감 토글 */}
@@ -196,6 +264,20 @@ export function TimerControls({ timerId, status, onModified, className }: TimerC
         </div>
       </div>
 
+      {/* 빠른 적용 모드 토글 */}
+      <div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={quickMode}
+            onChange={(e) => setQuickMode(e.target.checked)}
+            className="w-4 h-4 accent-accent rounded"
+          />
+          <span className="text-sm font-medium">빠른 적용 모드</span>
+          <span className="text-xs text-muted-foreground">프리셋 탭 한 번으로 즉시 적용</span>
+        </label>
+      </div>
+
       {/* 시간 입력 */}
       <div>
         <label className="text-sm font-medium text-foreground">시간</label>
@@ -207,8 +289,13 @@ export function TimerControls({ timerId, status, onModified, className }: TimerC
               key={preset.label}
               type="button"
               disabled={loading}
-              onClick={() => handlePresetClick(preset.seconds)}
-              className="rounded-md border border-border px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 text-muted-foreground hover:border-foreground/30 hover:text-foreground"
+              onClick={() => quickMode ? handleQuickApply(preset.seconds) : handlePresetClick(preset.seconds)}
+              className={cn(
+                "rounded-md border px-3 py-2 min-h-[48px] min-w-[48px] text-sm font-medium transition-colors disabled:opacity-50",
+                quickMode
+                  ? "border-accent text-accent hover:bg-accent hover:text-accent-foreground"
+                  : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground",
+              )}
             >
               +{preset.label}
             </button>
@@ -216,58 +303,94 @@ export function TimerControls({ timerId, status, onModified, className }: TimerC
         </div>
 
         {/* 직접 입력 */}
-        <div className="mt-2.5 flex items-center gap-2">
-          <Input
-            type="number"
-            min={0}
-            value={hours}
-            onChange={(e) => setHours(Math.max(0, Number(e.target.value)))}
-            className="w-20 text-center"
-            placeholder="0"
-            aria-label="시간"
-          />
-          <span className="text-sm text-muted-foreground">시</span>
-          <Input
-            type="number"
-            min={0}
-            max={59}
-            value={minutes}
-            onChange={(e) => setMinutes(Math.max(0, Math.min(59, Number(e.target.value))))}
-            className="w-20 text-center"
-            placeholder="0"
-            aria-label="분"
-          />
-          <span className="text-sm text-muted-foreground">분</span>
-          <Input
-            type="number"
-            min={0}
-            max={59}
-            value={seconds}
-            onChange={(e) => setSeconds(Math.max(0, Math.min(59, Number(e.target.value))))}
-            className="w-20 text-center"
-            placeholder="0"
-            aria-label="초"
-          />
-          <span className="text-sm text-muted-foreground">초</span>
-        </div>
+        {!quickMode && (
+          <div className="mt-2.5 flex items-center gap-2">
+            <Input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              value={hours}
+              onChange={(e) => setHours(Math.max(0, Number(e.target.value)))}
+              className="w-20 text-center"
+              placeholder="0"
+              aria-label="시간"
+            />
+            <span className="text-sm text-muted-foreground">시</span>
+            <Input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={59}
+              value={minutes}
+              onChange={(e) => setMinutes(Math.max(0, Math.min(59, Number(e.target.value))))}
+              className="w-20 text-center"
+              placeholder="0"
+              aria-label="분"
+            />
+            <span className="text-sm text-muted-foreground">분</span>
+            <Input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={59}
+              value={seconds}
+              onChange={(e) => setSeconds(Math.max(0, Math.min(59, Number(e.target.value))))}
+              className="w-20 text-center"
+              placeholder="0"
+              aria-label="초"
+            />
+            <span className="text-sm text-muted-foreground">초</span>
+          </div>
+        )}
       </div>
 
       {/* 에러 메시지 */}
       {error && <p className="text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>}
 
-      {/* 확인 버튼 */}
-      <Button
-        size="lg"
-        disabled={loading || totalSeconds <= 0}
-        onClick={handleSubmit}
-        className="w-full"
-      >
-        {loading
-          ? "처리 중..."
-          : totalSeconds > 0
-          ? `${selectedAction === "ADD" ? "추가" : "차감"} 확인 (${formatDelta(totalSeconds)})`
-          : "시간을 입력해주세요"}
-      </Button>
+      {/* 확인 버튼 (빠른 적용 모드가 아닐 때만) */}
+      {!quickMode && (
+        <Button
+          size="lg"
+          disabled={loading || totalSeconds <= 0}
+          onClick={handleSubmit}
+          className="w-full"
+        >
+          {loading
+            ? "처리 중..."
+            : totalSeconds > 0
+            ? `${selectedAction === "ADD" ? "추가" : "차감"} 확인 (${formatDelta(totalSeconds)})`
+            : "시간을 입력해주세요"}
+        </Button>
+      )}
+
+      {/* 모바일 하단 고정 빠른 액션 바 */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background/95 backdrop-blur-sm px-4 py-3 safe-area-bottom">
+        <div className="flex items-center gap-2">
+          {QUICK_PRESETS.map((preset) => (
+            <button
+              key={preset.label}
+              type="button"
+              disabled={loading || (!actorName.trim() && !defaultActor)}
+              onClick={() => handleQuickApply(preset.seconds)}
+              className={cn(
+                "flex-1 rounded-lg py-3 min-h-[48px] text-sm font-bold transition-colors disabled:opacity-50",
+                selectedAction === "ADD"
+                  ? "bg-green-600 text-white hover:bg-green-700 active:bg-green-800"
+                  : "bg-red-600 text-white hover:bg-red-700 active:bg-red-800",
+              )}
+            >
+              {selectedAction === "SUBTRACT" ? "-" : "+"}{preset.label.slice(1)}
+            </button>
+          ))}
+        </div>
+        {!actorName.trim() && !defaultActor && (
+          <p className="mt-1.5 text-center text-xs text-muted-foreground">
+            닉네임을 먼저 입력하세요
+          </p>
+        )}
+      </div>
+      {/* 모바일 하단바 높이 보정 */}
+      <div className="md:hidden h-20" />
     </div>
   );
 }

@@ -44,7 +44,7 @@ export function ConfirmDialog({
       onClose={onCancel}
       aria-modal="true"
       aria-labelledby={titleId}
-      className="rounded-xl border border-border bg-background p-0 shadow-lg backdrop:bg-black/50 max-w-sm w-full"
+      className="m-auto rounded-xl border border-border bg-background p-0 shadow-lg backdrop:bg-black/50 max-w-sm w-full"
       style={{ animation: open ? "fade-in 0.15s ease-out" : undefined }}
     >
       <div className="p-6">

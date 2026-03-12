@@ -77,6 +77,17 @@ This is a fresh Next.js 16 app using the App Router with TypeScript, React 19, a
 - **Agent**: `product-planner` — 데이터 기반 기획자 에이전트 (시장, 경쟁사, 사용자, 갭, 수익화, 기술, UX, 분석 8개 카테고리)
 - **Rule**: `.claude/rules/product-planning.md` — 전 에이전트 적용 기획 규칙
 
+## 코드 리뷰
+
+- **Skill**: `/code-review` — TDD 방식 코드 리뷰 + 이슈 수정
+- **Agent**: `code-reviewer` — 보안/설계/에러/타입 리뷰 에이전트
+
+## Storybook
+
+- **Skill**: `/storybook` — Storybook 빌드 검증
+- **Agent**: `storybook-writer` — CSF3 스토리 자동 생성
+- **Rule**: `.claude/rules/storybook.md` — 스토리 작성 규칙
+
 ## Git 워크플로우
 
 - **Skill**: `/commit` — 변경 분석 → Conventional Commits 한국어 커밋 메시지 생성 → 빌드 검증 → 커밋

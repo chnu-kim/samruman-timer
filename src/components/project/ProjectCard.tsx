@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { cn } from "@/lib/utils";
+import { cn, formatRelativeDate } from "@/lib/utils";
 import type { ProjectListItem } from "@/types";
 
 interface ProjectCardProps {
@@ -7,24 +7,12 @@ interface ProjectCardProps {
   className?: string;
 }
 
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) return "오늘";
-  if (diffDays === 1) return "어제";
-  if (diffDays < 30) return `${diffDays}일 전`;
-  return date.toLocaleDateString("ko-KR");
-}
-
 export function ProjectCard({ project, className }: ProjectCardProps) {
   return (
-    <Link href={`/projects/${project.id}`} className="flex">
+    <Link href={`/projects/${project.id}`} className="flex rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
       <article
         className={cn(
-          "flex w-full flex-col border border-border rounded-xl p-5 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5",
+          "flex w-full flex-col border border-border rounded-xl p-5 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 hover:border-accent/40",
           className,
         )}
         style={{ animation: "fade-in 0.2s ease-out forwards" }}
@@ -40,7 +28,7 @@ export function ProjectCard({ project, className }: ProjectCardProps) {
         {/* 하단: 메타 정보 (고정 영역) */}
         <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
           <span>{project.ownerNickname}</span>
-          <span>{formatDate(project.createdAt)}</span>
+          <span>{formatRelativeDate(project.createdAt)}</span>
         </div>
       </article>
     </Link>

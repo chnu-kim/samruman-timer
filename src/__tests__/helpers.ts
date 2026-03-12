@@ -96,6 +96,34 @@ export function createPatchRequest(
   });
 }
 
+export function createPutRequest(
+  url: string,
+  body: unknown,
+  headers?: Record<string, string>
+): NextRequest {
+  const allHeaders = new Headers(headers);
+  allHeaders.set("content-type", "application/json");
+  return new NextRequest(new URL(url, "http://localhost:3000"), {
+    method: "PUT",
+    headers: allHeaders,
+    body: JSON.stringify(body),
+  });
+}
+
+export function createPutRequestRaw(
+  url: string,
+  rawBody: string,
+  headers?: Record<string, string>
+): NextRequest {
+  const allHeaders = new Headers(headers);
+  allHeaders.set("content-type", "application/json");
+  return new NextRequest(new URL(url, "http://localhost:3000"), {
+    method: "PUT",
+    headers: allHeaders,
+    body: rawBody,
+  });
+}
+
 // ─── Response Parser ───
 
 export async function parseJson(response: Response) {

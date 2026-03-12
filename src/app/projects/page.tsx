@@ -166,8 +166,7 @@ export default function ProjectsPage() {
 
       {showForm && (
         <div
-          className="rounded-xl border border-accent/30 bg-accent-light/20 p-5"
-          style={{ animation: "fade-in 0.2s ease-out" }}
+          className="rounded-xl border border-accent/30 bg-accent-light/20 p-5 animate-fade-in"
         >
           <h2 className="text-sm font-bold text-foreground mb-4">새 프로젝트 만들기</h2>
           <CreateProjectForm onSuccess={handleCreateSuccess} />
@@ -176,11 +175,20 @@ export default function ProjectsPage() {
 
       {/* 로그인 시 탭 */}
       {user && (
-        <div className="flex gap-1 border-b border-border" role="tablist">
+        <div className="flex gap-1 border-b border-border" role="tablist" aria-label="프로젝트 소유 필터">
           <button
             role="tab"
+            id="project-tab-mine"
             aria-selected={activeTab === "mine"}
+            aria-controls="project-tabpanel"
+            tabIndex={activeTab === "mine" ? 0 : -1}
             onClick={() => setActiveTab("mine")}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                e.preventDefault();
+                setActiveTab(activeTab === "mine" ? "others" : "mine");
+              }
+            }}
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
               activeTab === "mine"
                 ? "border-accent text-accent"
@@ -191,8 +199,17 @@ export default function ProjectsPage() {
           </button>
           <button
             role="tab"
+            id="project-tab-others"
             aria-selected={activeTab === "others"}
+            aria-controls="project-tabpanel"
+            tabIndex={activeTab === "others" ? 0 : -1}
             onClick={() => setActiveTab("others")}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                e.preventDefault();
+                setActiveTab(activeTab === "mine" ? "others" : "mine");
+              }
+            }}
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
               activeTab === "others"
                 ? "border-accent text-accent"

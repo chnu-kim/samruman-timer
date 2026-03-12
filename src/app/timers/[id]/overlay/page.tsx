@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useSearchParams } from "next/navigation";
 import { formatTime } from "@/components/timer/CountdownDisplay";
+import { formatDateTime } from "@/lib/utils";
 import type { ApiSuccessResponse, TimerDetailResponse } from "@/types";
 
 type Position = "center" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
@@ -29,6 +30,7 @@ export default function TimerOverlayPage() {
   const color = searchParams.get("color") || "#ffffff";
   const bg = searchParams.get("bg") || "transparent";
   const showTitle = searchParams.get("showTitle") === "true";
+  const showEndDate = searchParams.get("showEndDate") === "true";
   const shadow = searchParams.get("shadow") !== "false"; // 기본 활성화: OBS에서 가독성 확보
   const positionParam = searchParams.get("position") || "center";
   const position: Position = isValidPosition(positionParam) ? positionParam : "center";
@@ -75,10 +77,10 @@ export default function TimerOverlayPage() {
     }
   }, [timerId]);
 
-  // 30초 폴링
+  // 5초 폴링
   useEffect(() => {
     fetchTimer();
-    const interval = setInterval(fetchTimer, 30_000);
+    const interval = setInterval(fetchTimer, 5_000);
     return () => clearInterval(interval);
   }, [fetchTimer]);
 
@@ -205,6 +207,25 @@ export default function TimerOverlayPage() {
               }}
             >
               시작 대기 중
+            </span>
+          )}
+          {showEndDate && !isExpired && !isScheduled && timer.status === "RUNNING" && displayed > 0 && (
+            <span
+              style={{
+                color: textColor,
+                fontSize: `${labelFontSize}px`,
+                fontWeight: 500,
+                lineHeight: 1,
+                opacity: 0.8,
+                textShadow,
+              }}
+            >
+              종료 예정 · {formatDateTime(new Date(Date.now() + displayed * 1000).toISOString())}
+              {(() => {
+                const startedAt = timer.scheduledStartAt ?? timer.createdAt;
+                const elapsed = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000);
+                return elapsed > 0 ? ` (${formatTime(elapsed)} 경과)` : "";
+              })()}
             </span>
           )}
         </div>

@@ -2,22 +2,173 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { TimerCard } from "@/components/timer/TimerCard";
+import { CountdownDisplay } from "@/components/timer/CountdownDisplay";
 import { CreateTimerForm } from "@/components/timer/CreateTimerForm";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EditableText } from "@/components/ui/EditableText";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { PlusIcon, TimerIcon, TrashIcon, LinkIcon, ChartBarIcon } from "@/components/ui/Icons";
-import { TimerCardGridSkeleton, Skeleton } from "@/components/ui/Skeleton";
+import { ProjectDetailSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
+import { GoalCard } from "@/components/goal/GoalCard";
+import { GoalForm } from "@/components/goal/GoalForm";
 import Link from "next/link";
 import type {
   ApiSuccessResponse,
   ProjectDetailResponse,
   TimerListItem,
+  GoalResponse,
   MeResponse,
 } from "@/types";
+
+function GoalSection({
+  goals,
+  projectId,
+  isOwner,
+  showGoalForm,
+  onShowGoalForm,
+  onHideGoalForm,
+  onGoalUpdate,
+}: {
+  goals: GoalResponse[];
+  projectId: string;
+  isOwner: boolean;
+  showGoalForm: boolean;
+  onShowGoalForm: () => void;
+  onHideGoalForm: () => void;
+  onGoalUpdate: () => void;
+}) {
+  const [goalTab, setGoalTab] = useState<"active" | "completed">("active");
+
+  const activeGoals = goals.filter((g) => g.status === "ACTIVE");
+  const inactiveGoals = goals.filter((g) => g.status !== "ACTIVE");
+
+  const tabClass = (active: boolean) =>
+    `px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+      active
+        ? "border-accent text-accent"
+        : "border-transparent text-muted-foreground hover:text-foreground"
+    }`;
+
+  return (
+    <section className="mt-6 space-y-4" aria-label="목표">
+      {/* 헤더 — 제목 + 추가 버튼 */}
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="text-sm font-bold text-foreground">목표</h2>
+        {isOwner && (
+          <Button
+            variant={showGoalForm ? "secondary" : "primary"}
+            size="sm"
+            onClick={showGoalForm ? onHideGoalForm : onShowGoalForm}
+          >
+            {showGoalForm ? (
+              "취소"
+            ) : (
+              <>
+                <PlusIcon className="w-4 h-4 mr-1" />
+                새 목표
+              </>
+            )}
+          </Button>
+        )}
+      </div>
+
+      {/* 폼 (토글) */}
+      {showGoalForm && (
+        <div className="rounded-xl border border-accent/30 bg-accent-light/20 p-5 animate-fade-in">
+          <h3 className="text-sm font-bold text-foreground mb-4">새 목표 설정</h3>
+          <GoalForm
+            projectId={projectId}
+            onSuccess={() => { onHideGoalForm(); onGoalUpdate(); }}
+            onCancel={onHideGoalForm}
+          />
+        </div>
+      )}
+
+      {/* 탭 — 진행 중 / 완료 */}
+      <div className="flex gap-1 border-b border-border" role="tablist" aria-label="목표 상태 필터">
+        <button
+          role="tab"
+          id="goal-tab-active"
+          aria-selected={goalTab === "active"}
+          aria-controls="goal-tabpanel"
+          tabIndex={goalTab === "active" ? 0 : -1}
+          onClick={() => setGoalTab("active")}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+              e.preventDefault();
+              setGoalTab(goalTab === "active" ? "completed" : "active");
+            }
+          }}
+          className={tabClass(goalTab === "active")}
+        >
+          진행 중 ({activeGoals.length})
+        </button>
+        <button
+          role="tab"
+          id="goal-tab-completed"
+          aria-selected={goalTab === "completed"}
+          aria-controls="goal-tabpanel"
+          tabIndex={goalTab === "completed" ? 0 : -1}
+          onClick={() => setGoalTab("completed")}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+              e.preventDefault();
+              setGoalTab(goalTab === "active" ? "completed" : "active");
+            }
+          }}
+          className={tabClass(goalTab === "completed")}
+        >
+          완료 ({inactiveGoals.length})
+        </button>
+      </div>
+
+      {/* 탭 콘텐츠 */}
+      <div
+        className="flex flex-col gap-3"
+        role="tabpanel"
+        id="goal-tabpanel"
+        aria-labelledby={goalTab === "active" ? "goal-tab-active" : "goal-tab-completed"}
+        tabIndex={0}
+      >
+        {goalTab === "active" ? (
+          activeGoals.length > 0 ? (
+            activeGoals.map((goal) => (
+              <GoalCard
+                key={goal.id}
+                goal={goal}
+                projectId={projectId}
+                isOwner={isOwner}
+                onUpdate={onGoalUpdate}
+              />
+            ))
+          ) : (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              진행 중인 목표가 없습니다.
+            </p>
+          )
+        ) : inactiveGoals.length > 0 ? (
+          inactiveGoals.map((goal) => (
+            <GoalCard
+              key={goal.id}
+              goal={goal}
+              projectId={projectId}
+              isOwner={isOwner}
+              onUpdate={onGoalUpdate}
+              compact
+            />
+          ))
+        ) : (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            완료된 목표가 없습니다.
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
 
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
@@ -33,6 +184,8 @@ export default function ProjectDetailPage() {
   const [showForm, setShowForm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [goals, setGoals] = useState<GoalResponse[]>([]);
+  const [showGoalForm, setShowGoalForm] = useState(false);
 
   const fetchProject = useCallback(async () => {
     try {
@@ -45,6 +198,18 @@ export default function ProjectDetailPage() {
       }
     } catch {
       setError(true);
+    }
+  }, [projectId]);
+
+  const fetchGoals = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/projects/${projectId}/goals`);
+      if (res.ok) {
+        const json = (await res.json()) as ApiSuccessResponse<GoalResponse[]>;
+        setGoals(json.data);
+      }
+    } catch {
+      // ignore
     }
   }, [projectId]);
 
@@ -67,6 +232,7 @@ export default function ProjectDetailPage() {
     }
     load();
     fetchTimers();
+    fetchGoals();
     fetch("/api/auth/me")
       .then(async (res) => {
         if (res.ok) {
@@ -75,14 +241,22 @@ export default function ProjectDetailPage() {
         }
       })
       .catch(() => {});
-  }, [projectId, fetchProject, fetchTimers]);
+  }, [projectId, fetchProject, fetchTimers, fetchGoals]);
 
   useEffect(() => {
-    const hasScheduled = timers.some((t) => t.status === "SCHEDULED");
-    if (!hasScheduled) return;
-    const interval = setInterval(fetchTimers, 30_000);
+    const timer = timers[0];
+    if (!timer || timer.status !== "SCHEDULED") return;
+    const interval = setInterval(fetchTimers, 5_000);
     return () => clearInterval(interval);
   }, [timers, fetchTimers]);
+
+  // ACTIVE 목표가 있으면 30초 간격 폴링
+  useEffect(() => {
+    const hasActiveGoal = goals.some((g) => g.status === "ACTIVE");
+    if (!hasActiveGoal) return;
+    const interval = setInterval(fetchGoals, 30_000);
+    return () => clearInterval(interval);
+  }, [goals, fetchGoals]);
 
   function handleCopyLink() {
     navigator.clipboard.writeText(window.location.href);
@@ -114,16 +288,7 @@ export default function ProjectDetailPage() {
   }
 
   if (loading) {
-    return (
-      <section className="space-y-6">
-        <div className="space-y-2">
-          <Skeleton className="h-8 w-64" />
-          <Skeleton className="h-4 w-48" />
-          <Skeleton className="h-3 w-32" />
-        </div>
-        <TimerCardGridSkeleton count={3} />
-      </section>
-    );
+    return <ProjectDetailSkeleton />;
   }
 
   if (error || !project) {
@@ -136,6 +301,8 @@ export default function ProjectDetailPage() {
   }
 
   const isOwner = user?.id === project.owner.id;
+  const iconBtnBase =
+    "rounded-lg p-1.5 min-h-11 min-w-11 flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
   function handleCreateSuccess() {
     setShowForm(false);
@@ -189,7 +356,7 @@ export default function ProjectDetailPage() {
                 href={`/projects/${projectId}/stats`}
                 aria-label="통계"
                 title="통계"
-                className="rounded-lg p-1.5 min-h-11 min-w-11 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className={`${iconBtnBase} text-muted-foreground hover:text-foreground hover:bg-foreground/10`}
               >
                 <ChartBarIcon className="w-5 h-5" />
               </Link>
@@ -198,7 +365,7 @@ export default function ProjectDetailPage() {
               onClick={handleCopyLink}
               aria-label="링크 복사"
               title="링크 복사"
-              className="rounded-lg p-1.5 min-h-11 min-w-11 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className={`${iconBtnBase} text-muted-foreground hover:text-foreground hover:bg-foreground/10`}
             >
               <LinkIcon className="w-5 h-5" />
             </button>
@@ -210,8 +377,8 @@ export default function ProjectDetailPage() {
                 onClick={() => setShowDeleteDialog(true)}
                 className={
                   deleting
-                    ? "rounded-lg p-1.5 min-h-11 min-w-11 flex items-center justify-center opacity-50 cursor-not-allowed"
-                    : "rounded-lg p-1.5 min-h-11 min-w-11 flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    ? `${iconBtnBase} opacity-50 cursor-not-allowed`
+                    : `${iconBtnBase} text-muted-foreground hover:text-red-500 hover:bg-red-500/10`
                 }
               >
                 <TrashIcon className="w-5 h-5" />
@@ -219,39 +386,10 @@ export default function ProjectDetailPage() {
             )}
           </div>
         </div>
-        {isOwner && (timers.length > 0 || showForm) && (
-          <Button
-            variant={showForm ? "secondary" : "primary"}
-            size="sm"
-            className="mt-3"
-            onClick={() => setShowForm(!showForm)}
-          >
-            {showForm ? (
-              "취소"
-            ) : (
-              <>
-                <PlusIcon className="w-4 h-4 mr-1" />
-                새 타이머
-              </>
-            )}
-          </Button>
-        )}
       </div>
 
-      {showForm && (
-        <div
-          className="mt-4 rounded-xl border border-accent/30 bg-accent-light/20 p-5"
-          style={{ animation: "fade-in 0.2s ease-out" }}
-        >
-          <h2 className="text-sm font-bold text-foreground mb-4">새 타이머 만들기</h2>
-          <CreateTimerForm
-            projectId={projectId}
-            onSuccess={handleCreateSuccess}
-          />
-        </div>
-      )}
-
-      <div className="mt-6">
+      {/* 타이머 섹션 (핵심 기능 — 항상 상단) */}
+      <div className="mt-4">
         {timers.length === 0 ? (
           <div className="py-16 text-center">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-muted">
@@ -265,18 +403,67 @@ export default function ProjectDetailPage() {
                 onClick={() => setShowForm(true)}
               >
                 <PlusIcon className="w-4 h-4 mr-1" />
-                첫 타이머 만들기
+                타이머 만들기
               </Button>
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {timers.map((timer) => (
-              <TimerCard key={timer.id} timer={timer} />
-            ))}
-          </div>
+          <Link
+            href={`/timers/${timers[0].id}`}
+            className="block rounded-xl border border-accent/30 bg-accent-light/10 p-5 transition-colors hover:bg-accent-light/20"
+          >
+            <div className="flex items-center justify-between gap-4">
+              <CountdownDisplay
+                remainingSeconds={timers[0].remainingSeconds}
+                status={timers[0].status}
+                scheduledStartAt={timers[0].scheduledStartAt}
+                createdAt={timers[0].createdAt}
+                size="large"
+              />
+              <Badge variant={timers[0].status === "SCHEDULED" ? "scheduled" : timers[0].status === "RUNNING" ? "running" : "expired"}>
+                {timers[0].status === "SCHEDULED" ? "예약됨" : timers[0].status === "RUNNING" ? "실행 중" : "만료"}
+              </Badge>
+            </div>
+            {timers[0].title && (
+              <p className="mt-2 text-sm text-muted-foreground">{timers[0].title}</p>
+            )}
+          </Link>
         )}
       </div>
+
+      {showForm && (
+        <div
+          className="mt-4 rounded-xl border border-accent/30 bg-accent-light/20 p-5 animate-fade-in"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-bold text-foreground">새 타이머 만들기</h2>
+            {isOwner && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowForm(false)}
+              >
+                취소
+              </Button>
+            )}
+          </div>
+          <CreateTimerForm
+            projectId={projectId}
+            onSuccess={handleCreateSuccess}
+          />
+        </div>
+      )}
+
+      {/* 목표 섹션 */}
+      <GoalSection
+        goals={goals}
+        projectId={projectId}
+        isOwner={isOwner}
+        showGoalForm={showGoalForm}
+        onShowGoalForm={() => setShowGoalForm(true)}
+        onHideGoalForm={() => setShowGoalForm(false)}
+        onGoalUpdate={fetchGoals}
+      />
 
       <ConfirmDialog
         open={showDeleteDialog}

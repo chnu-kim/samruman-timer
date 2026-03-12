@@ -36,3 +36,30 @@ export function formatHourShort(iso: string): string {
     hour12: false,
   });
 }
+
+/** 전체 날짜시간 포맷 (YYYY. MM. DD. HH:mm:ss) */
+export function formatDateTime(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleString("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
+
+/** 상대 날짜 포맷 ("오늘", "어제", "3일 전", 또는 로컬 날짜) */
+export function formatRelativeDate(iso: string): string {
+  const date = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return "오늘";
+  if (diffDays === 1) return "어제";
+  if (diffDays < 30) return `${diffDays}일 전`;
+  return date.toLocaleDateString("ko-KR");
+}

@@ -35,7 +35,7 @@ export async function detectScheduledActivation(
       .prepare(
         `INSERT INTO timer_logs (id, timer_id, action_type, actor_name, actor_user_id, delta_seconds, before_seconds, after_seconds, created_at) VALUES (?, ?, 'ACTIVATE', 'system', NULL, 0, ?, ?, ?)`
       )
-      .bind(logId, timer.id, timer.baseRemainingSeconds, timer.baseRemainingSeconds, nowStr),
+      .bind(logId, timer.id, timer.baseRemainingSeconds, timer.baseRemainingSeconds, timer.scheduledStartAt),
   ]);
 
   return {
@@ -58,6 +58,11 @@ export async function detectExpiry(
   );
   if (remaining > 0) return timer;
 
+  // 실제 만료 시각 = lastCalculatedAt + baseRemainingSeconds
+  const actualExpiryMs =
+    new Date(timer.lastCalculatedAt).getTime() +
+    timer.baseRemainingSeconds * 1000;
+  const actualExpiryISO = new Date(actualExpiryMs).toISOString();
   const now = nowISO();
   const logId = generateId();
 
@@ -66,19 +71,19 @@ export async function detectExpiry(
       .prepare(
         `UPDATE timers SET status = 'EXPIRED', base_remaining_seconds = 0, last_calculated_at = ?, updated_at = ? WHERE id = ?`
       )
-      .bind(now, now, timer.id),
+      .bind(actualExpiryISO, now, timer.id),
     db
       .prepare(
         `INSERT INTO timer_logs (id, timer_id, action_type, actor_name, actor_user_id, delta_seconds, before_seconds, after_seconds, created_at) VALUES (?, ?, 'EXPIRE', 'system', NULL, 0, ?, 0, ?)`
       )
-      .bind(logId, timer.id, remaining, now),
+      .bind(logId, timer.id, remaining, actualExpiryISO),
   ]);
 
   return {
     ...timer,
     status: "EXPIRED",
     baseRemainingSeconds: 0,
-    lastCalculatedAt: now,
+    lastCalculatedAt: actualExpiryISO,
     updatedAt: now,
   };
 }

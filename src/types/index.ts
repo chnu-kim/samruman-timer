@@ -285,6 +285,62 @@ export interface ProjectStatsResponse {
   dailyActivity: DailyActivity[];
 }
 
+export type TimerStatsResponse = ProjectStatsResponse;
+
+// ─── API 응답 타입: Overlay Settings ───
+
+export type OverlayPosition = "center" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
+
+export interface OverlaySettingsResponse {
+  fontSize: number;
+  color: string;
+  bg: string;
+  showTitle: boolean;
+  shadow: boolean;
+  position: OverlayPosition;
+}
+
+export interface OverlaySettingsRequest {
+  fontSize?: number;
+  color?: string;
+  bg?: string;
+  showTitle?: boolean;
+  shadow?: boolean;
+  position?: OverlayPosition;
+}
+
+// ─── API 응답 타입: Goal ───
+
+export type GoalType = "DURATION" | "DEADLINE";
+export type GoalStatus = "ACTIVE" | "COMPLETED" | "FAILED" | "CANCELLED";
+
+export interface CreateGoalRequest {
+  type: GoalType;
+  title: string;
+  targetSeconds?: number;
+  targetDatetime?: string;
+}
+
+export interface GoalResponse {
+  id: string;
+  type: GoalType;
+  title: string;
+  targetSeconds: number | null;
+  targetDatetime: string | null;
+  status: GoalStatus;
+  progress: GoalProgress;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface GoalProgress {
+  percentage: number;
+  currentSeconds?: number;
+  remainingToTarget?: number;
+  timerSurvivesDeadline?: boolean;
+  deadlineIn?: number;
+}
+
 // ─── Auth 타입 ───
 
 export interface JwtPayload {

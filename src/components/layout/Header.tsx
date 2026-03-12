@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { TimerIcon } from "@/components/ui/Icons";
+import { LogOutIcon, TimerIcon } from "@/components/ui/Icons";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { cn } from "@/lib/utils";
 import type { MeResponse } from "@/types";
@@ -37,12 +37,12 @@ export function Header({ initialUser }: HeaderProps = {}) {
   return (
     <header className="border-b border-border">
       <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
-        <div className="flex items-center gap-6">
-          <Link href="/" className="flex items-center gap-2 text-lg font-bold text-accent">
+        <div className="flex items-center gap-3 sm:gap-6">
+          <Link href="/" className="flex items-center gap-2 text-base sm:text-lg font-bold text-accent whitespace-nowrap">
             <TimerIcon className="w-5 h-5" />
             삼루먼타이머
           </Link>
-          <nav aria-label="메인 네비게이션">
+          <nav aria-label="메인 네비게이션" className="hidden sm:block">
             <Link
               href="/projects"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -52,7 +52,7 @@ export function Header({ initialUser }: HeaderProps = {}) {
           </nav>
         </div>
 
-        <div className={cn("flex items-center gap-2", !loaded && "invisible")}>
+        <div className={cn("flex items-center gap-2 shrink-0", !loaded && "invisible")}>
           <ThemeToggle />
           {user ? (
             <>
@@ -60,10 +60,11 @@ export function Header({ initialUser }: HeaderProps = {}) {
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-xs font-bold text-accent-foreground">
                   {user.nickname.charAt(0)}
                 </span>
-                <span className="text-sm">{user.nickname}</span>
+                <span className="hidden sm:inline text-sm">{user.nickname}</span>
               </div>
-              <Button variant="ghost" size="sm" onClick={handleLogout}>
-                로그아웃
+              <Button variant="ghost" size="sm" onClick={handleLogout} aria-label="로그아웃">
+                <LogOutIcon className="w-4 h-4 sm:hidden" />
+                <span className="hidden sm:inline">로그아웃</span>
               </Button>
             </>
           ) : (

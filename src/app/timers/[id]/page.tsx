@@ -5,15 +5,16 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { CountdownDisplay } from "@/components/timer/CountdownDisplay";
 import { TimerControls } from "@/components/timer/TimerControls";
+import { OverlaySettings } from "@/components/timer/OverlaySettings";
 import { Badge } from "@/components/ui/Badge";
 import { Pagination } from "@/components/ui/Pagination";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EditableText } from "@/components/ui/EditableText";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { TrashIcon, LinkIcon, ChartBarIcon } from "@/components/ui/Icons";
+import { TrashIcon, LinkIcon, ChartBarIcon, SettingsIcon } from "@/components/ui/Icons";
 import { TimerDetailSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
-import { cn } from "@/lib/utils";
+import { cn, formatDateTime } from "@/lib/utils";
 import { GraphModeSelector } from "@/components/graph/GraphModeSelector";
 import { RemainingChart } from "@/components/graph/RemainingChart";
 import { CumulativeChart } from "@/components/graph/CumulativeChart";
@@ -53,6 +54,8 @@ const ACTION_TYPE_BADGE_VARIANT: Record<ActionType, "create" | "add" | "subtract
 
 const FILTER_ACTIONS: ActionType[] = ["CREATE", "ADD", "SUBTRACT", "EXPIRE", "REOPEN", "ACTIVATE", "DELETE"];
 
+const GRAPH_MODES: GraphMode[] = ["remaining", "cumulative", "frequency"];
+
 function formatSeconds(s: number): string {
   const abs = Math.abs(s);
   const h = Math.floor(abs / 3600);
@@ -66,19 +69,6 @@ function formatSeconds(s: number): string {
   return parts.join(" ");
 }
 
-function formatDateTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString("ko-KR", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
-}
-
 export default function TimerDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -86,6 +76,7 @@ export default function TimerDetailPage() {
   const timerId = params.id;
   const [deleting, setDeleting] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showOverlaySettings, setShowOverlaySettings] = useState(false);
 
   const [timer, setTimer] = useState<TimerDetailResponse | null>(null);
   const [user, setUser] = useState<MeResponse | null>(null);
@@ -193,21 +184,59 @@ export default function TimerDetailPage() {
     fetchGraph(graphMode);
   }
 
-  // 키보드 단축키 (Step 11)
+  // 키보드 단축키 핸들러
   const handleKeyboardPreset = useCallback(async (seconds: number) => {
     if (!isOwner || !timer || timer.status === "SCHEDULED") return;
-    // 단축키 프리셋은 actorName 없이 사용 불가 — toast로 안내
-    toast(`닉네임 입력 후 숫자키로 즉시 적용할 수 있습니다`, "info");
-  }, [isOwner, timer, toast]);
+    // 기본 닉네임이 설정되어 있으면 즉시 적용 가능
+    const defaultActor = (() => {
+      try { return localStorage.getItem("defaultActorName") || ""; } catch { return ""; }
+    })();
+    if (defaultActor) {
+      try {
+        const res = await fetch(`/api/timers/${timerId}/modify`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: selectedAction, deltaSeconds: seconds, actorName: defaultActor }),
+        });
+        if (res.ok) {
+          const json = (await res.json()) as ApiSuccessResponse<TimerModifyResponse>;
+          handleModified(json.data);
+          toast(`${selectedAction === "ADD" ? "추가" : "차감"} 완료 (${defaultActor})`, "success");
+        }
+      } catch {
+        toast("시간 변경에 실패했습니다.", "error");
+      }
+    } else {
+      toast("닉네임 입력 후 숫자키로 즉시 적용할 수 있습니다", "info");
+    }
+  }, [isOwner, timer, toast, timerId, selectedAction]);
 
   const handleToggleAction = useCallback(() => {
     setSelectedAction((prev) => (prev === "ADD" ? "SUBTRACT" : "ADD"));
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    fetchTimer();
+    fetchLogs(logPage, activeFilters);
+    fetchGraph(graphMode);
+    toast("새로고침 완료", "success");
+  }, [fetchTimer, fetchLogs, fetchGraph, logPage, activeFilters, graphMode, toast]);
+
+  const handleToggleGraph = useCallback(() => {
+    setGraphMode((prev) => {
+      const idx = GRAPH_MODES.indexOf(prev);
+      const next = GRAPH_MODES[(idx + 1) % GRAPH_MODES.length];
+      setGraphData(null);
+      return next;
+    });
   }, []);
 
   const { showHelp, setShowHelp } = useKeyboardShortcuts({
     enabled: isOwner && !!timer && timer.status !== "SCHEDULED",
     onPreset: handleKeyboardPreset,
     onToggleAction: handleToggleAction,
+    onRefresh: handleRefresh,
+    onToggleGraph: handleToggleGraph,
   });
 
   function toggleFilter(action: ActionType) {
@@ -241,12 +270,6 @@ export default function TimerDetailPage() {
   function handleCopyLink() {
     navigator.clipboard.writeText(window.location.href);
     toast("링크가 복사되었습니다", "success");
-  }
-
-  function handleCopyOverlayLink() {
-    const url = `${window.location.origin}/timers/${timerId}/overlay`;
-    navigator.clipboard.writeText(url);
-    toast("OBS 오버레이 URL이 복사되었습니다", "success");
   }
 
   async function handleSaveTitle(title: string) {
@@ -335,9 +358,9 @@ export default function TimerDetailPage() {
             </Badge>
             {isOwner && (
               <Link
-                href={`/projects/${timer.projectId}/stats`}
-                aria-label="프로젝트 통계"
-                title="프로젝트 통계"
+                href={`/timers/${timerId}/stats`}
+                aria-label="타이머 통계"
+                title="타이머 통계"
                 className="rounded-lg p-1.5 min-h-11 min-w-11 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <ChartBarIcon className="w-5 h-5" />
@@ -376,20 +399,23 @@ export default function TimerDetailPage() {
             remainingSeconds={timer.remainingSeconds}
             status={timer.status}
             scheduledStartAt={timer.scheduledStartAt}
+            createdAt={timer.createdAt}
             size="large"
           />
         </div>
 
-        {/* OBS 오버레이 URL 복사 */}
+        {/* OBS 오버레이 설정 + 알림 설정 */}
         {isOwner && (
-          <button
-            onClick={handleCopyOverlayLink}
-            aria-label="OBS 오버레이 URL 복사"
-            className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <LinkIcon className="w-3.5 h-3.5" />
-            OBS 오버레이 URL 복사
-          </button>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setShowOverlaySettings(true)}
+              aria-label="OBS 오버레이 설정"
+              className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <SettingsIcon className="w-3.5 h-3.5" />
+              OBS 오버레이 설정
+            </button>
+          </div>
         )}
       </div>
 
@@ -605,9 +631,20 @@ export default function TimerDetailPage() {
             </div>
             <p className="mt-4 text-xs text-muted-foreground">
               입력 필드에 포커스가 없을 때만 동작합니다.
+              {(() => {
+                try { return localStorage.getItem("defaultActorName"); } catch { return ""; }
+              })() ? " 기본 닉네임이 설정되어 있으면 숫자키로 즉시 적용됩니다." : " 기본 닉네임을 설정하면 숫자키로 즉시 적용할 수 있습니다."}
             </p>
           </div>
         </div>
+      )}
+
+      {/* OBS 오버레이 설정 모달 */}
+      {showOverlaySettings && (
+        <OverlaySettings
+          timerId={timerId}
+          onClose={() => setShowOverlaySettings(false)}
+        />
       )}
 
       <ConfirmDialog

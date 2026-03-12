@@ -1,6 +1,14 @@
 ---
+name: storybook-writer
 model: sonnet
 description: 컴포넌트를 분석하여 CSF3 형식의 Storybook 스토리를 작성한다
+tools:
+  - Read
+  - Write
+  - Edit
+  - Bash
+  - Grep
+  - Glob
 ---
 
 # Storybook Writer Agent

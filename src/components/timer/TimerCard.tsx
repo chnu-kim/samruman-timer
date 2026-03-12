@@ -11,13 +11,16 @@ interface TimerCardProps {
 
 export function TimerCard({ timer, className }: TimerCardProps) {
   return (
-    <Link href={`/timers/${timer.id}`} className="flex">
+    <Link
+      href={`/timers/${timer.id}`}
+      className="flex rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+    >
       <article
         className={cn(
-          "flex w-full flex-col border border-border rounded-xl p-5 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5",
+          "flex w-full flex-col border border-border rounded-xl p-5 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 hover:border-accent/40",
           className,
         )}
-        style={{ animation: "fade-in 0.2s ease-out" }}
+        style={{ animation: "fade-in 0.2s ease-out forwards" }}
       >
         {/* 상단: 제목 + 설명 (가변 영역) */}
         <div className="flex-1 min-h-0">
@@ -33,6 +36,7 @@ export function TimerCard({ timer, className }: TimerCardProps) {
             remainingSeconds={timer.remainingSeconds}
             status={timer.status}
             scheduledStartAt={timer.scheduledStartAt}
+            createdAt={timer.createdAt}
             size="compact"
           />
           <Badge variant={timer.status === "SCHEDULED" ? "scheduled" : timer.status === "RUNNING" ? "running" : "expired"}>
