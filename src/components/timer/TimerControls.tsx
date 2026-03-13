@@ -214,13 +214,33 @@ export function TimerControls({ timerId, status, remainingSeconds, onModified, c
           required
           maxLength={50}
           placeholder={defaultActor ? `기본: ${defaultActor}` : "시간 변경을 요청한 시청자"}
-          list="recent-actors"
         />
-        <datalist id="recent-actors">
-          {recentActors.map((name) => (
-            <option key={name} value={name} />
-          ))}
-        </datalist>
+        {/* 최근 닉네임 칩 */}
+        {recentActors.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {recentActors.map((name) => {
+              const isDefault = name === defaultActor;
+              const isSelected = name === actorName;
+              return (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => setActorName(name)}
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-xs cursor-pointer transition-colors",
+                    isDefault
+                      ? "border-accent text-accent hover:bg-accent/10"
+                      : "border-border text-muted-foreground hover:bg-accent/10 hover:text-foreground",
+                    isSelected && "bg-accent/10",
+                  )}
+                >
+                  {isDefault && <span className="mr-0.5">★</span>}
+                  {name}
+                </button>
+              );
+            })}
+          </div>
+        )}
         <div className="mt-1.5 flex items-center gap-2">
           {actorName.trim() && actorName.trim() !== defaultActor && (
             <button
