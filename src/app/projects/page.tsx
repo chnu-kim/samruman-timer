@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { ProjectCard } from "@/components/project/ProjectCard";
 import { CreateProjectForm } from "@/components/project/CreateProjectForm";
 import { Button } from "@/components/ui/Button";
@@ -16,6 +17,7 @@ type SortBy = "latest" | "name";
 type Tab = "mine" | "others";
 
 export default function ProjectsPage() {
+  const router = useRouter();
   const [user, setUser] = useState<MeResponse | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
 
@@ -126,10 +128,8 @@ export default function ProjectsPage() {
     setPage(1);
   }, [debouncedQuery, sortBy, activeTab]);
 
-  function handleCreateSuccess() {
-    setShowForm(false);
-    fetchProjects();
-    fetchTabCounts();
+  function handleCreateSuccess(id: string) {
+    router.push(`/projects/${id}`);
   }
 
   if (!authChecked) {

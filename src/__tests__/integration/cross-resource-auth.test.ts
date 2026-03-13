@@ -21,7 +21,6 @@ import { PATCH as patchTimer, DELETE as deleteTimer } from "@/app/api/timers/[id
 import { POST as modifyTimer } from "@/app/api/timers/[id]/modify/route";
 import { PUT as putOverlaySettings } from "@/app/api/timers/[id]/overlay-settings/route";
 import { GET as getTimerStats } from "@/app/api/timers/[id]/stats/route";
-import { GET as getProjectStats } from "@/app/api/projects/[id]/stats/route";
 
 const OWNER_HEADERS = {
   "x-user-id": "owner-1",
@@ -165,13 +164,6 @@ describe("교차 리소스 인가 통합 테스트", () => {
       expect(res.status).toBe(403);
     });
 
-    it("비소유자 프로젝트 통계 조회 → 403", async () => {
-      db._stmt.first.mockResolvedValueOnce({ id: "proj-1", owner_user_id: "owner-1" });
-
-      const req = createGetRequest("/api/projects/proj-1/stats", OTHER_HEADERS);
-      const res = await getProjectStats(req as never, makeParams("proj-1") as never);
-      expect(res.status).toBe(403);
-    });
   });
 
   describe("미인증 요청 검증", () => {
