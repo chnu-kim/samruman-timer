@@ -27,7 +27,7 @@ export const GET = withErrorHandler(async (
       `SELECT id, project_id, type, title, target_seconds, target_datetime,
               status, created_at, completed_at, updated_at
        FROM goals
-       WHERE project_id = ? AND status != 'CANCELLED'
+       WHERE project_id = ?
        ORDER BY created_at DESC`,
     )
     .bind(projectId)

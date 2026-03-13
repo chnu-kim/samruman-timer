@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   createMockDB,
+  createDeleteRequest,
   createPatchRequest,
   parseJson,
 } from "../helpers";
@@ -17,7 +18,7 @@ vi.mock("@/lib/goal", async (importOriginal) => {
 
 import { getDB } from "@/lib/db";
 import { computeProgress } from "@/lib/goal";
-import { PATCH } from "@/app/api/projects/[id]/goals/[goalId]/route";
+import { DELETE, PATCH } from "@/app/api/projects/[id]/goals/[goalId]/route";
 
 const PROJECT_ROW = { id: "proj-1", owner_user_id: "user-1" };
 const ACTIVE_GOAL = {
@@ -121,5 +122,97 @@ describe("PATCH /api/projects/[id]/goals/[goalId]", () => {
     const res = await PATCH(req as never, makeParams() as never);
 
     expect(res.status).toBe(400);
+  });
+});
+
+describe("DELETE /api/projects/[id]/goals/[goalId]", () => {
+  let db: ReturnType<typeof createMockDB>;
+
+  beforeEach(() => {
+    db = createMockDB();
+    vi.mocked(getDB).mockResolvedValue(db as unknown as D1Database);
+  });
+
+  it("200 목표 소프트 삭제 성공", async () => {
+    db._stmt.first
+      .mockResolvedValueOnce(PROJECT_ROW)
+      .mockResolvedValueOnce({ id: "goal-1", status: "ACTIVE" });
+
+    const req = createDeleteRequest(
+      "/api/projects/proj-1/goals/goal-1",
+      { "x-user-id": "user-1" },
+    );
+    const res = await DELETE(req as never, makeParams() as never);
+    const json = await parseJson(res);
+
+    expect(res.status).toBe(200);
+    expect(json.data.id).toBe("goal-1");
+    expect(db._stmt.run).toHaveBeenCalled();
+  });
+
+  it("200 COMPLETED 목표도 삭제 가능", async () => {
+    db._stmt.first
+      .mockResolvedValueOnce(PROJECT_ROW)
+      .mockResolvedValueOnce({ id: "goal-1", status: "COMPLETED" });
+
+    const req = createDeleteRequest(
+      "/api/projects/proj-1/goals/goal-1",
+      { "x-user-id": "user-1" },
+    );
+    const res = await DELETE(req as never, makeParams() as never);
+
+    expect(res.status).toBe(200);
+  });
+
+  it("400 이미 CANCELLED인 목표 삭제 시도", async () => {
+    db._stmt.first
+      .mockResolvedValueOnce(PROJECT_ROW)
+      .mockResolvedValueOnce({ id: "goal-1", status: "CANCELLED" });
+
+    const req = createDeleteRequest(
+      "/api/projects/proj-1/goals/goal-1",
+      { "x-user-id": "user-1" },
+    );
+    const res = await DELETE(req as never, makeParams() as never);
+
+    expect(res.status).toBe(400);
+  });
+
+  it("404 프로젝트 없으면 에러", async () => {
+    db._stmt.first.mockResolvedValueOnce(null);
+
+    const req = createDeleteRequest(
+      "/api/projects/proj-1/goals/goal-1",
+      { "x-user-id": "user-1" },
+    );
+    const res = await DELETE(req as never, makeParams() as never);
+
+    expect(res.status).toBe(404);
+  });
+
+  it("403 소유자가 아니면 에러", async () => {
+    db._stmt.first.mockResolvedValueOnce(PROJECT_ROW);
+
+    const req = createDeleteRequest(
+      "/api/projects/proj-1/goals/goal-1",
+      { "x-user-id": "other-user" },
+    );
+    const res = await DELETE(req as never, makeParams() as never);
+
+    expect(res.status).toBe(403);
+  });
+
+  it("404 목표가 없으면 에러", async () => {
+    db._stmt.first
+      .mockResolvedValueOnce(PROJECT_ROW)
+      .mockResolvedValueOnce(null);
+
+    const req = createDeleteRequest(
+      "/api/projects/proj-1/goals/goal-1",
+      { "x-user-id": "user-1" },
+    );
+    const res = await DELETE(req as never, makeParams() as never);
+
+    expect(res.status).toBe(404);
   });
 });

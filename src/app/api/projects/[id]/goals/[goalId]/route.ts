@@ -2,6 +2,61 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDB, nowISO, withErrorHandler } from "@/lib/db";
 import { computeProgress, type GoalRow } from "@/lib/goal";
 
+export const DELETE = withErrorHandler(async (
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; goalId: string }> },
+) => {
+  const { id: projectId, goalId } = await params;
+  const userId = request.headers.get("x-user-id");
+  const db = await getDB();
+
+  const project = await db
+    .prepare("SELECT id, owner_user_id FROM projects WHERE id = ? AND status != 'DELETED'")
+    .bind(projectId)
+    .first<{ id: string; owner_user_id: string }>();
+
+  if (!project) {
+    return NextResponse.json(
+      { error: { code: "NOT_FOUND", message: "프로젝트를 찾을 수 없습니다" } },
+      { status: 404 },
+    );
+  }
+
+  if (project.owner_user_id !== userId) {
+    return NextResponse.json(
+      { error: { code: "FORBIDDEN", message: "프로젝트 소유자만 목표를 삭제할 수 있습니다" } },
+      { status: 403 },
+    );
+  }
+
+  const goal = await db
+    .prepare("SELECT id, status FROM goals WHERE id = ? AND project_id = ?")
+    .bind(goalId, projectId)
+    .first<{ id: string; status: string }>();
+
+  if (!goal) {
+    return NextResponse.json(
+      { error: { code: "NOT_FOUND", message: "목표를 찾을 수 없습니다" } },
+      { status: 404 },
+    );
+  }
+
+  if (goal.status === "CANCELLED") {
+    return NextResponse.json(
+      { error: { code: "BAD_REQUEST", message: "이미 취소된 목표입니다" } },
+      { status: 400 },
+    );
+  }
+
+  const now = nowISO();
+  await db
+    .prepare("UPDATE goals SET status = 'CANCELLED', completed_at = ?, updated_at = ? WHERE id = ?")
+    .bind(now, now, goalId)
+    .run();
+
+  return NextResponse.json({ data: { id: goalId } });
+});
+
 export const PATCH = withErrorHandler(async (
   request: NextRequest,
   { params }: { params: Promise<{ id: string; goalId: string }> },
