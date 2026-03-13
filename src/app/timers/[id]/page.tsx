@@ -20,6 +20,7 @@ import { RemainingChart } from "@/components/graph/RemainingChart";
 import { CumulativeChart } from "@/components/graph/CumulativeChart";
 import { FrequencyChart } from "@/components/graph/FrequencyChart";
 import { useKeyboardShortcuts, SHORTCUT_HELP } from "@/hooks/useKeyboardShortcuts";
+import { usePolling } from "@/hooks/usePolling";
 import type {
   ApiSuccessResponse,
   TimerDetailResponse,
@@ -94,6 +95,41 @@ export default function TimerDetailPage() {
   const [graphMode, setGraphMode] = useState<GraphMode>("remaining");
   const [graphData, setGraphData] = useState<GraphResponse | null>(null);
   const [graphLoading, setGraphLoading] = useState(false);
+  const [graphError, setGraphError] = useState(false);
+
+  // 폴링: 서버 동기화
+  const pollInterval = timer?.status === "RUNNING" ? 5000 : 15000;
+
+  const pollTimer = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/timers/${timerId}`);
+      if (!res.ok) return;
+      const json = (await res.json()) as ApiSuccessResponse<TimerDetailResponse>;
+      const serverData = json.data;
+
+      setTimer((prev) => {
+        if (!prev) return prev;
+        if (prev.status !== serverData.status) {
+          return serverData;
+        }
+        if (prev.status === "RUNNING") {
+          const diff = Math.abs(prev.remainingSeconds - serverData.remainingSeconds);
+          if (diff >= 2) {
+            return { ...prev, remainingSeconds: serverData.remainingSeconds };
+          }
+        }
+        return prev;
+      });
+    } catch {
+      // 폴링 실패는 무시
+    }
+  }, [timerId]);
+
+  usePolling({
+    fn: pollTimer,
+    interval: pollInterval,
+    enabled: !loading && !error && !!timer,
+  });
 
   // 키보드 단축키 상태
   const [selectedAction, setSelectedAction] = useState<"ADD" | "SUBTRACT">("ADD");
@@ -156,14 +192,17 @@ export default function TimerDetailPage() {
 
   const fetchGraph = useCallback(async (mode: GraphMode) => {
     setGraphLoading(true);
+    setGraphError(false);
     try {
       const res = await fetch(`/api/timers/${timerId}/graph?mode=${mode}`);
       if (res.ok) {
         const json = (await res.json()) as ApiSuccessResponse<GraphResponse>;
         setGraphData(json.data);
+      } else {
+        setGraphError(true);
       }
     } catch {
-      // ignore
+      setGraphError(true);
     } finally {
       setGraphLoading(false);
     }
@@ -179,9 +218,12 @@ export default function TimerDetailPage() {
         ? { ...prev, remainingSeconds: data.remainingSeconds, status: data.status }
         : prev,
     );
-    fetchLogs(1, activeFilters);
-    setLogPage(1);
-    fetchGraph(graphMode);
+    // optimistic 호출(log.id 없음)에서는 로그/그래프 갱신 생략
+    if (data.log?.id) {
+      fetchLogs(1, activeFilters);
+      setLogPage(1);
+      fetchGraph(graphMode);
+    }
   }
 
   // 키보드 단축키 핸들러
@@ -421,11 +463,12 @@ export default function TimerDetailPage() {
 
       {/* 시간 조작 */}
       {isOwner && (
-        <div className="mt-8 rounded-xl border border-accent/20 bg-accent-light/30 p-5">
-          <h2 className="text-sm font-medium text-foreground">시간 조작</h2>
+        <div className="mt-8 rounded-xl border border-accent/30 bg-accent-light/20 p-5">
+          <h2 className="text-sm font-bold text-foreground">시간 조작</h2>
           <TimerControls
             timerId={timerId}
             status={timer.status}
+            remainingSeconds={timer.remainingSeconds}
             onModified={handleModified}
             className="mt-3"
           />
@@ -587,10 +630,20 @@ export default function TimerDetailPage() {
       <div className="mt-8">
         <h2 className="border-l-2 border-accent pl-3 text-lg font-bold">그래프</h2>
         <GraphModeSelector mode={graphMode} onModeChange={(m) => { setGraphData(null); setGraphMode(m); }} className="mt-3" />
-        <div className="mt-4 rounded-xl border border-border bg-muted p-4">
+        <div id="graph-panel" role="tabpanel" aria-label={`${graphMode} 그래프`} className="mt-4 rounded-xl border border-border bg-muted p-4">
           {graphLoading ? (
             <div className="flex h-64 items-center justify-center">
               <div className="w-6 h-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+            </div>
+          ) : graphError ? (
+            <div className="flex h-64 flex-col items-center justify-center gap-2 text-muted-foreground">
+              <p className="text-sm">그래프를 불러오는데 실패했습니다.</p>
+              <button
+                onClick={() => fetchGraph(graphMode)}
+                className="rounded-md px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent-light transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                다시 시도
+              </button>
             </div>
           ) : graphData?.mode === "remaining" ? (
             <RemainingChart points={graphData.points} />

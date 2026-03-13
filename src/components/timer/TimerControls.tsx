@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
-import type { ApiSuccessResponse, ApiErrorResponse, TimerModifyResponse, ModifyAction, TimerStatus } from "@/types";
+import type { ApiSuccessResponse, ApiErrorResponse, TimerModifyResponse, TimerLogResponse, ModifyAction, TimerStatus } from "@/types";
 
 interface TimerControlsProps {
   timerId: string;
   status?: TimerStatus;
+  remainingSeconds?: number;
   onModified?: (data: TimerModifyResponse) => void;
   className?: string;
 }
@@ -60,14 +61,13 @@ function saveDefaultActor(name: string) {
   localStorage.setItem(DEFAULT_ACTOR_KEY, name);
 }
 
-export function TimerControls({ timerId, status, onModified, className }: TimerControlsProps) {
+export function TimerControls({ timerId, status, remainingSeconds, onModified, className }: TimerControlsProps) {
   const { toast } = useToast();
   const [actorName, setActorName] = useState("");
   const [hours, setHours] = useState(0);
   const [minutes, setMinutes] = useState(0);
   const [seconds, setSeconds] = useState(0);
   const [selectedAction, setSelectedAction] = useState<ModifyAction>("ADD");
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [recentActors, setRecentActors] = useState<string[]>([]);
   const [defaultActor, setDefaultActor] = useState("");
@@ -93,7 +93,27 @@ export function TimerControls({ timerId, status, onModified, className }: TimerC
 
   async function submitModify(action: ModifyAction, delta: number, actor: string) {
     setError("");
-    setLoading(true);
+
+    const prevRemaining = remainingSeconds ?? 0;
+    const optimisticRemaining = Math.max(0, prevRemaining + (action === "ADD" ? delta : -delta));
+
+    // Optimistic UI: 즉시 갱신
+    onModified?.({
+      id: timerId,
+      remainingSeconds: optimisticRemaining,
+      status: optimisticRemaining > 0 ? "RUNNING" : (status ?? "RUNNING"),
+      log: {} as TimerLogResponse,
+    });
+
+    // 입력 즉시 초기화
+    toast(`${action === "ADD" ? "추가" : "차감"} 완료`, "success");
+    saveRecentActor(actor);
+    setRecentActors(getRecentActors());
+    setHours(0);
+    setMinutes(0);
+    setSeconds(0);
+
+    // 백그라운드에서 서버 확정
     try {
       const res = await fetch(`/api/timers/${timerId}/modify`, {
         method: "POST",
@@ -103,24 +123,30 @@ export function TimerControls({ timerId, status, onModified, className }: TimerC
 
       if (!res.ok) {
         const json = (await res.json()) as ApiErrorResponse;
+        // 롤백
+        onModified?.({
+          id: timerId,
+          remainingSeconds: prevRemaining,
+          status: status ?? "RUNNING",
+          log: {} as TimerLogResponse,
+        });
         setError(json.error.message);
         toast(json.error.message, "error");
         return;
       }
 
       const json = (await res.json()) as ApiSuccessResponse<TimerModifyResponse>;
-      onModified?.(json.data);
-      toast(`${action === "ADD" ? "추가" : "차감"} 완료`, "success");
-      saveRecentActor(actor);
-      setRecentActors(getRecentActors());
-      setHours(0);
-      setMinutes(0);
-      setSeconds(0);
+      onModified?.(json.data); // 서버 값으로 확정
     } catch {
+      // 롤백
+      onModified?.({
+        id: timerId,
+        remainingSeconds: prevRemaining,
+        status: status ?? "RUNNING",
+        log: {} as TimerLogResponse,
+      });
       setError("시간 변경에 실패했습니다.");
       toast("시간 변경에 실패했습니다.", "error");
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -218,7 +244,7 @@ export function TimerControls({ timerId, status, onModified, className }: TimerC
 
       {/* 추가/차감 토글 */}
       <div>
-        <label className="mb-2.5 block text-sm font-medium text-foreground">변경 유형</label>
+        <label className="mb-1.5 block text-sm font-medium text-foreground">변경 유형</label>
         <div
           className="relative grid grid-cols-2 rounded-xl border border-border bg-muted p-1"
           role="radiogroup"
@@ -288,7 +314,6 @@ export function TimerControls({ timerId, status, onModified, className }: TimerC
             <button
               key={preset.label}
               type="button"
-              disabled={loading}
               onClick={() => quickMode ? handleQuickApply(preset.seconds) : handlePresetClick(preset.seconds)}
               className={cn(
                 "rounded-md border px-3 py-2 min-h-[48px] min-w-[48px] text-sm font-medium transition-colors disabled:opacity-50",
@@ -351,13 +376,11 @@ export function TimerControls({ timerId, status, onModified, className }: TimerC
       {!quickMode && (
         <Button
           size="lg"
-          disabled={loading || totalSeconds <= 0}
+          disabled={totalSeconds <= 0}
           onClick={handleSubmit}
           className="w-full"
         >
-          {loading
-            ? "처리 중..."
-            : totalSeconds > 0
+          {totalSeconds > 0
             ? `${selectedAction === "ADD" ? "추가" : "차감"} 확인 (${formatDelta(totalSeconds)})`
             : "시간을 입력해주세요"}
         </Button>
@@ -370,7 +393,7 @@ export function TimerControls({ timerId, status, onModified, className }: TimerC
             <button
               key={preset.label}
               type="button"
-              disabled={loading || (!actorName.trim() && !defaultActor)}
+              disabled={!actorName.trim() && !defaultActor}
               onClick={() => handleQuickApply(preset.seconds)}
               className={cn(
                 "flex-1 rounded-lg py-3 min-h-[48px] text-sm font-bold transition-colors disabled:opacity-50",
