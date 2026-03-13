@@ -7,6 +7,9 @@ import { signJwt } from "@/lib/auth";
 
 beforeEach(() => {
   vi.stubEnv("JWT_SECRET", "test-secret-key-at-least-32-chars-long!");
+  vi.stubEnv("CHZZK_CLIENT_ID", "test-client-id");
+  vi.stubEnv("CHZZK_CLIENT_SECRET", "test-client-secret");
+  vi.stubEnv("BASE_URL", "http://localhost:3000");
 });
 
 function makeRequest(
@@ -102,7 +105,7 @@ describe("proxy: 보호 라우트 — 잘못된 토큰", () => {
     expect(res.status).toBe(401);
     const body = await res.json();
     expect(body.error.code).toBe("UNAUTHORIZED");
-    expect(body.error.message).toContain("유효하지 않은");
+    expect(body.error.message).toContain("인증이 필요합니다");
   });
 });
 

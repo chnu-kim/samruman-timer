@@ -1,6 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
-import { signJwt, verifyJwt, getCurrentUser, createSessionCookie, deleteSessionCookie } from "@/lib/auth";
+import {
+  signJwt,
+  verifyJwt,
+  getCurrentUser,
+  createSessionCookie,
+  deleteSessionCookie,
+  hashToken,
+  generateRefreshToken,
+  createRefreshCookie,
+  deleteRefreshCookie,
+  rotateRefreshToken,
+  revokeRefreshTokenFamily,
+  createRefreshTokenInDB,
+  ACCESS_TOKEN_MAX_AGE,
+  REFRESH_TOKEN_MAX_AGE,
+} from "@/lib/auth";
+import { createMockDB } from "@/__tests__/helpers";
 
 describe("JWT auth", () => {
   beforeEach(() => {
@@ -22,6 +38,19 @@ describe("JWT auth", () => {
     expect(verified!.userId).toBe("user-123");
     expect(verified!.chzzkUserId).toBe("chzzk-456");
     expect(verified!.nickname).toBe("테스트유저");
+  });
+
+  it("signJwt 만료 시간이 15분(900초)이다", async () => {
+    const token = await signJwt({
+      userId: "user-1",
+      chzzkUserId: "chzzk-1",
+      nickname: "test",
+    });
+    const verified = await verifyJwt(token);
+    expect(verified).not.toBeNull();
+    // exp - iat should be approximately 900 seconds
+    const diff = verified!.exp - verified!.iat;
+    expect(diff).toBe(ACCESS_TOKEN_MAX_AGE);
   });
 
   it("잘못된 토큰은 null을 반환한다", async () => {
@@ -94,17 +123,215 @@ describe("getCurrentUser", () => {
 });
 
 describe("Session cookies", () => {
-  it("createSessionCookie: httpOnly, SameSite=Lax 포함", () => {
+  it("createSessionCookie: httpOnly, SameSite=Lax, Max-Age=900 포함", () => {
     const cookie = createSessionCookie("my-token");
     expect(cookie).toContain("session=my-token");
     expect(cookie).toContain("HttpOnly");
     expect(cookie).toContain("SameSite=Lax");
     expect(cookie).toContain("Path=/");
+    expect(cookie).toContain(`Max-Age=${ACCESS_TOKEN_MAX_AGE}`);
   });
 
   it("deleteSessionCookie: Max-Age=0", () => {
     const cookie = deleteSessionCookie();
     expect(cookie).toContain("session=");
     expect(cookie).toContain("Max-Age=0");
+  });
+});
+
+describe("hashToken", () => {
+  it("동일 입력 → 동일 해시", async () => {
+    const hash1 = await hashToken("test-token-123");
+    const hash2 = await hashToken("test-token-123");
+    expect(hash1).toBe(hash2);
+  });
+
+  it("다른 입력 → 다른 해시", async () => {
+    const hash1 = await hashToken("token-a");
+    const hash2 = await hashToken("token-b");
+    expect(hash1).not.toBe(hash2);
+  });
+
+  it("hex 문자열 반환", async () => {
+    const hash = await hashToken("test");
+    expect(hash).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
+describe("generateRefreshToken", () => {
+  it("고유한 opaque 문자열 생성", () => {
+    const t1 = generateRefreshToken();
+    const t2 = generateRefreshToken();
+    expect(t1).toBeTruthy();
+    expect(t2).toBeTruthy();
+    expect(t1).not.toBe(t2);
+  });
+});
+
+describe("Refresh cookies", () => {
+  it("createRefreshCookie: httpOnly, SameSite=Lax, Max-Age=30일", () => {
+    const cookie = createRefreshCookie("refresh-token-123");
+    expect(cookie).toContain("refresh=refresh-token-123");
+    expect(cookie).toContain("HttpOnly");
+    expect(cookie).toContain("SameSite=Lax");
+    expect(cookie).toContain("Path=/");
+    expect(cookie).toContain(`Max-Age=${REFRESH_TOKEN_MAX_AGE}`);
+  });
+
+  it("deleteRefreshCookie: Max-Age=0", () => {
+    const cookie = deleteRefreshCookie();
+    expect(cookie).toContain("refresh=");
+    expect(cookie).toContain("Max-Age=0");
+  });
+});
+
+describe("rotateRefreshToken", () => {
+  let db: ReturnType<typeof createMockDB>;
+
+  beforeEach(() => {
+    vi.stubEnv("JWT_SECRET", "test-secret-key-at-least-32-chars-long!");
+    db = createMockDB();
+  });
+
+  it("ACTIVE 토큰 → 성공 (old USED, new ACTIVE 생성, user 반환)", async () => {
+    const rawToken = "test-refresh-token";
+    const tokenHash = await hashToken(rawToken);
+
+    // first() 호출: refresh_tokens 조회 → user 조회
+    let firstCallCount = 0;
+    db._stmt.first.mockImplementation(async () => {
+      firstCallCount++;
+      if (firstCallCount === 1) {
+        return {
+          id: "rt-1",
+          user_id: "user-1",
+          token_hash: tokenHash,
+          family_id: "family-1",
+          status: "ACTIVE",
+          expires_at: new Date(Date.now() + 86400000).toISOString(),
+          created_at: new Date().toISOString(),
+          used_at: null,
+        };
+      }
+      // user 조회
+      return { id: "user-1", chzzk_user_id: "chzzk-1", nickname: "tester" };
+    });
+
+    db._stmt.run.mockResolvedValue({ meta: { changes: 1 } });
+
+    const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
+    expect(result).not.toBeNull();
+    expect(result!.userId).toBe("user-1");
+    expect(result!.chzzkUserId).toBe("chzzk-1");
+    expect(result!.nickname).toBe("tester");
+    expect(result!.newRawToken).toBeTruthy();
+    expect(result!.familyId).toBe("family-1");
+  });
+
+  it("USED 토큰 → null + family 전체 REVOKED (reuse detection)", async () => {
+    const rawToken = "used-token";
+    const tokenHash = await hashToken(rawToken);
+
+    db._stmt.first.mockResolvedValue({
+      id: "rt-1",
+      user_id: "user-1",
+      token_hash: tokenHash,
+      family_id: "family-1",
+      status: "USED",
+      expires_at: new Date(Date.now() + 86400000).toISOString(),
+      created_at: new Date().toISOString(),
+      used_at: new Date().toISOString(),
+    });
+
+    db._stmt.run.mockResolvedValue({ meta: { changes: 0 } });
+
+    const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
+    expect(result).toBeNull();
+    // family 폐기 UPDATE 호출됨
+    expect(db._stmt.run).toHaveBeenCalled();
+  });
+
+  it("REVOKED 토큰 → null", async () => {
+    const rawToken = "revoked-token";
+    const tokenHash = await hashToken(rawToken);
+
+    db._stmt.first.mockResolvedValue({
+      id: "rt-1",
+      user_id: "user-1",
+      token_hash: tokenHash,
+      family_id: "family-1",
+      status: "REVOKED",
+      expires_at: new Date(Date.now() + 86400000).toISOString(),
+      created_at: new Date().toISOString(),
+      used_at: null,
+    });
+
+    const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
+    expect(result).toBeNull();
+  });
+
+  it("만료된 토큰 → null", async () => {
+    const rawToken = "expired-token";
+    const tokenHash = await hashToken(rawToken);
+
+    db._stmt.first.mockResolvedValue({
+      id: "rt-1",
+      user_id: "user-1",
+      token_hash: tokenHash,
+      family_id: "family-1",
+      status: "ACTIVE",
+      expires_at: new Date(Date.now() - 86400000).toISOString(), // 과거
+      created_at: new Date().toISOString(),
+      used_at: null,
+    });
+
+    const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
+    expect(result).toBeNull();
+  });
+
+  it("존재하지 않는 토큰 → null", async () => {
+    db._stmt.first.mockResolvedValue(null);
+
+    const result = await rotateRefreshToken(db as unknown as D1Database, "nonexistent");
+    expect(result).toBeNull();
+  });
+
+  it("동시 사용 (changes=0) → null + family 폐기", async () => {
+    const rawToken = "concurrent-token";
+    const tokenHash = await hashToken(rawToken);
+
+    db._stmt.first.mockResolvedValue({
+      id: "rt-1",
+      user_id: "user-1",
+      token_hash: tokenHash,
+      family_id: "family-1",
+      status: "ACTIVE",
+      expires_at: new Date(Date.now() + 86400000).toISOString(),
+      created_at: new Date().toISOString(),
+      used_at: null,
+    });
+
+    // UPDATE returns 0 changes (concurrent use)
+    db._stmt.run.mockResolvedValue({ meta: { changes: 0 } });
+
+    const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
+    expect(result).toBeNull();
+    // family 폐기 호출됨
+    expect(db._stmt.run).toHaveBeenCalledTimes(2); // UPDATE status=USED (0 changes) + REVOKE family
+  });
+});
+
+describe("revokeRefreshTokenFamily", () => {
+  it("family 내 모든 토큰 REVOKED", async () => {
+    const db = createMockDB();
+    db._stmt.run.mockResolvedValue({ meta: { changes: 3 } });
+
+    await revokeRefreshTokenFamily(db as unknown as D1Database, "family-1");
+
+    expect(db.prepare).toHaveBeenCalledWith(
+      expect.stringContaining("UPDATE refresh_tokens SET status = 'REVOKED'")
+    );
+    expect(db._stmt.bind).toHaveBeenCalledWith("family-1");
+    expect(db._stmt.run).toHaveBeenCalled();
   });
 });

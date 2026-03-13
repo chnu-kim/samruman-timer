@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyJwt } from "@/lib/auth";
+import {
+  verifyJwt,
+  signJwt,
+  rotateRefreshToken,
+  ACCESS_TOKEN_MAX_AGE,
+  REFRESH_TOKEN_MAX_AGE,
+  REFRESH_COOKIE_NAME,
+  deleteSessionCookie,
+  deleteRefreshCookie,
+} from "@/lib/auth";
+import { getDB } from "@/lib/db";
+import { validateEnv } from "@/lib/env";
 
 // 내부 전용 헤더 — 외부 요청에서 위조 방지를 위해 항상 삭제 후 재설정
 const INTERNAL_HEADERS = ["x-user-id", "x-user-chzzk-id", "x-user-nickname"];
@@ -23,6 +34,8 @@ const PROTECTED_ROUTES: { method: string; pattern: RegExp }[] = [
 ];
 
 export async function middleware(request: NextRequest) {
+  validateEnv();
+
   const method = request.method;
   const { pathname } = request.nextUrl;
 
@@ -44,27 +57,78 @@ export async function middleware(request: NextRequest) {
   }
 
   const token = request.cookies.get("session")?.value;
-  if (!token) {
+  const payload = token ? await verifyJwt(token) : null;
+
+  if (payload) {
+    // 유효한 access token → 기존 로직
+    headers.set("x-user-id", payload.userId);
+    headers.set("x-user-chzzk-id", payload.chzzkUserId);
+    headers.set("x-user-nickname", encodeURIComponent(payload.nickname));
+    return NextResponse.next({ request: { headers } });
+  }
+
+  // Access token 없거나 만료 → refresh 시도
+  const refreshToken = request.cookies.get(REFRESH_COOKIE_NAME)?.value;
+  if (!refreshToken) {
     return NextResponse.json(
       { error: { code: "UNAUTHORIZED", message: "인증이 필요합니다" } },
       { status: 401 }
     );
   }
 
-  const payload = await verifyJwt(token);
-  if (!payload) {
+  // Refresh token rotation
+  try {
+    const db = await getDB();
+    const result = await rotateRefreshToken(db, refreshToken);
+
+    if (!result) {
+      // 갱신 실패 → 401 + 두 쿠키 삭제
+      const response = NextResponse.json(
+        { error: { code: "UNAUTHORIZED", message: "유효하지 않은 세션입니다" } },
+        { status: 401 }
+      );
+      response.headers.append("Set-Cookie", deleteSessionCookie());
+      response.headers.append("Set-Cookie", deleteRefreshCookie());
+      return response;
+    }
+
+    // 새 access token 발급
+    const newAccessToken = await signJwt({
+      userId: result.userId,
+      chzzkUserId: result.chzzkUserId,
+      nickname: result.nickname,
+    });
+
+    // 헤더 주입
+    headers.set("x-user-id", result.userId);
+    headers.set("x-user-chzzk-id", result.chzzkUserId);
+    headers.set("x-user-nickname", encodeURIComponent(result.nickname));
+
+    const response = NextResponse.next({ request: { headers } });
+
+    // 새 쿠키 설정
+    response.cookies.set("session", newAccessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV !== "development",
+      sameSite: "lax",
+      path: "/",
+      maxAge: ACCESS_TOKEN_MAX_AGE,
+    });
+    response.cookies.set(REFRESH_COOKIE_NAME, result.newRawToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV !== "development",
+      sameSite: "lax",
+      path: "/",
+      maxAge: REFRESH_TOKEN_MAX_AGE,
+    });
+
+    return response;
+  } catch {
     return NextResponse.json(
       { error: { code: "UNAUTHORIZED", message: "유효하지 않은 세션입니다" } },
       { status: 401 }
     );
   }
-
-  // 검증된 JWT에서만 내부 헤더 설정
-  headers.set("x-user-id", payload.userId);
-  headers.set("x-user-chzzk-id", payload.chzzkUserId);
-  headers.set("x-user-nickname", encodeURIComponent(payload.nickname));
-
-  return NextResponse.next({ request: { headers } });
 }
 
 export const config = {

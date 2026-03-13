@@ -278,14 +278,14 @@ export interface DailyActivity {
   subtractedSeconds: number;
 }
 
-export interface ProjectStatsResponse {
+export interface StatsResponse {
   summary: StatsSummary;
   topDonors: TopDonor[];
   hourlyDistribution: HourlyDistribution[];
   dailyActivity: DailyActivity[];
 }
 
-export type TimerStatsResponse = ProjectStatsResponse;
+export type TimerStatsResponse = StatsResponse;
 
 // ─── API 응답 타입: Overlay Settings ───
 
@@ -339,6 +339,21 @@ export interface GoalProgress {
   remainingToTarget?: number;
   timerSurvivesDeadline?: boolean;
   deadlineIn?: number;
+}
+
+// ─── Refresh Token 타입 ───
+
+export type RefreshTokenStatus = "ACTIVE" | "USED" | "REVOKED";
+
+export interface RefreshTokenRow {
+  id: string;
+  user_id: string;
+  token_hash: string;
+  family_id: string;
+  status: RefreshTokenStatus;
+  expires_at: string;
+  created_at: string;
+  used_at: string | null;
 }
 
 // ─── Auth 타입 ───
