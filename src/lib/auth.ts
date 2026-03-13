@@ -113,12 +113,16 @@ export async function revokeRefreshTokenFamily(
     .run();
 }
 
+// 동시 요청 grace period: 30초 이내에 같은 family의 ACTIVE 토큰이 있으면 race condition으로 판단
+const RACE_GRACE_MS = 30_000;
+
 export interface RotateResult {
   userId: string;
   chzzkUserId: string;
   nickname: string;
-  newRawToken: string;
-  newTokenHash: string;
+  /** race condition grace 시 null (새 토큰 발급 불필요) */
+  newRawToken: string | null;
+  newTokenHash: string | null;
   familyId: string;
 }
 
@@ -156,7 +160,34 @@ export async function rotateRefreshToken(
     .run();
 
   if (!updateResult.meta.changes || updateResult.meta.changes === 0) {
-    // 동시 사용 감지 → family 폐기
+    // Race condition: 다른 요청이 이미 이 토큰을 사용함.
+    // 같은 family에 최근(30초 이내) 발급된 ACTIVE 토큰이 있으면
+    // 정상적인 동시 요청으로 판단하고 사용자 정보만 반환한다.
+    const recentActive = await db
+      .prepare(
+        "SELECT id FROM refresh_tokens WHERE family_id = ? AND status = 'ACTIVE' AND created_at > ? LIMIT 1"
+      )
+      .bind(row.family_id, new Date(Date.now() - RACE_GRACE_MS).toISOString())
+      .first<{ id: string }>();
+
+    if (recentActive) {
+      // Grace: 새 토큰 발급 없이 사용자 정보만 반환
+      const user = await db
+        .prepare("SELECT id, chzzk_user_id, nickname FROM users WHERE id = ?")
+        .bind(row.user_id)
+        .first<{ id: string; chzzk_user_id: string; nickname: string }>();
+      if (!user) return null;
+      return {
+        userId: user.id,
+        chzzkUserId: user.chzzk_user_id,
+        nickname: user.nickname,
+        newRawToken: null,
+        newTokenHash: null,
+        familyId: row.family_id,
+      };
+    }
+
+    // 최근 ACTIVE 토큰 없음 → 진짜 토큰 재사용(탈취) → family 폐기
     await revokeRefreshTokenFamily(db, row.family_id);
     return null;
   }

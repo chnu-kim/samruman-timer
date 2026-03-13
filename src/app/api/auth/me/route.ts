@@ -62,13 +62,15 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
       path: "/",
       maxAge: ACCESS_TOKEN_MAX_AGE,
     });
-    refreshedResponse.cookies.set(REFRESH_COOKIE_NAME, result.newRawToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV !== "development",
-      sameSite: "lax",
-      path: "/",
-      maxAge: REFRESH_TOKEN_MAX_AGE,
-    });
+    if (result.newRawToken) {
+      refreshedResponse.cookies.set(REFRESH_COOKIE_NAME, result.newRawToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV !== "development",
+        sameSite: "lax",
+        path: "/",
+        maxAge: REFRESH_TOKEN_MAX_AGE,
+      });
+    }
   }
 
   const db = await getDB();

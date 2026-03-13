@@ -106,7 +106,7 @@ export async function middleware(request: NextRequest) {
 
     const response = NextResponse.next({ request: { headers } });
 
-    // 새 쿠키 설정
+    // 새 access token 쿠키 설정
     response.cookies.set("session", newAccessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV !== "development",
@@ -114,16 +114,21 @@ export async function middleware(request: NextRequest) {
       path: "/",
       maxAge: ACCESS_TOKEN_MAX_AGE,
     });
-    response.cookies.set(REFRESH_COOKIE_NAME, result.newRawToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV !== "development",
-      sameSite: "lax",
-      path: "/",
-      maxAge: REFRESH_TOKEN_MAX_AGE,
-    });
+
+    // Race condition grace가 아닌 경우에만 refresh token 갱신
+    if (result.newRawToken) {
+      response.cookies.set(REFRESH_COOKIE_NAME, result.newRawToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV !== "development",
+        sameSite: "lax",
+        path: "/",
+        maxAge: REFRESH_TOKEN_MAX_AGE,
+      });
+    }
 
     return response;
-  } catch {
+  } catch (err) {
+    console.error("[middleware] refresh token rotation failed:", err);
     return NextResponse.json(
       { error: { code: "UNAUTHORIZED", message: "유효하지 않은 세션입니다" } },
       { status: 401 }

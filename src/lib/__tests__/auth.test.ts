@@ -296,28 +296,75 @@ describe("rotateRefreshToken", () => {
     expect(result).toBeNull();
   });
 
-  it("동시 사용 (changes=0) → null + family 폐기", async () => {
+  it("동시 사용 (changes=0) + 최근 ACTIVE 토큰 있음 → grace (사용자 정보 반환, 새 토큰 없음)", async () => {
     const rawToken = "concurrent-token";
     const tokenHash = await hashToken(rawToken);
 
-    db._stmt.first.mockResolvedValue({
-      id: "rt-1",
-      user_id: "user-1",
-      token_hash: tokenHash,
-      family_id: "family-1",
-      status: "ACTIVE",
-      expires_at: new Date(Date.now() + 86400000).toISOString(),
-      created_at: new Date().toISOString(),
-      used_at: null,
+    let firstCallCount = 0;
+    db._stmt.first.mockImplementation(async () => {
+      firstCallCount++;
+      if (firstCallCount === 1) {
+        // refresh_tokens 조회
+        return {
+          id: "rt-1",
+          user_id: "user-1",
+          token_hash: tokenHash,
+          family_id: "family-1",
+          status: "ACTIVE",
+          expires_at: new Date(Date.now() + 86400000).toISOString(),
+          created_at: new Date().toISOString(),
+          used_at: null,
+        };
+      }
+      if (firstCallCount === 2) {
+        // grace: 최근 ACTIVE 토큰 조회
+        return { id: "rt-2" };
+      }
+      // user 조회
+      return { id: "user-1", chzzk_user_id: "chzzk-1", nickname: "tester" };
     });
 
     // UPDATE returns 0 changes (concurrent use)
     db._stmt.run.mockResolvedValue({ meta: { changes: 0 } });
 
     const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
+    expect(result).not.toBeNull();
+    expect(result!.userId).toBe("user-1");
+    expect(result!.newRawToken).toBeNull();
+    expect(result!.newTokenHash).toBeNull();
+    // family 폐기 호출 안 됨 (UPDATE 1회만)
+    expect(db._stmt.run).toHaveBeenCalledTimes(1);
+  });
+
+  it("동시 사용 (changes=0) + 최근 ACTIVE 토큰 없음 → null + family 폐기", async () => {
+    const rawToken = "reused-token";
+    const tokenHash = await hashToken(rawToken);
+
+    let firstCallCount = 0;
+    db._stmt.first.mockImplementation(async () => {
+      firstCallCount++;
+      if (firstCallCount === 1) {
+        return {
+          id: "rt-1",
+          user_id: "user-1",
+          token_hash: tokenHash,
+          family_id: "family-1",
+          status: "ACTIVE",
+          expires_at: new Date(Date.now() + 86400000).toISOString(),
+          created_at: new Date().toISOString(),
+          used_at: null,
+        };
+      }
+      // grace: 최근 ACTIVE 토큰 없음
+      return null;
+    });
+
+    db._stmt.run.mockResolvedValue({ meta: { changes: 0 } });
+
+    const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
     expect(result).toBeNull();
-    // family 폐기 호출됨
-    expect(db._stmt.run).toHaveBeenCalledTimes(2); // UPDATE status=USED (0 changes) + REVOKE family
+    // UPDATE (0 changes) + family 폐기
+    expect(db._stmt.run).toHaveBeenCalledTimes(2);
   });
 });
 
