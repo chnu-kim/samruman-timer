@@ -192,6 +192,45 @@ CHZZK OAuth 콜백을 처리한다.
 }
 ```
 
+### PATCH /api/projects/[id]
+
+프로젝트를 수정한다.
+
+- **인증**: 필요 (프로젝트 소유자만)
+- **요청 본문**:
+```json
+{
+  "name": "새 이름 (선택)",
+  "description": "새 설명 (선택)"
+}
+```
+- **유효성 검사**:
+  - 최소 1개 필드 필수
+  - `name`: 공백 제거 후 비어있으면 안 됨
+  - `description`: null 허용
+- **에러**:
+  - `400`: 변경할 필드 없음, 이름 비어있음, JSON 파싱 실패
+  - `401`: 인증 없음
+  - `403`: 소유자 아님
+  - `404`: 프로젝트 없음
+- **응답**: `200 OK`
+```json
+{
+  "data": {
+    "id": "project_id",
+    "name": "프로젝트 이름",
+    "description": "설명",
+    "owner": {
+      "id": "user_id",
+      "nickname": "닉네임",
+      "profileImageUrl": "https://..."
+    },
+    "createdAt": "2025-01-01T00:00:00Z",
+    "updatedAt": "2025-01-01T00:00:00Z"
+  }
+}
+```
+
 ### DELETE /api/projects/[id]
 
 프로젝트를 소프트 삭제한다 (status를 DELETED로 변경). 하위 타이머도 연쇄 소프트 삭제된다.
@@ -307,6 +346,29 @@ CHZZK OAuth 콜백을 처리한다.
 - 조회 시 예약 활성화 감지 → 만료 감지 로직 체이닝 실행 (TIMER-LOGIC.md 참조)
 - `SCHEDULED` 상태: `remainingSeconds`는 `baseRemainingSeconds` (고정값)
 
+### PATCH /api/timers/[id]
+
+타이머의 제목/설명을 수정한다.
+
+- **인증**: 필요 (프로젝트 소유자만)
+- **요청 본문**:
+```json
+{
+  "title": "새 제목 (선택)",
+  "description": "새 설명 (선택)"
+}
+```
+- **유효성 검사**:
+  - 최소 1개 필드 필수
+  - `title`: 공백 제거 후 비어있으면 안 됨
+  - `description`: null 허용
+- **에러**:
+  - `400`: 변경할 필드 없음, 제목 비어있음, JSON 파싱 실패
+  - `401`: 인증 없음
+  - `403`: 소유자 아님
+  - `404`: 타이머 없음
+- **응답**: `200 OK` (타이머 상세 정보 전체 반환)
+
 ### DELETE /api/timers/[id]
 
 타이머를 소프트 삭제한다 (status를 DELETED로 변경).
@@ -372,13 +434,17 @@ CHZZK OAuth 콜백을 처리한다.
 
 ## 통계 API
 
-### GET /api/projects/[id]/stats
+### GET /api/timers/[id]/stats
 
-프로젝트의 타이머 활동 통계를 반환한다.
+타이머의 활동 통계를 반환한다. 프로젝트당 타이머 1개(1:1 관계)이므로 프로젝트 통계와 사실상 동일.
 
 - **인증**: 필요 (프로젝트 소유자만)
 - **쿼리 파라미터**:
   - `donorLimit` (number, 기본값 10, 최대 50): 상위 후원자 수
+- **에러**:
+  - `401`: 인증 없음
+  - `403`: 소유자 아님
+  - `404`: 타이머 없음
 - **응답**:
 ```json
 {
@@ -499,3 +565,134 @@ CHZZK OAuth 콜백을 처리한다.
   }
 }
 ```
+
+---
+
+## 오버레이 설정 API
+
+### GET /api/timers/[id]/overlay-settings
+
+OBS 오버레이 설정을 조회한다.
+
+- **인증**: 불필요
+- **응답**: `200 OK`
+```json
+{
+  "data": {
+    "fontSize": 72,
+    "color": "#ffffff",
+    "bg": "transparent",
+    "showTitle": false,
+    "shadow": true,
+    "position": "center"
+  }
+}
+```
+- 설정 미저장 시 모든 필드 기본값으로 반환
+- `position`: `"center"` | `"top-left"` | `"top-right"` | `"bottom-left"` | `"bottom-right"`
+- **에러**:
+  - `404`: 타이머 없음
+
+### PUT /api/timers/[id]/overlay-settings
+
+OBS 오버레이 설정을 저장한다.
+
+- **인증**: 필요 (프로젝트 소유자만)
+- **요청 본문**:
+```json
+{
+  "fontSize": 96,
+  "color": "#00ff88",
+  "bg": "transparent",
+  "showTitle": true,
+  "shadow": false,
+  "position": "top-left"
+}
+```
+- **유효성 검사**:
+  - `fontSize`: 24~200 정수
+  - `position`: 유효한 값만 허용
+- **에러**:
+  - `400`: JSON 파싱 실패, fontSize 범위 초과, 유효하지 않은 position
+  - `401`: 인증 없음
+  - `403`: 소유자 아님
+  - `404`: 타이머 없음
+- **응답**: `200 OK` (저장된 설정 전체 반환)
+
+---
+
+## 목표(Goals) API
+
+### GET /api/projects/[id]/goals
+
+프로젝트의 목표 목록을 조회한다.
+
+- **인증**: 불필요
+- **동작**: 조회 시 ACTIVE 목표의 달성 여부를 자동 감지하여 COMPLETED로 전이
+- **응답**: `200 OK`
+```json
+{
+  "data": [
+    {
+      "id": "goal_id",
+      "type": "DURATION",
+      "title": "10시간 달성",
+      "targetSeconds": 36000,
+      "targetDatetime": null,
+      "status": "ACTIVE",
+      "progress": {
+        "percentage": 50,
+        "currentSeconds": 18000,
+        "remainingToTarget": 18000
+      },
+      "createdAt": "2025-01-01T00:00:00Z",
+      "completedAt": null
+    }
+  ]
+}
+```
+- `type=DURATION`의 progress: `{ percentage, currentSeconds, remainingToTarget }`
+- `type=DEADLINE`의 progress: `{ percentage, timerSurvivesDeadline, deadlineIn }`
+- 정렬: `created_at DESC`
+- CANCELLED 상태의 목표는 제외
+- **에러**:
+  - `404`: 프로젝트 없음
+
+### POST /api/projects/[id]/goals
+
+프로젝트 목표를 생성한다.
+
+- **인증**: 필요 (프로젝트 소유자만)
+- **요청 본문**:
+```json
+{
+  "type": "DURATION | DEADLINE",
+  "title": "목표 제목",
+  "targetSeconds": 36000,
+  "targetDatetime": "2025-12-31T23:59:59Z"
+}
+```
+- **유효성 검사**:
+  - `type`: 필수, `"DURATION"` 또는 `"DEADLINE"`
+  - `title`: 필수, 1~100자
+  - `targetSeconds`: DURATION일 때 필수, 1~8,760,000 (약 100일)
+  - `targetDatetime`: DEADLINE일 때 필수, ISO 8601 미래 시각
+- **에러**:
+  - `400`: 파싱 실패, 제목 길이, 유효하지 않은 타입, 범위 초과, 과거 날짜
+  - `401`: 인증 없음
+  - `403`: 소유자 아님
+  - `404`: 프로젝트 없음
+- **응답**: `201 Created`
+
+### PATCH /api/projects/[id]/goals/[goalId]
+
+목표를 취소한다 (ACTIVE → CANCELLED).
+
+- **인증**: 필요 (프로젝트 소유자만)
+- **요청 본문**: 없음
+- **에러**:
+  - `400`: ACTIVE가 아닌 목표 취소 시도
+  - `401`: 인증 없음
+  - `403`: 소유자 아님
+  - `404`: 프로젝트 없음, 목표 없음
+- **응답**: `200 OK` (취소된 목표 정보 반환, status=CANCELLED)

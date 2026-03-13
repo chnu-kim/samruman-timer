@@ -88,6 +88,11 @@ This is a fresh Next.js 16 app using the App Router with TypeScript, React 19, a
 - **Agent**: `storybook-writer` — CSF3 스토리 자동 생성
 - **Rule**: `.claude/rules/storybook.md` — 스토리 작성 규칙
 
+## UX 개선
+
+- **기획서**: `docs/UX-IMPROVEMENTS.md` — P0~P3 체크리스트
+- **Skill**: `/ux-improve` — 기획서 항목 선택 → 구현 → 체크리스트 갱신
+
 ## Git 워크플로우
 
 - **Skill**: `/commit` — 변경 분석 → Conventional Commits 한국어 커밋 메시지 생성 → 빌드 검증 → 커밋
