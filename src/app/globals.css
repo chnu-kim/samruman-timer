@@ -96,6 +96,16 @@ body {
   50% { opacity: 0.5; }
 }
 
+@keyframes pulse-urgent-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes pulse-urgent-fast {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 .animate-fade-in {
   animation: fade-in 0.2s ease-out;
 }

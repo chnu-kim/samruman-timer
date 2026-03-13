@@ -34,6 +34,8 @@ export default function TimerOverlayPage() {
   const shadow = searchParams.get("shadow") !== "false"; // 기본 활성화: OBS에서 가독성 확보
   const positionParam = searchParams.get("position") || "center";
   const position: Position = isValidPosition(positionParam) ? positionParam : "center";
+  const urgentColor = searchParams.get("urgentColor") || "#f59e0b"; // amber-500
+  const criticalColor = searchParams.get("criticalColor") || "#ef4444"; // red-500
 
   const [timer, setTimer] = useState<TimerDetailResponse | null>(null);
   const [displayed, setDisplayed] = useState(0);
@@ -104,6 +106,9 @@ export default function TimerOverlayPage() {
   const isExpired =
     timer?.status === "EXPIRED" || (timer?.status !== "SCHEDULED" && displayed <= 0 && timer !== null);
   const isScheduled = timer?.status === "SCHEDULED";
+  const isRunning = timer?.status === "RUNNING" && displayed > 0;
+  const isUrgent = isRunning && displayed < 300; // 5분 미만
+  const isCritical = isRunning && displayed < 60; // 1분 미만
 
   const fontSizePx = parseInt(fontSize, 10) || 72;
   const titleFontSize = Math.round(fontSizePx * 0.35);
@@ -127,7 +132,15 @@ export default function TimerOverlayPage() {
 
   if (!mounted) return null;
 
-  const textColor = isExpired ? "#ef4444" : isScheduled ? "#a855f7" : color;
+  const textColor = isExpired
+    ? "#ef4444"
+    : isScheduled
+      ? "#a855f7"
+      : isCritical
+        ? criticalColor
+        : isUrgent
+          ? urgentColor
+          : color;
 
   const textAlign = position === "center"
     ? "center" as const
@@ -168,7 +181,15 @@ export default function TimerOverlayPage() {
           )}
           <span
             role="timer"
-            aria-label={isScheduled ? `예약 시간 ${formatTime(displayed)}` : `남은 시간 ${formatTime(displayed)}`}
+            aria-label={
+              isCritical
+                ? `긴급: 남은 시간 ${formatTime(displayed)}, 1분 미만`
+                : isUrgent
+                  ? `긴급: 남은 시간 ${formatTime(displayed)}, 5분 미만`
+                  : isScheduled
+                    ? `예약 시간 ${formatTime(displayed)}`
+                    : `남은 시간 ${formatTime(displayed)}`
+            }
             style={{
               color: textColor,
               fontSize: `${fontSizePx}px`,
@@ -177,7 +198,13 @@ export default function TimerOverlayPage() {
               whiteSpace: "nowrap",
               letterSpacing: "-0.02em",
               textShadow,
-              ...(isExpired ? { animation: "pulse-expired 2s ease-in-out infinite" } : {}),
+              ...(isExpired
+                ? { animation: "pulse-expired 2s ease-in-out infinite" }
+                : isCritical
+                  ? { animation: "pulse-urgent-fast 0.8s ease-in-out infinite" }
+                  : isUrgent
+                    ? { animation: "pulse-urgent-slow 2s ease-in-out infinite" }
+                    : {}),
             }}
           >
             {formatTime(displayed)}

@@ -57,6 +57,8 @@ export function CountdownDisplay({
   const isExpired = status === "EXPIRED" || (status !== "SCHEDULED" && displayed <= 0);
   const isScheduled = status === "SCHEDULED";
   const isRunning = status === "RUNNING" && displayed > 0;
+  const isUrgent = isRunning && displayed < 300; // 5분 미만
+  const isCritical = isRunning && displayed < 60; // 1분 미만
 
   const startedAt = scheduledStartAt ?? createdAt;
   const elapsedSeconds = isRunning && startedAt
@@ -77,9 +79,26 @@ export function CountdownDisplay({
             : "text-lg font-mono font-semibold",
           isExpired && "text-muted-foreground",
           isScheduled && "text-purple-600 dark:text-purple-400",
+          isCritical && "text-red-500 dark:text-red-400",
+          isUrgent && !isCritical && "text-amber-500 dark:text-amber-400",
           className,
         )}
-        aria-label={isScheduled ? `예약 시간 ${formatTime(displayed)}` : `남은 시간 ${formatTime(displayed)}`}
+        style={
+          isCritical
+            ? { animation: "pulse-urgent-fast 0.8s ease-in-out infinite" }
+            : isUrgent
+              ? { animation: "pulse-urgent-slow 2s ease-in-out infinite" }
+              : undefined
+        }
+        aria-label={
+          isCritical
+            ? `긴급: 남은 시간 ${formatTime(displayed)}, 1분 미만`
+            : isUrgent
+              ? `긴급: 남은 시간 ${formatTime(displayed)}, 5분 미만`
+              : isScheduled
+                ? `예약 시간 ${formatTime(displayed)}`
+                : `남은 시간 ${formatTime(displayed)}`
+        }
       >
         {formatTime(displayed)}
       </span>
