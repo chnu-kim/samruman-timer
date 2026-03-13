@@ -215,7 +215,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
       {/* P2 #13: fade-in animation */}
       <div
         ref={modalRef}
-        className="relative w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden rounded-xl border border-border bg-background shadow-lg mx-4 animate-[fade-in_0.15s_ease-out]"
+        className="relative w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden rounded-xl border border-border bg-background shadow-dialog mx-4 animate-[fade-in_0.15s_ease-out]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 헤더 */}

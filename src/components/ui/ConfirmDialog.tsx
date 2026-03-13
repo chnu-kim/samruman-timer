@@ -38,13 +38,29 @@ export function ConfirmDialog({
     }
   }, [open]);
 
+  // Escape 키 처리: native dialog cancel 이벤트를 onCancel로 연결
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    function handleCancel(e: Event) {
+      e.preventDefault();
+      onCancel();
+    }
+    dialog.addEventListener("cancel", handleCancel);
+    return () => dialog.removeEventListener("cancel", handleCancel);
+  }, [onCancel]);
+
   return (
     <dialog
       ref={dialogRef}
       onClose={onCancel}
+      onClick={(e) => {
+        if (e.target === dialogRef.current) onCancel();
+      }}
       aria-modal="true"
       aria-labelledby={titleId}
-      className="m-auto rounded-xl border border-border bg-background p-0 shadow-lg backdrop:bg-black/50 max-w-sm w-full"
+      className="m-auto rounded-xl border border-border bg-background p-0 shadow-dialog backdrop:bg-black/50 max-w-sm w-full"
       style={{ animation: open ? "fade-in 0.15s ease-out" : undefined }}
     >
       <div className="p-6">

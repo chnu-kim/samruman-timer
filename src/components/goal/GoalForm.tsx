@@ -188,6 +188,7 @@ export function GoalForm({ projectId, onSuccess, onCancel }: GoalFormProps) {
         required
         maxLength={100}
         placeholder="목표 제목을 입력하세요"
+        autoFocus
       />
 
       <div>
@@ -299,15 +300,15 @@ export function GoalForm({ projectId, onSuccess, onCancel }: GoalFormProps) {
 
       {error && <p className="text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>}
 
-      <div className="flex gap-2">
-        <Button type="submit" disabled={loading || !title.trim()}>
-          {loading ? "생성 중..." : "목표 만들기"}
-        </Button>
+      <div className="flex justify-end gap-2 pt-2">
         {onCancel && (
-          <Button type="button" variant="secondary" onClick={onCancel}>
+          <Button type="button" variant="secondary" size="sm" onClick={onCancel} disabled={loading}>
             취소
           </Button>
         )}
+        <Button type="submit" size="sm" disabled={loading || !title.trim()}>
+          {loading ? "생성 중..." : "목표 만들기"}
+        </Button>
       </div>
     </form>
   );

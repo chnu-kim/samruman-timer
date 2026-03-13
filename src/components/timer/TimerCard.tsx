@@ -17,7 +17,7 @@ export function TimerCard({ timer, className }: TimerCardProps) {
     >
       <article
         className={cn(
-          "flex w-full flex-col border border-border rounded-xl p-5 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 hover:border-accent/40",
+          "flex w-full flex-col border border-border rounded-xl p-5 transition-all duration-200 shadow-card hover:shadow-card-hover hover:-translate-y-0.5 hover:border-accent/40",
           className,
         )}
         style={{ animation: "fade-in 0.2s ease-out forwards" }}

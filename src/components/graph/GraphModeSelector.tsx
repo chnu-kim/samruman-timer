@@ -23,6 +23,7 @@ export function GraphModeSelector({ mode, onModeChange, className }: GraphModeSe
           key={m.value}
           role="tab"
           aria-selected={mode === m.value}
+          aria-controls="graph-panel"
           onClick={() => onModeChange(m.value)}
           className={cn(
             "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",

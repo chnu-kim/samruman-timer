@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EditableText } from "@/components/ui/EditableText";
+import { FormDialog } from "@/components/ui/FormDialog";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { PlusIcon, TimerIcon, TrashIcon, LinkIcon, ChartBarIcon } from "@/components/ui/Icons";
 import { ProjectDetailSkeleton } from "@/components/ui/Skeleton";
@@ -27,6 +28,7 @@ function GoalSection({
   goals,
   projectId,
   isOwner,
+  hasTimer,
   showGoalForm,
   onShowGoalForm,
   onHideGoalForm,
@@ -35,18 +37,20 @@ function GoalSection({
   goals: GoalResponse[];
   projectId: string;
   isOwner: boolean;
+  hasTimer: boolean;
   showGoalForm: boolean;
   onShowGoalForm: () => void;
   onHideGoalForm: () => void;
   onGoalUpdate: () => void;
 }) {
   const [goalTab, setGoalTab] = useState<"active" | "completed">("active");
+  const [goalFormKey, setGoalFormKey] = useState(0);
 
   const activeGoals = goals.filter((g) => g.status === "ACTIVE");
   const inactiveGoals = goals.filter((g) => g.status !== "ACTIVE");
 
   const tabClass = (active: boolean) =>
-    `px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+    `px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
       active
         ? "border-accent text-accent"
         : "border-transparent text-muted-foreground hover:text-foreground"
@@ -59,33 +63,26 @@ function GoalSection({
         <h2 className="text-sm font-bold text-foreground">목표</h2>
         {isOwner && (
           <Button
-            variant={showGoalForm ? "secondary" : "primary"}
+            variant="primary"
             size="sm"
-            onClick={showGoalForm ? onHideGoalForm : onShowGoalForm}
+            onClick={() => { setGoalFormKey((k) => k + 1); onShowGoalForm(); }}
+            disabled={!hasTimer}
+            title={!hasTimer ? "타이머를 먼저 생성하세요" : undefined}
           >
-            {showGoalForm ? (
-              "취소"
-            ) : (
-              <>
-                <PlusIcon className="w-4 h-4 mr-1" />
-                새 목표
-              </>
-            )}
+            <PlusIcon className="w-4 h-4 mr-1" />
+            새 목표
           </Button>
         )}
       </div>
 
-      {/* 폼 (토글) */}
-      {showGoalForm && (
-        <div className="rounded-xl border border-accent/30 bg-accent-light/20 p-5 animate-fade-in">
-          <h3 className="text-sm font-bold text-foreground mb-4">새 목표 설정</h3>
-          <GoalForm
-            projectId={projectId}
-            onSuccess={() => { onHideGoalForm(); onGoalUpdate(); }}
-            onCancel={onHideGoalForm}
-          />
-        </div>
-      )}
+      {/* 목표 생성 모달 */}
+      <FormDialog open={showGoalForm} title="새 목표 설정" onClose={onHideGoalForm}>
+        <GoalForm
+          key={goalFormKey}
+          projectId={projectId}
+          onSuccess={() => { onHideGoalForm(); onGoalUpdate(); }}
+        />
+      </FormDialog>
 
       {/* 탭 — 진행 중 / 완료 */}
       <div className="flex gap-1 border-b border-border" role="tablist" aria-label="목표 상태 필터">
@@ -145,9 +142,18 @@ function GoalSection({
               />
             ))
           ) : (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              진행 중인 목표가 없습니다.
-            </p>
+            <div className="py-8 text-center">
+              <p className="text-sm text-muted-foreground">
+                {!hasTimer
+                  ? "타이머를 먼저 생성하면 목표를 설정할 수 있습니다."
+                  : "진행 중인 목표가 없습니다."}
+              </p>
+              {hasTimer && isOwner && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  &ldquo;새 목표&rdquo; 버튼을 눌러 목표를 추가해 보세요.
+                </p>
+              )}
+            </div>
           )
         ) : inactiveGoals.length > 0 ? (
           inactiveGoals.map((goal) => (
@@ -182,6 +188,7 @@ export default function ProjectDetailPage() {
   const [error, setError] = useState(false);
   const [user, setUser] = useState<MeResponse | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [formKey, setFormKey] = useState(0);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [goals, setGoals] = useState<GoalResponse[]>([]);
@@ -351,9 +358,9 @@ export default function ProjectDetailPage() {
             </p>
           </div>
           <div className="flex items-center gap-1 shrink-0 mt-1">
-            {isOwner && (
+            {isOwner && timers.length > 0 && (
               <Link
-                href={`/projects/${projectId}/stats`}
+                href={`/timers/${timers[0].id}/stats`}
                 aria-label="통계"
                 title="통계"
                 className={`${iconBtnBase} text-muted-foreground hover:text-foreground hover:bg-foreground/10`}
@@ -396,11 +403,11 @@ export default function ProjectDetailPage() {
               <TimerIcon className="w-8 h-8 text-muted-foreground" />
             </div>
             <p className="mt-4 text-muted-foreground">아직 타이머가 없습니다.</p>
-            {isOwner && !showForm && (
+            {isOwner && (
               <Button
                 size="sm"
                 className="mt-4"
-                onClick={() => setShowForm(true)}
+                onClick={() => { setFormKey((k) => k + 1); setShowForm(true); }}
               >
                 <PlusIcon className="w-4 h-4 mr-1" />
                 타이머 만들기
@@ -431,34 +438,21 @@ export default function ProjectDetailPage() {
         )}
       </div>
 
-      {showForm && (
-        <div
-          className="mt-4 rounded-xl border border-accent/30 bg-accent-light/20 p-5 animate-fade-in"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-bold text-foreground">새 타이머 만들기</h2>
-            {isOwner && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setShowForm(false)}
-              >
-                취소
-              </Button>
-            )}
-          </div>
-          <CreateTimerForm
-            projectId={projectId}
-            onSuccess={handleCreateSuccess}
-          />
-        </div>
-      )}
+      <FormDialog open={showForm} title="새 타이머 만들기" onClose={() => setShowForm(false)}>
+        <CreateTimerForm
+          key={formKey}
+          projectId={projectId}
+          onSuccess={handleCreateSuccess}
+          onCancel={() => setShowForm(false)}
+        />
+      </FormDialog>
 
       {/* 목표 섹션 */}
       <GoalSection
         goals={goals}
         projectId={projectId}
         isOwner={isOwner}
+        hasTimer={timers.length > 0}
         showGoalForm={showGoalForm}
         onShowGoalForm={() => setShowGoalForm(true)}
         onHideGoalForm={() => setShowGoalForm(false)}

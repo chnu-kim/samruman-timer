@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 interface BadgeProps {
-  variant: "running" | "expired" | "scheduled" | "create" | "add" | "subtract" | "expire" | "reopen" | "activate" | "delete";
+  variant: "running" | "expired" | "scheduled" | "create" | "add" | "subtract" | "expire" | "reopen" | "activate" | "delete" | "completed";
   children: React.ReactNode;
   className?: string;
 }
@@ -17,6 +17,7 @@ const variantStyles: Record<BadgeProps["variant"], string> = {
   reopen: "bg-amber-500 text-white dark:bg-amber-900/30 dark:text-amber-400",
   activate: "bg-cyan-600 text-white dark:bg-cyan-900/30 dark:text-cyan-400",
   delete: "bg-gray-700 text-white dark:bg-gray-800/30 dark:text-gray-300",
+  completed: "bg-blue-600 text-white dark:bg-blue-900/30 dark:text-blue-400",
 };
 
 export function Badge({ variant, children, className }: BadgeProps) {

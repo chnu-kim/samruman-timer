@@ -70,7 +70,7 @@ export function Header({ initialUser }: HeaderProps = {}) {
           ) : (
             <Link
               href="/login"
-              className="inline-flex items-center justify-center rounded-lg border border-border bg-transparent px-3 h-8 text-sm font-medium hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="inline-flex items-center justify-center rounded-lg border border-border bg-transparent px-3 h-8 text-sm font-medium hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               로그인
             </Link>

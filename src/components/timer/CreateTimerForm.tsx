@@ -80,9 +80,10 @@ function SelectField({ value, options, onChange, suffix, label, pad = 0, width =
 interface CreateTimerFormProps {
   projectId: string;
   onSuccess?: (id: string) => void;
+  onCancel?: () => void;
 }
 
-export function CreateTimerForm({ projectId, onSuccess }: CreateTimerFormProps) {
+export function CreateTimerForm({ projectId, onSuccess, onCancel }: CreateTimerFormProps) {
   const { toast } = useToast();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -323,7 +324,7 @@ export function CreateTimerForm({ projectId, onSuccess }: CreateTimerFormProps) 
 
         {/* 예약 패널 */}
         {useScheduled && (
-          <div className="mt-2 rounded-xl border border-purple-200 bg-purple-50/30 p-4 dark:border-purple-800/60 dark:bg-purple-950/20">
+          <div className="mt-2 rounded-xl border border-accent/30 bg-accent-light/10 p-4">
             {/* 날짜 */}
             <label className="text-sm font-medium text-foreground">
               날짜
@@ -385,7 +386,7 @@ export function CreateTimerForm({ projectId, onSuccess }: CreateTimerFormProps) 
                   "mt-3 flex items-center gap-2 rounded-lg px-3 py-2",
                   isPast
                     ? "bg-red-50 dark:bg-red-950/30"
-                    : "bg-purple-100/60 dark:bg-purple-900/20",
+                    : "bg-accent-light",
                 )}
                 aria-live="polite"
               >
@@ -396,7 +397,7 @@ export function CreateTimerForm({ projectId, onSuccess }: CreateTimerFormProps) 
                   "text-sm",
                   isPast
                     ? "text-red-600 dark:text-red-400"
-                    : "text-purple-700 dark:text-purple-300",
+                    : "text-accent",
                 )}>
                   {relativeTimeText}
                 </span>
@@ -407,9 +408,16 @@ export function CreateTimerForm({ projectId, onSuccess }: CreateTimerFormProps) 
       </div>
 
       {error && <p className="text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>}
-      <Button type="submit" disabled={loading || !title.trim()}>
-        {loading ? "생성 중..." : "타이머 만들기"}
-      </Button>
+      <div className="flex gap-2">
+        {onCancel && (
+          <Button type="button" variant="secondary" onClick={onCancel} className="flex-1">
+            취소
+          </Button>
+        )}
+        <Button type="submit" disabled={loading || !title.trim()} className="flex-1">
+          {loading ? "생성 중..." : "타이머 만들기"}
+        </Button>
+      </div>
     </form>
   );
 }

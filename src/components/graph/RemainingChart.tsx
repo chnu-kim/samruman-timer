@@ -34,13 +34,13 @@ export function RemainingChart({ points, className }: RemainingChartProps) {
           <XAxis
             dataKey="timestamp"
             tickFormatter={formatTimestampShort}
-            tick={{ fontSize: 11 }}
+            tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
             stroke="var(--color-foreground)"
             opacity={0.4}
           />
           <YAxis
             tickFormatter={(v: number) => `${(v / 3600).toFixed(0)}h`}
-            tick={{ fontSize: 11 }}
+            tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
             stroke="var(--color-foreground)"
             opacity={0.4}
             width={40}
@@ -53,6 +53,7 @@ export function RemainingChart({ points, className }: RemainingChartProps) {
               border: "1px solid var(--color-border)",
               borderRadius: "8px",
               fontSize: "12px",
+              color: "var(--color-foreground)",
               opacity: 0.9,
             }}
           />

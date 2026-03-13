@@ -35,13 +35,13 @@ export function FrequencyChart({ buckets, className }: FrequencyChartProps) {
           <XAxis
             dataKey="hour"
             tickFormatter={formatHourShort}
-            tick={{ fontSize: 11 }}
+            tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
             stroke="var(--color-foreground)"
             opacity={0.4}
           />
           <YAxis
             allowDecimals={false}
-            tick={{ fontSize: 11 }}
+            tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
             stroke="var(--color-foreground)"
             opacity={0.4}
             width={30}
@@ -57,6 +57,7 @@ export function FrequencyChart({ buckets, className }: FrequencyChartProps) {
               border: "1px solid var(--color-border)",
               borderRadius: "8px",
               fontSize: "12px",
+              color: "var(--color-foreground)",
               opacity: 0.9,
             }}
           />
@@ -64,6 +65,7 @@ export function FrequencyChart({ buckets, className }: FrequencyChartProps) {
             formatter={(value: string) =>
               value === "adds" ? "추가" : "차감"
             }
+            wrapperStyle={{ color: "var(--color-muted-foreground)", fontSize: "12px" }}
           />
           <Bar dataKey="adds" fill="#22c55e" stackId="a" radius={[2, 2, 0, 0]} />
           <Bar dataKey="subtracts" fill="#ef4444" stackId="a" radius={[2, 2, 0, 0]} />
