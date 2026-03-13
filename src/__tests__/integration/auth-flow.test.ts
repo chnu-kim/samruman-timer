@@ -71,15 +71,7 @@ describe("인증 흐름 통합 테스트", () => {
     expect(sessionCookie).toContain("HttpOnly");
   });
 
-  it("3. me → 사용자 정보 (JWT 쿠키 기반)", async () => {
-    // signJwt로 실제 토큰 생성
-    const { signJwt } = await import("@/lib/auth");
-    const token = await signJwt({
-      userId: "user-1",
-      chzzkUserId: "chzzk-user-1",
-      nickname: "테스터",
-    });
-
+  it("3. me → 사용자 정보 (미들웨어가 주입한 x-user-id 기반)", async () => {
     db._stmt.first.mockResolvedValue({
       id: "user-1",
       chzzk_user_id: "chzzk-user-1",
@@ -88,7 +80,7 @@ describe("인증 흐름 통합 테스트", () => {
     });
 
     const req = new NextRequest(new URL("http://localhost:3000/api/auth/me"), {
-      headers: { cookie: `session=${token}` },
+      headers: { "x-user-id": "user-1" },
     });
     const res = await me(req as never);
     const body = await parseJson(res);

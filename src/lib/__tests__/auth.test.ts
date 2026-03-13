@@ -228,26 +228,69 @@ describe("rotateRefreshToken", () => {
     expect(result!.familyId).toBe("family-1");
   });
 
-  it("USED 토큰 → null + family 전체 REVOKED (reuse detection)", async () => {
+  it("USED 토큰 + 최근 ACTIVE 있음 → grace (사용자 정보 반환)", async () => {
     const rawToken = "used-token";
     const tokenHash = await hashToken(rawToken);
 
-    db._stmt.first.mockResolvedValue({
-      id: "rt-1",
-      user_id: "user-1",
-      token_hash: tokenHash,
-      family_id: "family-1",
-      status: "USED",
-      expires_at: new Date(Date.now() + 86400000).toISOString(),
-      created_at: new Date().toISOString(),
-      used_at: new Date().toISOString(),
+    let firstCallCount = 0;
+    db._stmt.first.mockImplementation(async () => {
+      firstCallCount++;
+      if (firstCallCount === 1) {
+        return {
+          id: "rt-1",
+          user_id: "user-1",
+          token_hash: tokenHash,
+          family_id: "family-1",
+          status: "USED",
+          expires_at: new Date(Date.now() + 86400000).toISOString(),
+          created_at: new Date().toISOString(),
+          used_at: new Date().toISOString(),
+        };
+      }
+      if (firstCallCount === 2) {
+        // grace: 최근 ACTIVE 토큰 존재
+        return { id: "rt-2" };
+      }
+      // user 조회
+      return { id: "user-1", chzzk_user_id: "chzzk-1", nickname: "tester" };
+    });
+
+    const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
+    expect(result).not.toBeNull();
+    expect(result!.userId).toBe("user-1");
+    expect(result!.newRawToken).toBeNull();
+    // family 폐기 호출 안 됨
+    expect(db._stmt.run).not.toHaveBeenCalled();
+  });
+
+  it("USED 토큰 + 최근 ACTIVE 없음 → null + family 폐기 (reuse detection)", async () => {
+    const rawToken = "used-token-old";
+    const tokenHash = await hashToken(rawToken);
+
+    let firstCallCount = 0;
+    db._stmt.first.mockImplementation(async () => {
+      firstCallCount++;
+      if (firstCallCount === 1) {
+        return {
+          id: "rt-1",
+          user_id: "user-1",
+          token_hash: tokenHash,
+          family_id: "family-1",
+          status: "USED",
+          expires_at: new Date(Date.now() + 86400000).toISOString(),
+          created_at: new Date().toISOString(),
+          used_at: new Date().toISOString(),
+        };
+      }
+      // grace: 최근 ACTIVE 토큰 없음
+      return null;
     });
 
     db._stmt.run.mockResolvedValue({ meta: { changes: 0 } });
 
     const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
     expect(result).toBeNull();
-    // family 폐기 UPDATE 호출됨
+    // family 폐기 호출됨
     expect(db._stmt.run).toHaveBeenCalled();
   });
 

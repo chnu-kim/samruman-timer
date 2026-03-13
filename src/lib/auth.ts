@@ -140,8 +140,35 @@ export async function rotateRefreshToken(
 
   if (!row) return null;
 
-  // 2. USED/REVOKED면 → family 전체 폐기 (reuse detection)
+  // 2. USED/REVOKED면 → grace period 확인 후 reuse detection
   if (row.status === "USED" || row.status === "REVOKED") {
+    // 동시 요청 grace: 같은 family에 최근 발급된 ACTIVE 토큰이 있으면
+    // 정상적인 동시 요청으로 판단하고 사용자 정보만 반환
+    if (row.status === "USED") {
+      const recentActive = await db
+        .prepare(
+          "SELECT id FROM refresh_tokens WHERE family_id = ? AND status = 'ACTIVE' AND created_at > ? LIMIT 1"
+        )
+        .bind(row.family_id, new Date(Date.now() - RACE_GRACE_MS).toISOString())
+        .first<{ id: string }>();
+
+      if (recentActive) {
+        const user = await db
+          .prepare("SELECT id, chzzk_user_id, nickname FROM users WHERE id = ?")
+          .bind(row.user_id)
+          .first<{ id: string; chzzk_user_id: string; nickname: string }>();
+        if (!user) return null;
+        return {
+          userId: user.id,
+          chzzkUserId: user.chzzk_user_id,
+          nickname: user.nickname,
+          newRawToken: null,
+          newTokenHash: null,
+          familyId: row.family_id,
+        };
+      }
+    }
+
     await revokeRefreshTokenFamily(db, row.family_id);
     return null;
   }

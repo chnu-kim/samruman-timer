@@ -6,8 +6,6 @@ import {
   ACCESS_TOKEN_MAX_AGE,
   REFRESH_TOKEN_MAX_AGE,
   REFRESH_COOKIE_NAME,
-  deleteSessionCookie,
-  deleteRefreshCookie,
 } from "@/lib/auth";
 import { getDB } from "@/lib/db";
 import { validateEnv } from "@/lib/env";
@@ -19,6 +17,7 @@ const PROTECTED_ROUTES: { method: string; pattern: RegExp }[] = [
   { method: "POST", pattern: /^\/api\/projects$/ },
   { method: "POST", pattern: /^\/api\/projects\/[^/]+\/timers$/ },
   { method: "POST", pattern: /^\/api\/timers\/[^/]+\/modify$/ },
+  { method: "GET", pattern: /^\/api\/auth\/me$/ },
   { method: "POST", pattern: /^\/api\/auth\/logout$/ },
   { method: "DELETE", pattern: /^\/api\/projects\/[^/]+$/ },
   { method: "DELETE", pattern: /^\/api\/timers\/[^/]+$/ },
@@ -82,14 +81,11 @@ export async function middleware(request: NextRequest) {
     const result = await rotateRefreshToken(db, refreshToken);
 
     if (!result) {
-      // 갱신 실패 → 401 + 두 쿠키 삭제
-      const response = NextResponse.json(
+      // 갱신 실패 → 401 반환 (쿠키 삭제는 로그아웃에서만 수행)
+      return NextResponse.json(
         { error: { code: "UNAUTHORIZED", message: "유효하지 않은 세션입니다" } },
         { status: 401 }
       );
-      response.headers.append("Set-Cookie", deleteSessionCookie());
-      response.headers.append("Set-Cookie", deleteRefreshCookie());
-      return response;
     }
 
     // 새 access token 발급
