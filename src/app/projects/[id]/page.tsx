@@ -16,6 +16,7 @@ import { useToast } from "@/components/ui/Toast";
 import { GoalCard } from "@/components/goal/GoalCard";
 import { GoalForm } from "@/components/goal/GoalForm";
 import Link from "next/link";
+import { authFetch } from "@/lib/auth-fetch";
 import type {
   ApiSuccessResponse,
   ProjectDetailResponse,
@@ -271,7 +272,7 @@ export default function ProjectDetailPage() {
   }
 
   async function handleSaveName(name: string) {
-    const res = await fetch(`/api/projects/${projectId}`, {
+    const res = await authFetch(`/api/projects/${projectId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
@@ -283,7 +284,7 @@ export default function ProjectDetailPage() {
   }
 
   async function handleSaveDescription(description: string) {
-    const res = await fetch(`/api/projects/${projectId}`, {
+    const res = await authFetch(`/api/projects/${projectId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ description }),
@@ -320,7 +321,7 @@ export default function ProjectDetailPage() {
     setShowDeleteDialog(false);
     setDeleting(true);
     try {
-      const res = await fetch(`/api/projects/${projectId}`, { method: "DELETE" });
+      const res = await authFetch(`/api/projects/${projectId}`, { method: "DELETE" });
       if (res.ok) {
         router.push("/projects");
       } else {

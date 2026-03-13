@@ -6,6 +6,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
 import { CopyIcon, XIcon, CheckIcon } from "@/components/ui/Icons";
 import { useToast } from "@/components/ui/Toast";
+import { authFetch } from "@/lib/auth-fetch";
 import { cn } from "@/lib/utils";
 
 interface OverlaySettingsProps {
@@ -69,7 +70,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`/api/timers/${timerId}/overlay-settings`);
+        const res = await authFetch(`/api/timers/${timerId}/overlay-settings`);
         const json = await res.json() as { data?: OverlayConfig };
         if (json.data) {
           setConfig(json.data);
@@ -153,7 +154,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      const res = await fetch(`/api/timers/${timerId}/overlay-settings`, {
+      const res = await authFetch(`/api/timers/${timerId}/overlay-settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config),

@@ -21,6 +21,7 @@ import { CumulativeChart } from "@/components/graph/CumulativeChart";
 import { FrequencyChart } from "@/components/graph/FrequencyChart";
 import { useKeyboardShortcuts, SHORTCUT_HELP } from "@/hooks/useKeyboardShortcuts";
 import { usePolling } from "@/hooks/usePolling";
+import { authFetch } from "@/lib/auth-fetch";
 import type {
   ApiSuccessResponse,
   TimerDetailResponse,
@@ -235,7 +236,7 @@ export default function TimerDetailPage() {
     })();
     if (defaultActor) {
       try {
-        const res = await fetch(`/api/timers/${timerId}/modify`, {
+        const res = await authFetch(`/api/timers/${timerId}/modify`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: selectedAction, deltaSeconds: seconds, actorName: defaultActor }),
@@ -298,7 +299,7 @@ export default function TimerDetailPage() {
     setShowDeleteDialog(false);
     setDeleting(true);
     try {
-      const res = await fetch(`/api/timers/${timerId}`, { method: "DELETE" });
+      const res = await authFetch(`/api/timers/${timerId}`, { method: "DELETE" });
       if (res.ok) {
         router.push(`/projects/${timer!.projectId}`);
       } else {
@@ -315,7 +316,7 @@ export default function TimerDetailPage() {
   }
 
   async function handleSaveTitle(title: string) {
-    const res = await fetch(`/api/timers/${timerId}`, {
+    const res = await authFetch(`/api/timers/${timerId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title }),
@@ -327,7 +328,7 @@ export default function TimerDetailPage() {
   }
 
   async function handleSaveDescription(description: string) {
-    const res = await fetch(`/api/timers/${timerId}`, {
+    const res = await authFetch(`/api/timers/${timerId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ description }),

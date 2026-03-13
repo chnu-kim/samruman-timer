@@ -11,6 +11,7 @@ import { ProjectCardGridSkeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Pagination } from "@/components/ui/Pagination";
 import { useDebounce } from "@/hooks/useDebounce";
+import { authFetch } from "@/lib/auth-fetch";
 import type { ApiSuccessResponse, ProjectListItem, ProjectListResponse, MeResponse, Pagination as PaginationType } from "@/types";
 
 type SortBy = "latest" | "name";
@@ -63,7 +64,7 @@ export default function ProjectsPage() {
 
       if (user) {
         const endpoint = activeTab === "mine" ? "/api/projects/mine" : "/api/projects/others";
-        const res = await fetch(`${endpoint}?${qs}`);
+        const res = await authFetch(`${endpoint}?${qs}`);
         if (res.ok) {
           const json = (await res.json()) as ApiSuccessResponse<ProjectListResponse>;
           setProjects(json.data.projects);
@@ -95,8 +96,8 @@ export default function ProjectsPage() {
     if (!user) return;
     try {
       const [mineRes, othersRes] = await Promise.all([
-        fetch("/api/projects/mine?limit=1"),
-        fetch("/api/projects/others?limit=1"),
+        authFetch("/api/projects/mine?limit=1"),
+        authFetch("/api/projects/others?limit=1"),
       ]);
       if (mineRes.ok) {
         const json = (await mineRes.json()) as ApiSuccessResponse<ProjectListResponse>;

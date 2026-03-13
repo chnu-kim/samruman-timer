@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
+import { authFetch } from "@/lib/auth-fetch";
 import type { ApiSuccessResponse, ApiErrorResponse, TimerCreateResponse } from "@/types";
 
 function formatRelativeTime(targetMs: number): string {
@@ -215,7 +216,7 @@ export function CreateTimerForm({ projectId, onSuccess, onCancel }: CreateTimerF
         body.scheduledStartAt = new Date(scheduledStartAt).toISOString();
       }
 
-      const res = await fetch(`/api/projects/${projectId}/timers`, {
+      const res = await authFetch(`/api/projects/${projectId}/timers`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

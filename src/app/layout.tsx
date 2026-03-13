@@ -4,6 +4,7 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { ToastProvider } from "@/components/ui/Toast";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { SessionExpiredHandler } from "@/components/providers/SessionExpiredHandler";
 import "./globals.css";
 
 const notoSansKR = Noto_Sans_KR({
@@ -41,6 +42,7 @@ export default function RootLayout({
             <Header />
             <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">{children}</main>
             <Footer />
+            <SessionExpiredHandler />
           </ToastProvider>
         </ThemeProvider>
       </body>

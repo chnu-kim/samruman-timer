@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
+import { authFetch } from "@/lib/auth-fetch";
 import type { ApiSuccessResponse, ApiErrorResponse, TimerModifyResponse, TimerLogResponse, ModifyAction, TimerStatus } from "@/types";
 
 interface TimerControlsProps {
@@ -115,7 +116,7 @@ export function TimerControls({ timerId, status, remainingSeconds, onModified, c
 
     // 백그라운드에서 서버 확정
     try {
-      const res = await fetch(`/api/timers/${timerId}/modify`, {
+      const res = await authFetch(`/api/timers/${timerId}/modify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, deltaSeconds: delta, actorName: actor }),
