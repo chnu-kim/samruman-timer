@@ -46,3 +46,16 @@ export function detectTimerChange(
     floatingText: `${sign}${formatDelta(absDelta)}`,
   };
 }
+
+/**
+ * 폴링 요청은 취소하지 않으므로 이전 요청의 응답이 늦게 도착할 수 있다.
+ * 직전에 반영한 것보다 오래된 응답은 버려야 화면이 과거 값으로 되돌아가거나
+ * 가짜 변경 애니메이션이 뜨지 않는다.
+ */
+export function isStaleResponse(
+  prev: TimerSnapshot | null,
+  current: { updatedAt: string },
+): boolean {
+  if (!prev) return false;
+  return Date.parse(current.updatedAt) < Date.parse(prev.updatedAt);
+}

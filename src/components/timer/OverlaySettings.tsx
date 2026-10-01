@@ -292,7 +292,8 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                 value={fontSizeInput}
                 onChange={(e) => {
                   setFontSizeInput(e.target.value);
-                  const v = Number(e.target.value);
+                  // 서버는 정수만 받으므로 소수 입력은 반올림해 반영한다
+                  const v = Math.round(Number(e.target.value));
                   if (!Number.isNaN(v) && v >= 24 && v <= 200) {
                     setConfig((prev) => ({ ...prev, fontSize: v }));
                   }
@@ -302,7 +303,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                   if (Number.isNaN(v) || fontSizeInput === "") {
                     setFontSizeInput(String(config.fontSize));
                   } else {
-                    const clamped = Math.max(24, Math.min(200, v));
+                    const clamped = Math.max(24, Math.min(200, Math.round(v)));
                     setFontSizeInput(String(clamped));
                     setConfig((prev) => ({ ...prev, fontSize: clamped }));
                   }

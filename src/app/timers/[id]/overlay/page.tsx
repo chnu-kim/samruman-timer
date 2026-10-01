@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useSearchParams } from "next/navigation";
 import { formatTime } from "@/components/timer/CountdownDisplay";
-import { detectTimerChange, type TimerSnapshot } from "@/lib/overlay-animation";
+import { detectTimerChange, isStaleResponse, type TimerSnapshot } from "@/lib/overlay-animation";
 import { formatDateTime } from "@/lib/utils";
 import type { ApiSuccessResponse, TimerDetailResponse } from "@/types";
 
@@ -79,6 +79,7 @@ export default function TimerOverlayPage() {
         const json = (await res.json()) as ApiSuccessResponse<TimerDetailResponse>;
         const data = json.data;
         const now = Date.now();
+        if (isStaleResponse(prevTimerRef.current, data)) return;
 
         // 변경 감지: updatedAt이 바뀌었으면 수동 조작 발생
         if (animation && prevTimerRef.current) {

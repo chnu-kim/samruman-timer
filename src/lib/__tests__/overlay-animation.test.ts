@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   formatDelta,
   detectTimerChange,
+  isStaleResponse,
 } from "@/lib/overlay-animation";
 
 describe("formatDelta", () => {
@@ -152,5 +153,22 @@ describe("detectTimerChange", () => {
       BASE_TIME + 30000, // 폴링 사이에 활성화되어 5초 진행
     );
     expect(result).toBeNull();
+  });
+});
+
+describe("isStaleResponse", () => {
+  const snap = { remainingSeconds: 600, updatedAt: "2024-01-01T00:00:10.000Z", fetchedAt: 0, status: "RUNNING" as const };
+
+  it("직전 스냅샷이 없으면 stale 아님", () => {
+    expect(isStaleResponse(null, { updatedAt: "2024-01-01T00:00:00.000Z" })).toBe(false);
+  });
+
+  it("더 오래된 updatedAt 응답은 stale (늦게 도착한 이전 폴링)", () => {
+    expect(isStaleResponse(snap, { updatedAt: "2024-01-01T00:00:05.000Z" })).toBe(true);
+  });
+
+  it("같거나 새로운 updatedAt은 stale 아님", () => {
+    expect(isStaleResponse(snap, { updatedAt: "2024-01-01T00:00:10.000Z" })).toBe(false);
+    expect(isStaleResponse(snap, { updatedAt: "2024-01-01T00:00:15.000Z" })).toBe(false);
   });
 });
