@@ -99,7 +99,7 @@
     - CSS animation만 사용 (JS 의존 최소화)
   - 구현 위치: `src/app/timers/[id]/overlay/page.tsx`, `src/components/timer/OverlaySettings.tsx`
 
-- [ ] **P1-3. 사운드 알림 (시간 추가/만료)**
+- **P1-3. 사운드 알림 (시간 추가/만료)** — ❌ 제외 (2026-10-02): 방송 송출에 소리가 섞이면 안 된다
   - 사용자 스토리: 스트리머로서 시간이 추가되거나 만료될 때 효과음을 듣고 싶다, 다른 화면을 보고 있어도 인지하기 위해
   - 예상 공수: 1일
   - 개선안:
@@ -198,7 +198,6 @@
 |------|------|----------|
 | 3주차 | 최근 닉네임 드롭다운/칩 UI | `TimerControls.tsx` |
 | 3-4주차 | 오버레이 애니메이션 효과 | `overlay/page.tsx`, `OverlaySettings.tsx` |
-| 4주차 | 사운드 알림 시스템 | `CountdownDisplay.tsx`, 신규 hook |
 | 5주차 | 오버레이 프리셋 확장 + CSS 커스터마이징 | `OverlaySettings.tsx` |
 | 5-6주차 | 타이머 상세 그래프 모드 정리 | 그래프 컴포넌트 |
 
