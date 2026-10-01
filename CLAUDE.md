@@ -8,7 +8,7 @@
 - `pnpm test` — Vitest 전체 실행. 파일 지정: `pnpm test src/__tests__/api/timers-modify.test.ts`
 - `pnpm build-storybook` — 스토리 빌드 검증
 - `pnpm db:migrate:local` / `pnpm db:migrate` — D1 마이그레이션 적용 (원격 적용은 사용자 확인 후)
-- `pnpm deploy` — 프로덕션 배포. 사용자가 명시적으로 요청할 때만 실행
+- `pnpm run deploy` — 프로덕션 배포 (`pnpm deploy`는 pnpm 내장 workspace 명령이라 스크립트가 실행되지 않는다). 사용자가 명시적으로 요청할 때만 실행
 - 배포와 원격 마이그레이션은 별개 명령이라 한쪽만 실행되기 쉽다. 실제로 코드만 배포되고 `0007` 마이그레이션이 빠져 프로덕션 로그인이 깨진 적이 있다. 배포 전이나 프로덕션 오류를 조사할 때는 `npx wrangler d1 migrations list samrumantimer-db --remote`로 원격에 적용 안 된 마이그레이션부터 확인한다. 로그는 `npx wrangler tail samrumantimer`.
 
 변경을 마무리하기 전에 `pnpm test`와 `pnpm build`를 통과시킨다. UI 컴포넌트를 바꿨다면 `pnpm build-storybook`도.
