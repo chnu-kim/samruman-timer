@@ -17,3 +17,4 @@ paths:
 - D1은 외래 키 강제가 기본 꺼져 있으므로 참조 무결성은 앱 코드에서 보장한다.
 - 스키마를 바꾸면 `src/types/`의 행 타입과 `docs/DATABASE.md`를 함께 갱신한다.
 - 로컬 검증: `pnpm db:migrate:local`. 원격(`pnpm db:migrate`)은 사용자 확인 후에만 실행한다.
+- `migrations apply`는 작업 트리에 있는 미적용 파일을 전부 적용한다. 아직 머지되지 않은 마이그레이션 파일이 작업 트리에 있으면 그것까지 프로덕션에 들어가니, 원격 적용 전에 `migrations list --remote`로 적용될 목록을 확인한다.
