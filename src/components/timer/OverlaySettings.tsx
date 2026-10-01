@@ -23,6 +23,7 @@ interface OverlayConfig {
   showTitle: boolean;
   shadow: boolean;
   position: Position;
+  animation: boolean;
 }
 
 const PRESETS: { name: string; config: Partial<OverlayConfig> }[] = [
@@ -64,7 +65,9 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
     showTitle: false,
     shadow: true,
     position: "center",
+    animation: true,
   });
+  const [fontSizeInput, setFontSizeInput] = useState(String(config.fontSize));
   const [iframeSrc, setIframeSrc] = useState<string>("");
 
   useEffect(() => {
@@ -73,19 +76,21 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
         const res = await authFetch(`/api/timers/${timerId}/overlay-settings`);
         const json = await res.json() as { data?: OverlayConfig };
         if (json.data) {
-          setConfig(json.data);
-          setSavedConfig(json.data);
+          const loaded = { ...json.data, animation: json.data.animation ?? true };
+          setConfig(loaded);
+          setFontSizeInput(String(loaded.fontSize));
+          setSavedConfig(loaded);
         } else {
           setSavedConfig({
             fontSize: 72, color: "#ffffff", bg: "transparent",
-            showTitle: false, shadow: true, position: "center",
+            showTitle: false, shadow: true, position: "center", animation: true,
           });
         }
       } catch {
         // ignore — use defaults
         setSavedConfig({
           fontSize: 72, color: "#ffffff", bg: "transparent",
-          showTitle: false, shadow: true, position: "center",
+          showTitle: false, shadow: true, position: "center", animation: true,
         });
       } finally {
         setLoading(false);
@@ -181,6 +186,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
     if (config.showTitle) params.set("showTitle", "true");
     if (!config.shadow) params.set("shadow", "false");
     if (config.position !== "center") params.set("position", config.position);
+    if (!config.animation) params.set("animation", "false");
 
     const base = `${typeof window !== "undefined" ? window.location.origin : ""}/timers/${timerId}/overlay`;
     const qs = params.toString();
@@ -201,7 +207,11 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
   }, [overlayUrl, toast]);
 
   const applyPreset = useCallback((preset: (typeof PRESETS)[number]) => {
-    setConfig((prev) => ({ ...prev, ...preset.config }));
+    setConfig((prev) => {
+      const next = { ...prev, ...preset.config };
+      setFontSizeInput(String(next.fontSize));
+      return next;
+    });
   }, []);
 
   return (
@@ -255,20 +265,54 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
           </div>
         </div>
 
-        {/* 폰트 크기 슬라이더 */}
+        {/* 폰트 크기 슬라이더 + 직접 입력 */}
         <div className="mb-5">
           <label className="text-sm font-medium text-foreground">
-            폰트 크기: {config.fontSize}px
+            폰트 크기
           </label>
-          <input
-            type="range"
-            min={24}
-            max={200}
-            value={config.fontSize}
-            onChange={(e) => setConfig((prev) => ({ ...prev, fontSize: Number(e.target.value) }))}
-            className="mt-1.5 w-full accent-accent"
-            aria-label="폰트 크기"
-          />
+          <div className="mt-1.5 flex items-center gap-3">
+            <input
+              type="range"
+              min={24}
+              max={200}
+              value={config.fontSize}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setConfig((prev) => ({ ...prev, fontSize: v }));
+                setFontSizeInput(String(v));
+              }}
+              className="flex-1 accent-accent"
+              aria-label="폰트 크기 슬라이더"
+            />
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                min={24}
+                max={200}
+                value={fontSizeInput}
+                onChange={(e) => {
+                  setFontSizeInput(e.target.value);
+                  const v = Number(e.target.value);
+                  if (!Number.isNaN(v) && v >= 24 && v <= 200) {
+                    setConfig((prev) => ({ ...prev, fontSize: v }));
+                  }
+                }}
+                onBlur={() => {
+                  const v = Number(fontSizeInput);
+                  if (Number.isNaN(v) || fontSizeInput === "") {
+                    setFontSizeInput(String(config.fontSize));
+                  } else {
+                    const clamped = Math.max(24, Math.min(200, v));
+                    setFontSizeInput(String(clamped));
+                    setConfig((prev) => ({ ...prev, fontSize: clamped }));
+                  }
+                }}
+                className="w-16 text-center rounded border border-border bg-background px-2 py-1 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="폰트 크기 입력"
+              />
+              <span className="text-sm text-muted-foreground">px</span>
+            </div>
+          </div>
           <div className="flex justify-between text-xs text-muted-foreground mt-0.5">
             <span>24px</span>
             <span>200px</span>
@@ -408,6 +452,15 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
               className="w-4 h-4 accent-accent rounded"
             />
             <span className="text-sm">텍스트 그림자</span>
+          </label>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={config.animation}
+              onChange={(e) => setConfig((prev) => ({ ...prev, animation: e.target.checked }))}
+              className="w-4 h-4 accent-accent rounded"
+            />
+            <span className="text-sm">시간 변경 애니메이션</span>
           </label>
         </div>
 

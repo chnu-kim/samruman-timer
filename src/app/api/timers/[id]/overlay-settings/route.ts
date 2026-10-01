@@ -9,6 +9,7 @@ const DEFAULT_SETTINGS: OverlaySettingsResponse = {
   showTitle: false,
   shadow: true,
   position: "center",
+  animation: true,
 };
 
 const VALID_POSITIONS: OverlayPosition[] = [
@@ -46,7 +47,7 @@ export const GET = withErrorHandler(
 
     const row = await db
       .prepare(
-        "SELECT font_size, text_color, background, show_title, text_shadow, position FROM overlay_settings WHERE timer_id = ?"
+        "SELECT font_size, text_color, background, show_title, text_shadow, position, animation FROM overlay_settings WHERE timer_id = ?"
       )
       .bind(id)
       .first<{
@@ -56,6 +57,7 @@ export const GET = withErrorHandler(
         show_title: number;
         text_shadow: number;
         position: string;
+        animation: number;
       }>();
 
     if (!row) {
@@ -69,6 +71,7 @@ export const GET = withErrorHandler(
       showTitle: row.show_title === 1,
       shadow: row.text_shadow === 1,
       position: row.position as OverlayPosition,
+      animation: row.animation === 1,
     };
 
     return NextResponse.json({ data });
@@ -170,6 +173,11 @@ export const PUT = withErrorHandler(
         ? Boolean(body.shadow)
         : DEFAULT_SETTINGS.shadow;
 
+    const animation =
+      body.animation !== undefined
+        ? Boolean(body.animation)
+        : DEFAULT_SETTINGS.animation;
+
     const position =
       body.position !== undefined
         ? String(body.position)
@@ -190,8 +198,8 @@ export const PUT = withErrorHandler(
 
     await db
       .prepare(
-        `INSERT INTO overlay_settings (timer_id, font_size, text_color, background, show_title, text_shadow, position, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO overlay_settings (timer_id, font_size, text_color, background, show_title, text_shadow, position, animation, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(timer_id) DO UPDATE SET
          font_size = excluded.font_size,
          text_color = excluded.text_color,
@@ -199,6 +207,7 @@ export const PUT = withErrorHandler(
          show_title = excluded.show_title,
          text_shadow = excluded.text_shadow,
          position = excluded.position,
+         animation = excluded.animation,
          updated_at = excluded.updated_at`
       )
       .bind(
@@ -209,6 +218,7 @@ export const PUT = withErrorHandler(
         showTitle ? 1 : 0,
         shadow ? 1 : 0,
         position,
+        animation ? 1 : 0,
         now
       )
       .run();
@@ -220,6 +230,7 @@ export const PUT = withErrorHandler(
       showTitle,
       shadow,
       position: position as OverlayPosition,
+      animation,
     };
 
     return NextResponse.json({ data });

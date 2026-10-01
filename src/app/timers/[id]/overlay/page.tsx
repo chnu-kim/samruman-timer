@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useSearchParams } from "next/navigation";
 import { formatTime } from "@/components/timer/CountdownDisplay";
+import { detectTimerChange, type TimerSnapshot } from "@/lib/overlay-animation";
 import { formatDateTime } from "@/lib/utils";
 import type { ApiSuccessResponse, TimerDetailResponse } from "@/types";
 
@@ -37,9 +38,14 @@ export default function TimerOverlayPage() {
   const urgentColor = searchParams.get("urgentColor") || "#f59e0b"; // amber-500
   const criticalColor = searchParams.get("criticalColor") || "#ef4444"; // red-500
 
+  const animation = searchParams.get("animation") !== "false"; // 기본 활성화
   const [timer, setTimer] = useState<TimerDetailResponse | null>(null);
   const [displayed, setDisplayed] = useState(0);
   const [mounted, setMounted] = useState(false);
+  const [animClass, setAnimClass] = useState<string | null>(null);
+  const [floatingText, setFloatingText] = useState<string | null>(null);
+  const [floatingKey, setFloatingKey] = useState(0);
+  const prevTimerRef = useRef<TimerSnapshot | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -71,13 +77,27 @@ export default function TimerOverlayPage() {
       const res = await fetch(`/api/timers/${timerId}`);
       if (res.ok) {
         const json = (await res.json()) as ApiSuccessResponse<TimerDetailResponse>;
-        setTimer(json.data);
-        setDisplayed(json.data.remainingSeconds);
+        const data = json.data;
+        const now = Date.now();
+
+        // 변경 감지: updatedAt이 바뀌었으면 수동 조작 발생
+        if (animation && prevTimerRef.current) {
+          const change = detectTimerChange(prevTimerRef.current, data, now);
+          if (change) {
+            setFloatingText(change.floatingText);
+            setFloatingKey((k) => k + 1);
+            setAnimClass(change.animClass);
+          }
+        }
+
+        prevTimerRef.current = { remainingSeconds: data.remainingSeconds, updatedAt: data.updatedAt, fetchedAt: now, status: data.status };
+        setTimer(data);
+        setDisplayed(data.remainingSeconds);
       }
     } catch {
       // ignore
     }
-  }, [timerId]);
+  }, [timerId, animation]);
 
   // 5초 폴링
   useEffect(() => {
@@ -153,6 +173,7 @@ export default function TimerOverlayPage() {
       {timer && (
         <div
           style={{
+            position: "relative",
             display: "flex",
             flexDirection: "column",
             alignItems: position === "center"
@@ -198,17 +219,45 @@ export default function TimerOverlayPage() {
               whiteSpace: "nowrap",
               letterSpacing: "-0.02em",
               textShadow,
-              ...(isExpired
-                ? { animation: "pulse-expired 2s ease-in-out infinite" }
-                : isCritical
-                  ? { animation: "pulse-urgent-fast 0.8s ease-in-out infinite" }
-                  : isUrgent
-                    ? { animation: "pulse-urgent-slow 2s ease-in-out infinite" }
-                    : {}),
+              ...(animClass === "overlay-anim-add"
+                ? { animation: "overlay-flash-add 0.6s ease-out" }
+                : animClass === "overlay-anim-subtract"
+                  ? { animation: "overlay-flash-subtract 0.5s ease-out" }
+                  : isExpired
+                    ? { animation: "pulse-expired 2s ease-in-out infinite" }
+                    : isCritical
+                      ? { animation: "pulse-urgent-fast 0.8s ease-in-out infinite" }
+                      : isUrgent
+                        ? { animation: "pulse-urgent-slow 2s ease-in-out infinite" }
+                        : {}),
+            }}
+            onAnimationEnd={() => {
+              if (animClass) setAnimClass(null);
             }}
           >
             {formatTime(displayed)}
           </span>
+          {floatingText && (
+            <span
+              key={floatingKey}
+              style={{
+                position: "absolute",
+                top: `-${Math.round(fontSizePx * 0.3)}px`,
+                left: "50%",
+                transform: "translateX(-50%)",
+                fontSize: `${Math.round(fontSizePx * 0.4)}px`,
+                fontWeight: 700,
+                color: floatingText.startsWith("+") ? "#22c55e" : "#ef4444",
+                whiteSpace: "nowrap",
+                pointerEvents: "none",
+                animation: "overlay-float-up 1.2s ease-out forwards",
+                textShadow,
+              }}
+              onAnimationEnd={() => setFloatingText(null)}
+            >
+              {floatingText}
+            </span>
+          )}
           {isExpired && (
             <span
               style={{

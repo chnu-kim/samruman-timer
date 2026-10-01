@@ -584,12 +584,14 @@ OBS 오버레이 설정을 조회한다.
     "bg": "transparent",
     "showTitle": false,
     "shadow": true,
-    "position": "center"
+    "position": "center",
+    "animation": true
   }
 }
 ```
 - 설정 미저장 시 모든 필드 기본값으로 반환
 - `position`: `"center"` | `"top-left"` | `"top-right"` | `"bottom-left"` | `"bottom-right"`
+- `animation`: 시간 추가/차감 시 오버레이 애니메이션(flash, 변경량 표시) 사용 여부. 기본 `true`
 - **에러**:
   - `404`: 타이머 없음
 
@@ -606,7 +608,8 @@ OBS 오버레이 설정을 저장한다.
   "bg": "transparent",
   "showTitle": true,
   "shadow": false,
-  "position": "top-left"
+  "position": "top-left",
+  "animation": false
 }
 ```
 - **유효성 검사**:
