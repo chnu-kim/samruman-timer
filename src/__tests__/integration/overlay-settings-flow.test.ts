@@ -65,6 +65,7 @@ describe("오버레이 설정 통합 흐름", () => {
       showTitle: false,
       shadow: true,
       position: "center",
+      animation: true,
     });
   });
 
@@ -85,6 +86,7 @@ describe("오버레이 설정 통합 흐름", () => {
       showTitle: true,
       shadow: false,
       position: "top-left",
+      animation: false,
     }, AUTH_HEADERS);
     const putRes = await putOverlaySettings(putReq as never, makeParams(timerId) as never);
     const putBody = await parseJson(putRes);
@@ -93,6 +95,7 @@ describe("오버레이 설정 통합 흐름", () => {
     expect(putBody.data.fontSize).toBe(96);
     expect(putBody.data.color).toBe("#00ff88");
     expect(putBody.data.position).toBe("top-left");
+    expect(putBody.data.animation).toBe(false);
 
     // GET 조회 시 저장된 값 반환
     db._stmt.first
@@ -104,6 +107,7 @@ describe("오버레이 설정 통합 흐름", () => {
         show_title: 1,
         text_shadow: 0,
         position: "top-left",
+        animation: 0,
       });
 
     const getReq = createGetRequest(`/api/timers/${timerId}/overlay-settings`);
@@ -118,6 +122,7 @@ describe("오버레이 설정 통합 흐름", () => {
       showTitle: true,
       shadow: false,
       position: "top-left",
+      animation: false,
     });
   });
 

@@ -298,6 +298,7 @@ export interface OverlaySettingsResponse {
   showTitle: boolean;
   shadow: boolean;
   position: OverlayPosition;
+  animation: boolean;
 }
 
 export interface OverlaySettingsRequest {
@@ -307,6 +308,7 @@ export interface OverlaySettingsRequest {
   showTitle?: boolean;
   shadow?: boolean;
   position?: OverlayPosition;
+  animation?: boolean;
 }
 
 // ─── API 응답 타입: Goal ───

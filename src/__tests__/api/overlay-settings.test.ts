@@ -28,6 +28,7 @@ const SETTINGS_ROW = {
   show_title: 1,
   text_shadow: 0,
   position: "top-left",
+  animation: 0,
 };
 
 function makeParams(id = "timer-1") {
@@ -58,6 +59,7 @@ describe("GET /api/timers/[id]/overlay-settings", () => {
       showTitle: true,
       shadow: false,
       position: "top-left",
+      animation: false,
     });
   });
 
@@ -77,6 +79,7 @@ describe("GET /api/timers/[id]/overlay-settings", () => {
       showTitle: false,
       shadow: true,
       position: "center",
+      animation: true,
     });
   });
 
@@ -119,6 +122,25 @@ describe("PUT /api/timers/[id]/overlay-settings", () => {
     expect(body.data.showTitle).toBe(true);
     expect(body.data.shadow).toBe(false);
     expect(body.data.position).toBe("top-left");
+    expect(body.data.animation).toBe(true);
+  });
+
+  it("animation=false 저장 시 DB에 0으로 기록하고 응답에 반영", async () => {
+    db._stmt.first.mockResolvedValueOnce(TIMER_ROW);
+    const req = createPutRequest(
+      "/api/timers/timer-1/overlay-settings",
+      { animation: false },
+      { "x-user-id": "user-1" }
+    );
+    const res = await PUT(req as never, makeParams() as never);
+    const body = await parseJson(res);
+
+    expect(res.status).toBe(200);
+    expect(body.data.animation).toBe(false);
+    const sql = db.prepare.mock.calls.map((c: unknown[]) => String(c[0])).find((q: string) => q.includes("INSERT INTO overlay_settings"));
+    expect(sql).toContain("animation");
+    const bindArgs = db._stmt.bind.mock.calls.at(-1) as unknown[];
+    expect(bindArgs.at(-2)).toBe(0); // animation은 updated_at 바로 앞
   });
 
   it("미인증 → 401", async () => {
