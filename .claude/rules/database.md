@@ -4,20 +4,17 @@ paths:
   - migrations/**
 ---
 
-# 데이터베이스 규칙
+# D1 / 마이그레이션
 
-DB 관련 코드 작업 시 반드시 아래 설계 문서를 참조한다:
+스키마 설계: `docs/DATABASE.md`. 현재 스키마의 최종 형태는 `migrations/`를 순서대로 적용한 결과다.
 
-- `docs/DATABASE.md` — D1 스키마, 인덱스, 마이그레이션 전략, 타입 규칙
+## 마이그레이션 작성
 
-## 핵심 규칙
-
-- DB: Cloudflare D1 (SQLite 호환)
-- 접근: `getCloudflareContext().env.DB`
-- ID: `TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16))))` — 32자 hex
-- 날짜: `TEXT` 타입, `datetime('now')` (ISO 8601 UTC)
-- enum: `TEXT` + `CHECK` 제약조건
-- 트랜잭션: `db.batch()` 로 여러 쿼리를 원자적 실행
-- 마이그레이션: `migrations/NNNN_description.sql` 순번 관리
-- 기존 마이그레이션 파일 수정 금지 — 변경 시 새 파일 추가
-- `wrangler d1 migrations apply` 로 적용
+- 새 파일: `migrations/NNNN_snake_case_description.sql`, 기존 최대 번호 + 1.
+- 이미 존재하는 마이그레이션 파일은 수정하지 않는다. 프로덕션에 적용됐을 수 있다.
+- 컬럼 타입 관례: ID `TEXT PRIMARY KEY` (32자 hex), 날짜 `TEXT` (ISO 8601 UTC), enum은 `TEXT` + `CHECK (... IN (...))`.
+- SQLite는 `CHECK` 제약 변경이나 컬럼 수정을 `ALTER`로 못 한다. 이런 변경은 새 테이블 생성 → 데이터 복사 → 기존 테이블 삭제 → rename 순서로 한다 (`0002_scheduled_start.sql` 참고). 이때 인덱스도 다시 만든다.
+- D1은 외래 키 강제가 기본 꺼져 있으므로 참조 무결성은 앱 코드에서 보장한다.
+- 스키마를 바꾸면 `src/types/`의 행 타입과 `docs/DATABASE.md`를 함께 갱신한다.
+- 로컬 검증: `pnpm db:migrate:local`. 원격(`pnpm db:migrate`)은 사용자 확인 후에만 실행한다.
+- `migrations apply`는 작업 트리에 있는 미적용 파일을 전부 적용한다. 아직 머지되지 않은 마이그레이션 파일이 작업 트리에 있으면 그것까지 프로덕션에 들어가니, 원격 적용 전에 `migrations list --remote`로 적용될 목록을 확인한다.
