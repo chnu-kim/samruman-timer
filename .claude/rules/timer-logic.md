@@ -1,28 +1,27 @@
 ---
 paths:
   - src/lib/timer.ts
-  - src/app/api/**/timers/**
-  - src/app/api/**/modify/**
-  - src/app/api/**/logs/**
-  - src/app/api/**/graph/**
+  - src/lib/goal.ts
+  - src/app/api/timers/**
+  - src/app/api/projects/*/timers/**
+  - src/app/api/projects/*/goals/**
 ---
 
-# 타이머 로직 규칙
+# 타이머 로직
 
-타이머 관련 코드 작업 시 반드시 아래 설계 문서를 참조한다:
+설계: `docs/TIMER-LOGIC.md` (상태 전이표와 로깅 규칙의 기준 문서).
 
-- `docs/TIMER-LOGIC.md` — 타이머 계산 로직, 상태 전이, 로깅 규칙
-- `docs/DATABASE.md` — timers, timer_logs 테이블 스키마
+## 핵심
 
-## 핵심 규칙
+- 잔여시간은 저장하지 않고 계산한다: `remaining = max(0, base_remaining_seconds - (now - last_calculated_at))`. 시간 변경 시 현재 remaining을 새 base로 확정하고 `last_calculated_at`을 갱신한다.
+- 상태: `SCHEDULED`(예약, 카운트다운 미시작) / `RUNNING` / `EXPIRED` / `DELETED`(soft delete).
+- 상태 전이는 조회 시점에 lazy하게 감지·기록한다. 크론이 없으므로 "조회될 때까지 DB 상태가 갱신되지 않는다"는 전제로 코드를 읽는다.
+  - `SCHEDULED → RUNNING`: now ≥ `scheduled_start_at` → `ACTIVATE` 로그
+  - `RUNNING → EXPIRED`: remaining ≤ 0 → `EXPIRE` 로그 (만료 시각 기준으로 기록)
+  - `EXPIRED → RUNNING`: ADD로 remaining > 0 → `REOPEN` + `ADD`
+  - SUBTRACT로 remaining ≤ 0 → `SUBTRACT` + `EXPIRE`
+  - `SCHEDULED`에서는 시간 변경 불가
+- 로그 `action_type`: `CREATE`, `ADD`, `SUBTRACT`, `EXPIRE`, `REOPEN`, `ACTIVATE`, `DELETE`. `before_seconds`/`after_seconds`를 반드시 기록한다. 단순 조회와 카운트다운 틱은 로그를 남기지 않는다.
+- 상태 변경과 로그 INSERT는 하나의 `db.batch()`로 묶는다.
 
-- 잔여 시간 계산: `remaining = baseRemainingSeconds - (now - lastCalculatedAt)`
-- remaining 계산 시 항상 `max(0, ...)` 적용 — 음수 불허
-- 상태: `RUNNING` (진행 중) / `EXPIRED` (만료)
-- 상태 전이:
-  - `RUNNING → EXPIRED`: 조회 시 remaining ≤ 0 감지 → `EXPIRE` 로그
-  - `EXPIRED → RUNNING`: 시간 추가로 remaining > 0 → `REOPEN` + `ADD` 로그
-- SUBTRACT로 remaining ≤ 0 되면 → `SUBTRACT` + `EXPIRE` 로그
-- 로그 action_type: `CREATE`, `ADD`, `SUBTRACT`, `EXPIRE`, `REOPEN`
-- 로그에 `before_seconds`, `after_seconds` 반드시 기록
-- 자동 감소(카운트다운 틱)와 단순 조회는 로깅하지 않음
+로직을 바꾸면 `src/lib/__tests__/timer.test.ts`와 `src/__tests__/integration/timer-lifecycle.test.ts`에 경계값(정확히 0초, 예약 시각 직전·직후)을 넣는다.

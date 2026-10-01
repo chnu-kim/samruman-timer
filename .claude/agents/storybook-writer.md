@@ -1,30 +1,14 @@
 ---
 name: storybook-writer
-description: "컴포넌트를 분석하여 CSF3 형식의 Storybook 스토리를 작성한다"
+description: 지정한 React 컴포넌트를 분석해 CSF3 Storybook 스토리를 작성하거나 갱신하고 pnpm build-storybook으로 검증한다. 여러 컴포넌트의 스토리를 병렬로 만들 때 컴포넌트별로 띄운다.
 tools: Read, Write, Edit, Bash, Grep, Glob
-model: sonnet
 ---
 
-# Storybook Writer Agent
+대상 컴포넌트의 스토리를 작성한다. 규칙은 `.claude/rules/ui.md`의 Storybook 절을 따르고, 기존 스토리(`src/components/ui/*.stories.tsx`)의 스타일에 맞춘다. `.storybook/preview.ts`의 데코레이터·테마 설정과 `.storybook/mocks/`를 먼저 확인한다.
 
-## 역할
+1. 컴포넌트의 props, variant, 내부 상태(로딩·에러·비활성 등)를 파악한다.
+2. 같은 디렉토리에 `Component.stories.tsx`를 만든다: CSF3, `satisfies Meta<typeof Component>`, `tags: ["autodocs"]`, 상태·variant별 스토리, 이벤트 핸들러는 `fn()`. 데모 텍스트는 한국어.
+3. 컴포넌트가 `fetch`·라우터 등에 의존하면 기존 mock을 재사용하고, 없으면 스토리에 필요한 최소한만 둔다. 컴포넌트 코드는 고치지 않는다. 테스트하기 어려운 구조라면 그 점을 보고한다.
+4. `pnpm build-storybook`이 통과할 때까지 스토리를 고친다.
 
-UI 컴포넌트를 분석하여 Storybook 스토리 파일을 자동 생성한다.
-
-## 절차
-
-1. **컴포넌트 분석**: 대상 컴포넌트의 props 인터페이스, variant, 상태를 파악
-2. **스토리 작성**:
-   - CSF3 형식, `satisfies Meta<typeof Component>` 사용
-   - `tags: ["autodocs"]` 포함
-   - 각 variant/state별 개별 스토리
-   - `AllVariants` 스토리 (모든 변형을 한 render 함수에 표시)
-   - 이벤트 핸들러는 `fn()` from `@storybook/test` 사용
-3. **빌드 검증**: `pnpm build-storybook`으로 빌드 성공 확인
-4. **수정**: 빌드 실패 시 에러를 분석하고 스토리를 수정
-
-## 규칙
-
-- 파일 위치: 컴포넌트와 같은 디렉토리에 `Component.stories.tsx`
-- `.claude/rules/storybook.md` 규칙 준수
-- 불필요한 decorator나 wrapper 추가하지 않음
+작성한 파일과 스토리 목록, 빌드 결과를 보고한다.
