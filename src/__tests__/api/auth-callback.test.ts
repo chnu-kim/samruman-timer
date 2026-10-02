@@ -144,3 +144,79 @@ describe("GET /api/auth/callback", () => {
     expect(res.headers.get("Location")).toContain("/login?error=auth_failed");
   });
 });
+
+// UX-74: 세션 만료 후 다시 로그인하면 보던 화면(next)으로 돌아간다
+describe("GET /api/auth/callback — next 리다이렉트", () => {
+  let db: ReturnType<typeof createMockDB>;
+
+  beforeEach(() => {
+    vi.stubEnv("BASE_URL", "http://localhost:3000");
+    vi.stubEnv("JWT_SECRET", "test-secret-key-at-least-32-chars-long!");
+    vi.stubEnv("CHZZK_CLIENT_ID", "test-client-id");
+    vi.stubEnv("CHZZK_CLIENT_SECRET", "test-client-secret");
+
+    db = createMockDB();
+    vi.mocked(getDB).mockResolvedValue(db as unknown as D1Database);
+    vi.mocked(exchangeCode).mockResolvedValue({
+      accessToken: "access-token",
+      refreshToken: "refresh-token",
+      expiresIn: 3600,
+    });
+    vi.mocked(getUserInfo).mockResolvedValue({
+      id: "chzzk-user-1",
+      nickname: "테스터",
+      profileImageUrl: null,
+    });
+    db._stmt.first.mockResolvedValue({ id: "user-1", nickname: "테스터", profile_image_url: null });
+  });
+
+  function successReq(next: string) {
+    return createCallbackReq(
+      { code: "valid-code", state: "state-1" },
+      { oauth_state: "state-1", oauth_next: encodeURIComponent(next) }
+    );
+  }
+
+  function nextCookie(res: Response) {
+    return res.headers.getSetCookie().find((c) => c.startsWith("oauth_next="));
+  }
+
+  it("저장된 next가 같은 출처 경로면 그곳으로 보내고 oauth_next를 지운다", async () => {
+    const res = await GET(successReq("/timers/abc?tab=logs&page=2") as never);
+    expect(res.status).toBe(307);
+    expect(res.headers.get("Location")).toBe("http://localhost:3000/timers/abc?tab=logs&page=2");
+    expect(nextCookie(res)).toMatch(/Max-Age=0|Expires=Thu, 01 Jan 1970/i);
+    // 세션 쿠키는 그대로 설정된다
+    expect(res.headers.getSetCookie().some((c) => c.startsWith("session="))).toBe(true);
+  });
+
+  it.each([
+    "//evil.com",
+    "/\\evil.com",
+    "%2F%2Fevil.com",
+    "https://evil.com",
+    "javascript:alert(1)",
+    "/\t/evil.com",
+    "/login",
+  ])("쿠키의 next(%s)가 허용되지 않으면 / 로 보낸다", async (next) => {
+    const res = await GET(successReq(next) as never);
+    expect(res.headers.get("Location")).toBe("http://localhost:3000/");
+  });
+
+  it("state가 맞지 않으면 next를 쓰지 않고 oauth_next를 지운다", async () => {
+    const req = createCallbackReq(
+      { code: "valid-code", state: "state-1" },
+      { oauth_state: "other", oauth_next: encodeURIComponent("/timers/abc") }
+    );
+    const res = await GET(req as never);
+    expect(res.headers.get("Location")).toBe("http://localhost:3000/login?error=auth_failed");
+    expect(nextCookie(res)).toMatch(/Max-Age=0|Expires=Thu, 01 Jan 1970/i);
+  });
+
+  it("토큰 교환이 실패해도 oauth_next를 지운다", async () => {
+    vi.mocked(exchangeCode).mockRejectedValue(new Error("fail"));
+    const res = await GET(successReq("/timers/abc") as never);
+    expect(res.headers.get("Location")).toContain("/login?error=auth_failed");
+    expect(nextCookie(res)).toMatch(/Max-Age=0|Expires=Thu, 01 Jan 1970/i);
+  });
+});

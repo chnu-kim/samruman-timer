@@ -2,10 +2,14 @@
 
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { sanitizeNextPath } from "@/lib/safe-redirect";
 
 function LoginContent() {
   const searchParams = useSearchParams();
   const error = searchParams.get("error");
+  // 세션 만료로 온 경우 로그인 후 돌아갈 경로. 서버(로그인·콜백)에서도 다시 검증한다
+  const next = sanitizeNextPath(searchParams.get("next"));
+  const loginHref = next ? `/api/auth/login?next=${encodeURIComponent(next)}` : "/api/auth/login";
 
   return (
     <div className="w-full max-w-sm space-y-6 px-4">
@@ -26,7 +30,7 @@ function LoginContent() {
 
       {/* API 라우트로 전체 이동해야 하므로 <a>를 두고, 공용 Button primary와 같은 색·포커스 스타일을 쓴다 */}
       <a
-        href="/api/auth/login"
+        href={loginHref}
         className="flex w-full items-center justify-center rounded-lg bg-accent px-4 h-12 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
         CHZZK로 로그인

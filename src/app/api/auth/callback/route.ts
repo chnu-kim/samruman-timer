@@ -11,6 +11,21 @@ import {
 } from "@/lib/auth";
 import { getDB, generateId, nowISO, withErrorHandler } from "@/lib/db";
 import { logger } from "@/lib/logger";
+import { NEXT_COOKIE_NAME, sanitizeNextPath } from "@/lib/safe-redirect";
+
+/** 로그인 시작 때 저장한 next로 돌아갈 주소를 만든다. 쿠키 값도 다시 검증하고, 출처가 BASE_URL과 같을 때만 쓴다 */
+function resolveRedirect(baseUrl: string, rawNext: string | undefined): string {
+  const next = sanitizeNextPath(rawNext);
+  if (!next) return `${baseUrl}/`;
+  const target = new URL(next, baseUrl);
+  return target.origin === new URL(baseUrl).origin ? target.toString() : `${baseUrl}/`;
+}
+
+function failureRedirect(baseUrl: string): NextResponse {
+  const response = NextResponse.redirect(`${baseUrl}/login?error=auth_failed`);
+  response.cookies.delete(NEXT_COOKIE_NAME);
+  return response;
+}
 
 export const GET = withErrorHandler(async (request: NextRequest) => {
   const baseUrl = process.env.BASE_URL!;
@@ -21,7 +36,7 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
 
   // state 검증
   if (!code || !state || state !== savedState) {
-    return NextResponse.redirect(`${baseUrl}/login?error=auth_failed`);
+    return failureRedirect(baseUrl);
   }
 
   try {
@@ -71,8 +86,10 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
     const familyId = generateId();
     await createRefreshTokenInDB(db, user.id, refreshTokenHash, familyId);
 
-    // 리다이렉트 + 두 쿠키 설정
-    const response = NextResponse.redirect(`${baseUrl}/`);
+    // 리다이렉트 + 두 쿠키 설정. 세션 만료로 다시 로그인한 경우 보던 화면(next)으로 돌려보낸다
+    const response = NextResponse.redirect(
+      resolveRedirect(baseUrl, request.cookies.get(NEXT_COOKIE_NAME)?.value),
+    );
     response.cookies.set("session", accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV !== "development",
@@ -88,12 +105,13 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
       maxAge: REFRESH_TOKEN_MAX_AGE,
     });
     response.cookies.delete("oauth_state");
+    response.cookies.delete(NEXT_COOKIE_NAME);
 
     return response;
   } catch (error) {
     logger.error("Auth callback failed", {
       error: error instanceof Error ? error.message : String(error),
     });
-    return NextResponse.redirect(`${baseUrl}/login?error=auth_failed`);
+    return failureRedirect(baseUrl);
   }
 });

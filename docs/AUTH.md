@@ -34,7 +34,7 @@ CHZZK OAuth를 통해 사용자 인증을 수행하고, JWT를 httpOnly 쿠키�
      │                       │←───────────────────────│
      │                       │                        │
      │  Set-Cookie: token=JWT│                        │
-     │  302 Redirect → /     │                        │
+     │  302 Redirect → / 또는 next                     │
      │←──────────────────────│                        │
 ```
 
@@ -51,6 +51,23 @@ GET /api/auth/login
 ```
 
 - `state` 파라미터를 생성하여 쿠키에 저장 (CSRF 방지)
+- 선택 쿼리 `next`: 로그인 후 돌아갈 경로. `sanitizeNextPath()`(`src/lib/safe-redirect.ts`)를 통과하면 `oauth_next` 쿠키(httpOnly, SameSite=Lax, 프로덕션 Secure, 10분)에 저장하고, 없거나 허용되지 않으면 이전 시도의 `oauth_next`를 지운다
+
+#### `next` 검증 규칙 (오픈 리다이렉트 방지)
+
+같은 출처의 상대 경로만 허용한다. 아래 중 하나라도 해당하면 버리고 `/`로 보낸다.
+
+- `/`로 시작하지 않거나 `//`로 시작한다 (`https://evil.com`, `javascript:...`, `//evil.com`)
+- 역슬래시·공백·제어 문자가 어디든 들어 있다. 브라우저는 `\`를 `/`로 바꾸고 URL 파서는 탭·개행을 지우므로 `/\evil.com`, `/<탭>/evil.com`이 `//evil.com`이 된다
+- 512자를 넘는다
+- 파싱한 결과의 출처가 바뀐다
+- `/login`이나 `/api/`로 시작한다 (로그인 루프, 의도치 않은 API 호출)
+
+쿼리 값은 한 번 디코딩된 뒤 검사하므로 `?next=%2F%2Fevil.com`은 `//evil.com`으로 거부된다. 콜백은 쿠키 값을 다시 검증하고, `new URL(next, BASE_URL)`의 출처가 `BASE_URL`과 같을 때만 리다이렉트한다.
+
+#### 세션 만료 후 재로그인
+
+refresh까지 실패해 `authFetch()`가 세션 만료를 알리면 `SessionExpiredHandler`가 현재 경로를 실어 `/login?next=<경로>`로 보낸다. 로그인 화면은 같은 규칙으로 검증한 `next`를 `/api/auth/login?next=`로 넘긴다. 헤더의 일반 로그인 링크는 `next` 없이 `/`로 돌아간다.
 
 ### 2단계: 콜백 처리 (`/api/auth/callback`)
 
@@ -59,7 +76,7 @@ GET /api/auth/login
 3. Access token으로 CHZZK 사용자 정보 조회
 4. DB에서 사용자 조회 또는 생성 (upsert)
 5. JWT 생성 및 httpOnly 쿠키 설정
-6. 메인 페이지로 리다이렉트
+6. `oauth_next` 쿠키의 경로로 리다이렉트(다시 검증, 없거나 허용되지 않으면 메인 페이지 `/`). 성공·실패 모두 `oauth_next`를 지운다
 
 ### 3단계: 토큰 교환
 
