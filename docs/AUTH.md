@@ -138,7 +138,7 @@ Access token 만료 시 자동 갱신을 위한 refresh token rotation 방식을
 |------|-----|
 | 형식 | Opaque random string (`crypto.randomUUID()`) |
 | 저장 | SHA-256 해시를 DB `refresh_tokens` 테이블에 저장 |
-| 만료 시간 | 30일 |
+| 만료 시간 | 30일 (발급마다 갱신). 단 로그인 후 90일(`SESSION_ABSOLUTE_MAX_AGE`, `family_expires_at`)을 넘기지 않는다 |
 | 쿠키 이름 | `refresh` (`Max-Age` 30일) |
 | httpOnly | `true` |
 | secure | `true` (`NODE_ENV`가 `development`가 아닐 때) |
@@ -152,13 +152,16 @@ Access token 만료 시 자동 갱신을 위한 refresh token rotation 방식을
 3. 갱신 시 이전 refresh token은 `UPDATE ... WHERE status = 'ACTIVE'`로 `USED` 처리(`used_at` 기록)하고 새 토큰 발급 (같은 `family_id`). DB에 없는 토큰이나 만료된 `ACTIVE` 토큰은 상태를 바꾸지 않고 실패한다
 4. 이미 `USED`/`REVOKED`된 토큰 제시 시 해당 family 전체 폐기 (토큰 탈취 대응). 단 아래 동시 요청 grace에 해당하는 `USED` 토큰은 예외
 5. 로그아웃 시 해당 family 전체 `REVOKED` 처리
+6. 새 토큰의 만료는 `min(지금 + 30일, family_expires_at)`. 그래서 계속 쓰는 세션도 로그인 후 90일이 지나면 다시 로그인해야 한다. 갱신할 때 `family_expires_at`이 이미 지났으면 토큰 자체 만료가 남아 있어도 거부한다
+7. 로그인할 때 그 사용자의 만료된 행을 지운다. rotation마다 행이 하나씩 쌓이기 때문이다
 
 #### 동시 요청 grace (`RACE_GRACE_MS` = 30초)
 
-access token이 만료된 상태에서 여러 요청이 같은 refresh token으로 동시에 들어오면, 먼저 처리된 요청이 토큰을 `USED`로 바꾼다. 이후 요청이 `USED` 토큰을 제시하거나 `USED` 처리 경합에서 지면(`changes = 0`), 같은 family에 최근 30초 안에 생성된 `ACTIVE` 토큰이 있는지 본다.
+access token이 만료된 상태에서 여러 요청이 같은 refresh token으로 동시에 들어오면, 먼저 처리된 요청이 토큰을 `USED`로 바꾼다. 이후 요청이 `USED` 토큰을 제시하거나 `USED` 처리 경합에서 지면(`changes = 0`, 이때는 상태를 다시 읽는다), **그 토큰 자신의 `used_at`**이 30초 이내인지 본다.
 
-- 있으면 정상 동시 요청으로 보고 사용자 정보만 돌려준다. 미들웨어는 새 access token만 설정하고 refresh 쿠키는 바꾸지 않는다(`newRawToken: null`)
-- 없으면 재사용(탈취)으로 보고 family 전체를 `REVOKED` 처리한다
+- 30초 이내면 정상 동시 요청으로 보고 사용자 정보만 돌려준다. 미들웨어는 새 access token만 설정하고 refresh 쿠키는 바꾸지 않는다(`newRawToken: null`)
+- 아니면(또는 다시 읽은 상태가 `REVOKED`면) 재사용(탈취)으로 보고 family 전체를 `REVOKED` 처리한다
+- family 전체에 최근 `ACTIVE` 토큰이 있는지로 판정하지 않는다. 그렇게 하면 탈취자가 30초마다 rotation하는 동안 피해자의 오래된 `USED` 토큰이 계속 grace로 통과해 탐지가 일어나지 않는다
 
 #### Reuse Detection
 
@@ -167,7 +170,7 @@ access token이 만료된 상태에서 여러 요청이 같은 refresh token으�
 - 감지 즉시 해당 family의 `ACTIVE`/`USED` 토큰을 모두 `REVOKED` 처리 (`revokeRefreshTokenFamily`)
 - 공격자와 정상 사용자 모두 재로그인 필요
 
-#### DB 스키마 (`refresh_tokens`, `migrations/0007_refresh_tokens.sql`)
+#### DB 스키마 (`refresh_tokens`, `migrations/0007_refresh_tokens.sql` + `0009`)
 
 ```sql
 CREATE TABLE refresh_tokens (
@@ -178,7 +181,8 @@ CREATE TABLE refresh_tokens (
   status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'USED', 'REVOKED')),
   expires_at TEXT NOT NULL,
   created_at TEXT NOT NULL,
-  used_at TEXT
+  used_at TEXT,
+  family_expires_at TEXT  -- 0009
 );
 
 CREATE INDEX idx_refresh_tokens_token_hash ON refresh_tokens(token_hash);

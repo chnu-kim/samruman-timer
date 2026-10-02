@@ -189,18 +189,29 @@ export const POST = withErrorHandler(async (
 
   const timerStatus = scheduledStartAt ? "SCHEDULED" : "RUNNING";
 
-  await db.batch([
-    db
-      .prepare(
-        "INSERT INTO timers (id, project_id, title, description, base_remaining_seconds, last_calculated_at, status, scheduled_start_at, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-      )
-      .bind(timerId, projectId, body.title, body.description ?? null, body.initialSeconds, now, timerStatus, scheduledStartAt, userId, now, now),
-    db
-      .prepare(
-        "INSERT INTO timer_logs (id, timer_id, action_type, actor_name, actor_user_id, delta_seconds, before_seconds, after_seconds, created_at) VALUES (?, ?, 'CREATE', ?, ?, ?, 0, ?, ?)"
-      )
-      .bind(logId, timerId, nickname, userId, body.initialSeconds, body.initialSeconds, now),
-  ]);
+  try {
+    await db.batch([
+      db
+        .prepare(
+          "INSERT INTO timers (id, project_id, title, description, base_remaining_seconds, last_calculated_at, status, scheduled_start_at, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(timerId, projectId, body.title, body.description ?? null, body.initialSeconds, now, timerStatus, scheduledStartAt, userId, now, now),
+      db
+        .prepare(
+          "INSERT INTO timer_logs (id, timer_id, action_type, actor_name, actor_user_id, delta_seconds, before_seconds, after_seconds, created_at) VALUES (?, ?, 'CREATE', ?, ?, ?, 0, ?, ?)"
+        )
+        .bind(logId, timerId, nickname, userId, body.initialSeconds, body.initialSeconds, now),
+    ]);
+  } catch (err) {
+    // 위 COUNT 검사와 INSERT 사이에 다른 요청이 먼저 만든 경우. DB의 부분 UNIQUE 인덱스(0009)가 막는다
+    if (err instanceof Error && err.message.includes("UNIQUE constraint failed")) {
+      return NextResponse.json(
+        { error: { code: "BAD_REQUEST", message: "프로젝트당 하나의 타이머만 생성할 수 있습니다" } },
+        { status: 400 }
+      );
+    }
+    throw err;
+  }
 
   return NextResponse.json(
     {

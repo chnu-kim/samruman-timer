@@ -12,7 +12,8 @@ export function createMockDB() {
   };
   const db = {
     prepare: vi.fn().mockReturnValue(stmt),
-    batch: vi.fn().mockResolvedValue([]),
+    // 첫 문장(타이머 상태 UPDATE)이 한 행을 바꾼 것으로 본다. CAS 실패는 테스트에서 따로 흉내 낸다
+    batch: vi.fn().mockResolvedValue([{ meta: { changes: 1 } }]),
     _stmt: stmt,
   };
   return db as unknown as D1Database & {

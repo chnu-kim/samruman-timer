@@ -5,6 +5,8 @@ import type { JwtPayload, RefreshTokenRow } from "@/types";
 const COOKIE_NAME = "session";
 export const ACCESS_TOKEN_MAX_AGE = 15 * 60; // 15 minutes
 export const REFRESH_TOKEN_MAX_AGE = 30 * 24 * 60 * 60; // 30 days
+// 로그인 1회로 이어지는 세션(refresh family)의 최대 수명. rotation해도 이 기간을 넘겨 연장되지 않는다
+export const SESSION_ABSOLUTE_MAX_AGE = 90 * 24 * 60 * 60; // 90 days
 export const REFRESH_COOKIE_NAME = "refresh";
 
 /**
@@ -94,23 +96,38 @@ function nowISO(): string {
   return new Date().toISOString();
 }
 
+/** 새 로그인으로 시작하는 family의 절대 만료 시각 */
+export function newFamilyExpiresAt(): string {
+  return new Date(Date.now() + SESSION_ABSOLUTE_MAX_AGE * 1000).toISOString();
+}
+
 export async function createRefreshTokenInDB(
   db: D1Database,
   userId: string,
   tokenHash: string,
-  familyId: string
+  familyId: string,
+  familyExpiresAt: string
 ): Promise<void> {
   const id = generateId();
   const now = nowISO();
+  const slidingExpiresAt = Date.now() + REFRESH_TOKEN_MAX_AGE * 1000;
   const expiresAt = new Date(
-    Date.now() + REFRESH_TOKEN_MAX_AGE * 1000
+    Math.min(slidingExpiresAt, new Date(familyExpiresAt).getTime())
   ).toISOString();
 
   await db
     .prepare(
-      "INSERT INTO refresh_tokens (id, user_id, token_hash, family_id, status, expires_at, created_at) VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?)"
+      "INSERT INTO refresh_tokens (id, user_id, token_hash, family_id, status, expires_at, created_at, family_expires_at) VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?, ?)"
     )
-    .bind(id, userId, tokenHash, familyId, expiresAt, now)
+    .bind(id, userId, tokenHash, familyId, expiresAt, now, familyExpiresAt)
+    .run();
+}
+
+/** 만료된 refresh token 행을 지운다. 만료 토큰은 어떤 판정에도 쓰이지 않는다 */
+export async function deleteExpiredRefreshTokens(db: D1Database, userId: string): Promise<void> {
+  await db
+    .prepare("DELETE FROM refresh_tokens WHERE user_id = ? AND expires_at <= ?")
+    .bind(userId, nowISO())
     .run();
 }
 
@@ -126,8 +143,29 @@ export async function revokeRefreshTokenFamily(
     .run();
 }
 
-// 동시 요청 grace period: 30초 이내에 같은 family의 ACTIVE 토큰이 있으면 race condition으로 판단
+// 동시 요청 grace period: 토큰이 rotation된 지 30초 이내에 다시 쓰이면 race condition으로 판단
 const RACE_GRACE_MS = 30_000;
+
+function isWithinRaceGrace(usedAt: string | null): boolean {
+  return usedAt !== null && Date.now() - new Date(usedAt).getTime() < RACE_GRACE_MS;
+}
+
+/** Grace: 새 토큰 발급 없이 사용자 정보만 반환한다 */
+async function graceResult(db: D1Database, row: RefreshTokenRow): Promise<RotateResult | null> {
+  const user = await db
+    .prepare("SELECT id, chzzk_user_id, nickname FROM users WHERE id = ?")
+    .bind(row.user_id)
+    .first<{ id: string; chzzk_user_id: string; nickname: string }>();
+  if (!user) return null;
+  return {
+    userId: user.id,
+    chzzkUserId: user.chzzk_user_id,
+    nickname: user.nickname,
+    newRawToken: null,
+    newTokenHash: null,
+    familyId: row.family_id,
+  };
+}
 
 export interface RotateResult {
   userId: string;
@@ -155,39 +193,22 @@ export async function rotateRefreshToken(
 
   // 2. USED/REVOKED면 → grace period 확인 후 reuse detection
   if (row.status === "USED" || row.status === "REVOKED") {
-    // 동시 요청 grace: 같은 family에 최근 발급된 ACTIVE 토큰이 있으면
-    // 정상적인 동시 요청으로 판단하고 사용자 정보만 반환
-    if (row.status === "USED") {
-      const recentActive = await db
-        .prepare(
-          "SELECT id FROM refresh_tokens WHERE family_id = ? AND status = 'ACTIVE' AND created_at > ? LIMIT 1"
-        )
-        .bind(row.family_id, new Date(Date.now() - RACE_GRACE_MS).toISOString())
-        .first<{ id: string }>();
-
-      if (recentActive) {
-        const user = await db
-          .prepare("SELECT id, chzzk_user_id, nickname FROM users WHERE id = ?")
-          .bind(row.user_id)
-          .first<{ id: string; chzzk_user_id: string; nickname: string }>();
-        if (!user) return null;
-        return {
-          userId: user.id,
-          chzzkUserId: user.chzzk_user_id,
-          nickname: user.nickname,
-          newRawToken: null,
-          newTokenHash: null,
-          familyId: row.family_id,
-        };
-      }
+    // 동시 요청 grace: 이 토큰 자신이 방금 rotation됐을 때만 정상적인 동시 요청으로 본다.
+    // family에 최근 ACTIVE 토큰이 있는지로 판단하면, 탈취자가 주기적으로 rotation하는 동안
+    // 피해자의 재사용이 계속 grace로 통과해 탐지가 일어나지 않는다.
+    if (row.status === "USED" && isWithinRaceGrace(row.used_at)) {
+      return graceResult(db, row);
     }
 
     await revokeRefreshTokenFamily(db, row.family_id);
     return null;
   }
 
-  // 3. 만료 확인
+  // 3. 만료 확인. family 절대 만료가 지났으면 토큰 자체 만료가 남아 있어도 거부한다
   if (new Date(row.expires_at) <= new Date()) {
+    return null;
+  }
+  if (row.family_expires_at && new Date(row.family_expires_at) <= new Date()) {
     return null;
   }
 
@@ -200,34 +221,17 @@ export async function rotateRefreshToken(
     .run();
 
   if (!updateResult.meta.changes || updateResult.meta.changes === 0) {
-    // Race condition: 다른 요청이 이미 이 토큰을 사용함.
-    // 같은 family에 최근(30초 이내) 발급된 ACTIVE 토큰이 있으면
-    // 정상적인 동시 요청으로 판단하고 사용자 정보만 반환한다.
-    const recentActive = await db
-      .prepare(
-        "SELECT id FROM refresh_tokens WHERE family_id = ? AND status = 'ACTIVE' AND created_at > ? LIMIT 1"
-      )
-      .bind(row.family_id, new Date(Date.now() - RACE_GRACE_MS).toISOString())
-      .first<{ id: string }>();
+    // Race condition: 조회와 UPDATE 사이에 다른 요청이 이 토큰을 사용했다.
+    // 그 사이 family가 폐기됐을 수 있으므로 현재 상태를 다시 읽는다.
+    const current = await db
+      .prepare("SELECT status, used_at FROM refresh_tokens WHERE id = ?")
+      .bind(row.id)
+      .first<Pick<RefreshTokenRow, "status" | "used_at">>();
 
-    if (recentActive) {
-      // Grace: 새 토큰 발급 없이 사용자 정보만 반환
-      const user = await db
-        .prepare("SELECT id, chzzk_user_id, nickname FROM users WHERE id = ?")
-        .bind(row.user_id)
-        .first<{ id: string; chzzk_user_id: string; nickname: string }>();
-      if (!user) return null;
-      return {
-        userId: user.id,
-        chzzkUserId: user.chzzk_user_id,
-        nickname: user.nickname,
-        newRawToken: null,
-        newTokenHash: null,
-        familyId: row.family_id,
-      };
+    if (current?.status === "USED" && isWithinRaceGrace(current.used_at)) {
+      return graceResult(db, row);
     }
 
-    // 최근 ACTIVE 토큰 없음 → 진짜 토큰 재사용(탈취) → family 폐기
     await revokeRefreshTokenFamily(db, row.family_id);
     return null;
   }
@@ -235,7 +239,11 @@ export async function rotateRefreshToken(
   // 5. 새 토큰 생성, 같은 family_id
   const newRawToken = generateRefreshToken();
   const newTokenHash = await hashToken(newRawToken);
-  await createRefreshTokenInDB(db, row.user_id, newTokenHash, row.family_id);
+  // 절대 만료는 family를 따라간다. 0009 이전 행처럼 비어 있으면 이 토큰 생성 시각 기준으로 정한다
+  const familyExpiresAt =
+    row.family_expires_at ??
+    new Date(new Date(row.created_at).getTime() + SESSION_ABSOLUTE_MAX_AGE * 1000).toISOString();
+  await createRefreshTokenInDB(db, row.user_id, newTokenHash, row.family_id, familyExpiresAt);
 
   // 6. user 정보 조회
   const user = await db

@@ -40,7 +40,7 @@ describe("detectScheduledActivation", () => {
     };
     return {
       prepare: vi.fn().mockReturnValue(preparedStatement),
-      batch: vi.fn().mockResolvedValue([]),
+      batch: vi.fn().mockResolvedValue([{ meta: { changes: 1 } }]),
       _stmt: preparedStatement,
     } as unknown as D1Database & { _stmt: typeof preparedStatement };
   }
@@ -120,7 +120,7 @@ describe("detectExpiry", () => {
     };
     return {
       prepare: vi.fn().mockReturnValue(preparedStatement),
-      batch: vi.fn().mockResolvedValue([]),
+      batch: vi.fn().mockResolvedValue([{ meta: { changes: 1 } }]),
       _stmt: preparedStatement,
     } as unknown as D1Database & { _stmt: typeof preparedStatement };
   }
@@ -180,7 +180,7 @@ describe("modifyTimer", () => {
     };
     return {
       prepare: vi.fn().mockReturnValue(preparedStatement),
-      batch: vi.fn().mockResolvedValue([]),
+      batch: vi.fn().mockResolvedValue([{ meta: { changes: 1 } }]),
     } as unknown as D1Database;
   }
 
@@ -290,5 +290,102 @@ describe("modifyTimer", () => {
 
     const addLog = result.logs.find((l) => l.actionType === "ADD")!;
     expect(addLog.afterSeconds).toBe(addLog.beforeSeconds + 200);
+  });
+});
+
+// ─── 동시 쓰기(CAS) ───
+
+describe("타이머 상태 쓰기 CAS (보안 감사 F02)", () => {
+  function createCasDB(batchResults: number[], reloadRows: object[] = []) {
+    const stmt = {
+      bind: vi.fn().mockReturnThis(),
+      run: vi.fn().mockResolvedValue({}),
+      first: vi.fn(),
+    };
+    for (const row of reloadRows) stmt.first.mockResolvedValueOnce(row);
+    const batch = vi.fn();
+    for (const changes of batchResults) batch.mockResolvedValueOnce([{ meta: { changes } }]);
+    return {
+      db: { prepare: vi.fn().mockReturnValue(stmt), batch } as unknown as D1Database & {
+        prepare: ReturnType<typeof vi.fn>;
+      },
+      stmt,
+      batch,
+    };
+  }
+
+  function makeTimer(overrides: Partial<Timer> = {}): Timer {
+    return {
+      id: "timer-1",
+      projectId: "proj-1",
+      title: "Test Timer",
+      description: null,
+      baseRemainingSeconds: 1000,
+      lastCalculatedAt: new Date().toISOString(),
+      status: "RUNNING",
+      scheduledStartAt: null,
+      createdBy: "user-1",
+      createdAt: "2025-01-01T00:00:00Z",
+      updatedAt: "2025-01-01T00:00:00Z",
+      ...overrides,
+    };
+  }
+
+  it("상태 UPDATE는 읽은 status·잔여·기준 시각이 그대로일 때만 적용하고, 로그는 UPDATE가 적용됐을 때만 넣는다", async () => {
+    const { db, stmt } = createCasDB([1]);
+    const timer = makeTimer();
+    await modifyTimer(db, timer, "ADD", 60, "tester", "user-1");
+
+    const sqls = db.prepare.mock.calls.map((c) => String(c[0]));
+    expect(sqls[0]).toContain("WHERE id = ? AND status = ? AND base_remaining_seconds = ? AND last_calculated_at = ?");
+    expect(sqls.slice(1).every((q) => q.includes("WHERE changes() = 1"))).toBe(true);
+    expect(stmt.bind.mock.calls[0].slice(-4)).toEqual(["timer-1", "RUNNING", 1000, timer.lastCalculatedAt]);
+  });
+
+  it("다른 요청이 먼저 시간을 바꿨으면 다시 읽은 상태에 더해 변경을 잃지 않는다", async () => {
+    const now = new Date().toISOString();
+    const { db, batch } = createCasDB([0, 1], [
+      { status: "RUNNING", base_remaining_seconds: 1600, last_calculated_at: now, updated_at: now },
+    ]);
+    const result = await modifyTimer(db, makeTimer(), "ADD", 300, "tester", "user-1");
+
+    expect(batch).toHaveBeenCalledTimes(2);
+    expect(result.timer.baseRemainingSeconds).toBeGreaterThanOrEqual(1899);
+    expect(result.logs.find((l) => l.actionType === "ADD")?.beforeSeconds).toBeGreaterThanOrEqual(1599);
+  });
+
+  it("재시도가 모두 겹치면 409 TimerStateError", async () => {
+    const now = new Date().toISOString();
+    const row = { status: "RUNNING", base_remaining_seconds: 1000, last_calculated_at: now, updated_at: now };
+    const { db } = createCasDB([0, 0, 0, 0, 0], [row, row, row, row, row]);
+
+    await expect(modifyTimer(db, makeTimer(), "ADD", 60, "tester", "user-1")).rejects.toMatchObject({
+      status: 409,
+      code: "CONFLICT",
+    });
+  });
+
+  it("그 사이 타이머가 삭제됐으면 404 TimerStateError (삭제된 타이머를 되살리지 않는다)", async () => {
+    const now = new Date().toISOString();
+    const { db, batch } = createCasDB([0], [
+      { status: "DELETED", base_remaining_seconds: 1000, last_calculated_at: now, updated_at: now },
+    ]);
+
+    await expect(modifyTimer(db, makeTimer(), "ADD", 60, "tester", "user-1")).rejects.toMatchObject({
+      status: 404,
+    });
+    expect(batch).toHaveBeenCalledTimes(1);
+  });
+
+  it("만료 감지가 겹치면 덮어쓰지 않고 다른 요청이 남긴 상태를 돌려준다", async () => {
+    const past = new Date(Date.now() - 10_000).toISOString();
+    const now = new Date().toISOString();
+    const { db } = createCasDB([0], [
+      { status: "RUNNING", base_remaining_seconds: 600, last_calculated_at: now, updated_at: now },
+    ]);
+    const result = await detectExpiry(db, makeTimer({ baseRemainingSeconds: 5, lastCalculatedAt: past }));
+
+    expect(result.status).toBe("RUNNING");
+    expect(result.baseRemainingSeconds).toBe(600);
   });
 });

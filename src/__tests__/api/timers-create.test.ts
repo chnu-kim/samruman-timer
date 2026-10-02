@@ -96,6 +96,14 @@ describe("POST /api/projects/[id]/timers", () => {
     expect(body.error.message).toContain("미래");
   });
 
+  it("동시 생성으로 DB 유일 제약에 걸리면 400 (500이 아님)", async () => {
+    db.batch.mockRejectedValueOnce(new Error("D1_ERROR: UNIQUE constraint failed: timers.project_id: SQLITE_CONSTRAINT"));
+    const res = await callPost({ title: "타이머", initialSeconds: 3600 });
+    expect(res.status).toBe(400);
+    const body = await parseJson(res);
+    expect(body.error.message).toContain("하나의 타이머");
+  });
+
   it("성공 201 + CREATE 로그 (RUNNING)", async () => {
     const res = await callPost({ title: "새타이머", initialSeconds: 7200 });
     expect(res.status).toBe(201);

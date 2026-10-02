@@ -358,6 +358,8 @@ export interface RefreshTokenRow {
   expires_at: string;
   created_at: string;
   used_at: string | null;
+  /** family 절대 만료(0009). 이전 행은 마이그레이션이 채운다 */
+  family_expires_at: string | null;
 }
 
 // ─── Auth 타입 ───

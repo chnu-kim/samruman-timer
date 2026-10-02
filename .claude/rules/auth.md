@@ -16,8 +16,8 @@ paths:
 
 - CHZZK OAuth Authorization Code Flow. `state`를 state 쿠키(10분, 이름은 `oauthStateCookieName()`: development 외에는 `__Host-oauth_state`)에 저장했다가 콜백에서 대조해 CSRF를 막는다. 토큰 교환·사용자 조회는 `openapi.chzzk.naver.com`(`src/lib/chzzk.ts`).
 - Access token: HS256 JWT, `session` 쿠키, 15분 (`ACCESS_TOKEN_MAX_AGE`). 페이로드 `{ userId, chzzkUserId, nickname }`.
-- Refresh token: 랜덤 토큰을 해시해 `refresh_tokens` 테이블에 저장, `refresh` 쿠키, 30일. 사용 시 rotation(`ACTIVE` → `USED`, 새 토큰 발급), 같은 `family_id`로 묶인다.
-- 동시 요청 race 대응: `USED` 토큰이라도 같은 family에 30초(`RACE_GRACE_MS`) 안에 생성된 `ACTIVE` 토큰이 있으면 허용하고, 새 refresh 없이 access token만 다시 발급한다. 그 밖의 `USED`/`REVOKED` 재사용은 탈취로 보고 family 전체를 `REVOKED` 처리한다.
+- Refresh token: 랜덤 토큰을 해시해 `refresh_tokens` 테이블에 저장, `refresh` 쿠키, 30일. 사용 시 rotation(`ACTIVE` → `USED`, 새 토큰 발급), 같은 `family_id`로 묶인다. 새 토큰 만료는 `min(30일, family_expires_at)`이라 로그인 후 90일을 넘기지 않는다.
+- 동시 요청 race 대응: `USED` 토큰이라도 그 토큰 자신의 `used_at`이 30초(`RACE_GRACE_MS`) 이내면 허용하고, 새 refresh 없이 access token만 다시 발급한다. 그 밖의 `USED`/`REVOKED` 재사용은 탈취로 보고 family 전체를 `REVOKED` 처리한다.
 - 미들웨어(`matcher: /api/:path*`)는 모든 요청에서 `x-user-*` 헤더를 지우고 `x-request-id`를 넣는다. `PROTECTED_ROUTES`(메서드+경로)에 해당하면 JWT를 검증해 `x-user-id`, `x-user-chzzk-id`, `x-user-nickname`(URI 인코딩)을 주입하고, access 만료 시 refresh로 자동 갱신해 새 쿠키를 응답에 싣는다. 갱신 실패는 401이며 쿠키는 지우지 않는다. 라우트가 `x-user-id`를 읽는다면 그 메서드·경로가 `PROTECTED_ROUTES`에 있어야 한다. 예외로 `POST /api/auth/logout`은 넣지 않는다. 넣으면 만료 상태의 로그아웃에서 미들웨어가 rotation한 새 `session` 쿠키가 삭제 쿠키를 덮어써 로그인이 유지된다.
 - 클라이언트는 `authFetch()`로 호출하고, 401이면 세션 만료 UX(로그인 리다이렉트)로 넘어간다. 이때 현재 경로를 `/login?next=`로 실어 보내고, `next`는 `oauth_next` 쿠키로 OAuth 왕복을 거쳐 콜백에서 리다이렉트 대상이 된다.
 

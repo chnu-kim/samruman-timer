@@ -4,7 +4,7 @@
 
 Cloudflare D1 (SQLite 호환)을 사용한다. 스키마는 `migrations/` 디렉토리에서 마이그레이션 파일로 관리한다.
 
-아래 스키마는 `migrations/0001`~`0008`을 순서대로 적용한 최종 형태다. 일부 테이블은 마이그레이션 중 재생성되어 최초 정의와 다르다(예: `timers`, `timer_logs`의 `id`는 `DEFAULT`가 없다). ID와 날짜는 앱 코드에서 `generateId()`·`nowISO()`로 채운다.
+아래 스키마는 `migrations/0001`~`0009`를 순서대로 적용한 최종 형태다. 일부 테이블은 마이그레이션 중 재생성되어 최초 정의와 다르다(예: `timers`, `timer_logs`의 `id`는 `DEFAULT`가 없다). ID와 날짜는 앱 코드에서 `generateId()`·`nowISO()`로 채운다.
 
 ## 테이블 스키마
 
@@ -133,9 +133,12 @@ CREATE TABLE refresh_tokens (
   status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'USED', 'REVOKED')),
   expires_at TEXT NOT NULL,
   created_at TEXT NOT NULL,
-  used_at TEXT
+  used_at TEXT,
+  family_expires_at TEXT  -- 0009: family 절대 만료(로그인 후 90일)
 );
 ```
+
+`expires_at`은 발급 시각 + 30일과 `family_expires_at` 중 이른 쪽이다. rotation해도 family 절대 만료를 넘겨 연장되지 않는다. 로그인할 때 그 사용자의 만료된 행을 지운다(`deleteExpiredRefreshTokens`).
 
 ## 인덱스
 
@@ -144,6 +147,8 @@ CREATE TABLE refresh_tokens (
 ```sql
 CREATE INDEX idx_timer_logs_timer_created ON timer_logs(timer_id, created_at);
 CREATE INDEX idx_timers_project ON timers(project_id);
+-- 0009: 프로젝트당 비삭제 타이머 1개를 DB에서 보장 (앱의 COUNT 검사 경합 보완)
+CREATE UNIQUE INDEX idx_timers_one_per_project ON timers(project_id) WHERE status != 'DELETED';
 CREATE INDEX idx_timers_scheduled ON timers(status, scheduled_start_at);
 CREATE INDEX idx_projects_owner ON projects(owner_user_id);
 CREATE INDEX idx_goals_project ON goals(project_id);
@@ -166,6 +171,7 @@ migrations/
   0006_goals.sql            — 목표 테이블 (goals + 인덱스 2개)
   0007_refresh_tokens.sql   — refresh token 테이블 (refresh_tokens + 인덱스 3개)
   0008_overlay_animation.sql — overlay_settings.animation 컬럼 추가
+  0009_timer_unique_and_session_lifetime.sql — 프로젝트당 비삭제 타이머 UNIQUE 부분 인덱스(먼저 기존 중복은 가장 먼저 만든 1개만 남기고 DELETED + DELETE 로그), refresh_tokens.family_expires_at(기존 행은 family 최초 발급 + 90일, expires_at도 그 안으로 줄임)
 ```
 
 ### 규칙
@@ -192,6 +198,6 @@ migrations/
 ## D1 특이사항
 
 - D1은 `PRAGMA foreign_keys = OFF`를 유지하지 않는다(`0003` 주석). 그래서 테이블 재생성은 FK 의존성 순서로 한다
-- 단일 writer: 동시 쓰기는 D1이 직렬화
+- 단일 writer: 문장 단위로는 직렬화되지만 읽기-수정-쓰기 사이의 경합은 막지 못한다. 타이머 상태 쓰기는 CAS 조건을 건다(`docs/TIMER-LOGIC.md` 동시 수정)
 - 트랜잭션: `db.batch()` 로 여러 쿼리를 하나의 트랜잭션으로 실행
 - datetime 함수: 컬럼 `DEFAULT`의 `datetime('now')`는 UTC다. 앱 쿼리는 이를 쓰지 않고 `nowISO()` 값을 바인딩한다

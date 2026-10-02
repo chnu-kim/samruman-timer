@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDB, withErrorHandler } from "@/lib/db";
-import { calculateRemaining, modifyTimer, detectScheduledActivation, EXPIRED_SUBTRACT_MESSAGE } from "@/lib/timer";
+import { calculateRemaining, modifyTimer, detectScheduledActivation, EXPIRED_SUBTRACT_MESSAGE, TimerStateError } from "@/lib/timer";
 import type { Timer, ModifyTimerRequest } from "@/types";
 
 export const POST = withErrorHandler(async (
@@ -126,14 +126,26 @@ export const POST = withErrorHandler(async (
     );
   }
 
-  const result = await modifyTimer(
-    db,
-    activated,
-    body.action,
-    body.deltaSeconds,
-    body.actorName,
-    userId
-  );
+  let result: Awaited<ReturnType<typeof modifyTimer>>;
+  try {
+    result = await modifyTimer(
+      db,
+      activated,
+      body.action,
+      body.deltaSeconds,
+      body.actorName,
+      userId
+    );
+  } catch (err) {
+    // 동시 변경으로 다시 읽은 상태가 삭제·만료됐거나 재시도가 모두 겹친 경우
+    if (err instanceof TimerStateError) {
+      return NextResponse.json(
+        { error: { code: err.code, message: err.message } },
+        { status: err.status }
+      );
+    }
+    throw err;
+  }
 
   const remainingSeconds =
     result.timer.status === "RUNNING"
