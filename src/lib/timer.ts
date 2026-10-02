@@ -88,6 +88,8 @@ export async function detectExpiry(
   };
 }
 
+export const EXPIRED_SUBTRACT_MESSAGE = "만료된 타이머는 차감할 수 없습니다";
+
 export async function modifyTimer(
   db: D1Database,
   timer: Timer,
@@ -105,6 +107,11 @@ export async function modifyTimer(
     timer.baseRemainingSeconds,
     timer.lastCalculatedAt
   );
+
+  // 만료 상태(또는 아직 EXPIRED로 기록되지 않았지만 0초가 된 타이머)에서는 차감이 아무것도 바꾸지 않으므로 0→0 로그를 남기지 않는다
+  if (action === "SUBTRACT" && (timer.status === "EXPIRED" || currentRemaining <= 0)) {
+    throw new Error(EXPIRED_SUBTRACT_MESSAGE);
+  }
 
   let newRemaining: number;
   let newStatus = timer.status;

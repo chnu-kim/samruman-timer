@@ -157,6 +157,7 @@
 - **근거**: [16-timer-expired--d-light.png](ux-review/16-timer-expired--d-light.png), [16-timer-expired--m-light.png](ux-review/16-timer-expired--m-light.png) · `src/components/timer/TimerControls.tsx:196-206`, `src/lib/timer.ts:116-121`
 
 #### UX-14. 만료 타이머에서 '차감'이 아무 효과 없이 '차감 완료'와 0→0 로그를 남긴다
+- **상태**: 해결 — modify 라우트가 EXPIRED(또는 DB는 RUNNING이지만 잔여 0초) 상태의 SUBTRACT를 400 '만료된 타이머는 차감할 수 없습니다'로 거절하고 로그를 남기지 않는다. `modifyTimer`도 같은 조건에서 예외를 던진다. 클라이언트는 기존 롤백과 오류 토스트로 처리되고 '차감 완료' 토스트는 UX-10으로 응답 뒤로 옮겼다. 차감 세그먼트 비활성화(선택 사항)는 하지 않았다. `docs/API.md`, `docs/TIMER-LOGIC.md` 갱신.
 - **심각도**: minor · **영역**: 타이머 상태
 - **관찰**: EXPIRED 상태에서 SUBTRACT 요청을 보내면 상태 변화 없이 `before=0, after=0`인 SUBTRACT 로그가 INSERT된다. 클라이언트는 응답 전에 성공 토스트를 띄운다.
 - **이유**: 공개 변경 기록에 실제로는 아무것도 바꾸지 않은 '-1시간' 항목이 시청자 닉네임과 함께 남는다.

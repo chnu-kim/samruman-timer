@@ -204,6 +204,36 @@ describe("타이머 전체 생명주기", () => {
     expect(body.data.remainingSeconds).toBe(0);
   });
 
+  it("7-1. 만료 상태에서 SUBTRACT → 400, 로그 없음 (UX-14)", async () => {
+    db._stmt.first.mockResolvedValue({
+      id: "timer-1",
+      project_id: "proj-1",
+      title: "테스트",
+      description: null,
+      base_remaining_seconds: 0,
+      last_calculated_at: new Date().toISOString(),
+      status: "EXPIRED",
+      scheduled_start_at: null,
+      created_by: "user-1",
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+      owner_user_id: "user-1",
+    });
+    db.batch.mockClear();
+
+    const req = createPostRequest("/api/timers/timer-1/modify", {
+      action: "SUBTRACT",
+      deltaSeconds: 3600,
+      actorName: "시청자",
+    }, AUTH_HEADERS);
+    const res = await modifyTimer(req as never, { params: Promise.resolve({ id: "timer-1" }) } as never);
+    const body = await parseJson(res);
+
+    expect(res.status).toBe(400);
+    expect(body.error.code).toBe("BAD_REQUEST");
+    expect(db.batch).not.toHaveBeenCalled();
+  });
+
   it("8. ADD로 재오픈 → RUNNING + REOPEN + ADD 로그", async () => {
     db._stmt.first.mockResolvedValue({
       id: "timer-1",
