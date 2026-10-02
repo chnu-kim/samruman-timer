@@ -555,7 +555,7 @@ export default function TimerDetailPage() {
                       <td className="py-2.5 pr-4">{log.actorName}</td>
                       <td className="py-2.5 pr-4 text-right font-mono text-xs">
                         {log.deltaSeconds > 0 ? (
-                          <span className={log.actionType === "ADD" ? "text-green-600 dark:text-green-400" : log.actionType === "SUBTRACT" ? "text-red-600 dark:text-red-400" : ""}>
+                          <span className={log.actionType === "ADD" ? "text-green-700 dark:text-green-400" : log.actionType === "SUBTRACT" ? "text-red-600 dark:text-red-400" : ""}>
                             {log.actionType === "ADD" ? "+" : log.actionType === "SUBTRACT" ? "-" : ""}
                             {formatSeconds(log.deltaSeconds)}
                           </span>
@@ -599,7 +599,7 @@ export default function TimerDetailPage() {
                     {log.deltaSeconds > 0 ? (
                       <span className={cn(
                         "font-mono text-xs font-medium",
-                        log.actionType === "ADD" ? "text-green-600 dark:text-green-400" : log.actionType === "SUBTRACT" ? "text-red-600 dark:text-red-400" : "",
+                        log.actionType === "ADD" ? "text-green-700 dark:text-green-400" : log.actionType === "SUBTRACT" ? "text-red-600 dark:text-red-400" : "",
                       )}>
                         {log.actionType === "ADD" ? "+" : log.actionType === "SUBTRACT" ? "-" : ""}
                         {formatSeconds(log.deltaSeconds)}

@@ -43,7 +43,7 @@ export function DonorRankingTable({ donors, className }: DonorRankingTableProps)
                   )}
                 </td>
                 <td className="py-2.5 pr-4 font-medium">{donor.actorName}</td>
-                <td className="py-2.5 pr-4 text-right font-mono text-xs text-green-600 dark:text-green-400">
+                <td className="py-2.5 pr-4 text-right font-mono text-xs text-green-700 dark:text-green-400">
                   +{formatDuration(donor.totalSeconds)}
                 </td>
                 <td className="py-2.5 text-right text-muted-foreground">
@@ -71,7 +71,7 @@ export function DonorRankingTable({ donors, className }: DonorRankingTableProps)
               </div>
               <span className="text-xs text-muted-foreground">{donor.eventCount}회</span>
             </div>
-            <p className="font-mono text-sm text-green-600 dark:text-green-400">
+            <p className="font-mono text-sm text-green-700 dark:text-green-400">
               +{formatDuration(donor.totalSeconds)}
             </p>
           </div>

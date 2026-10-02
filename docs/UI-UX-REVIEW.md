@@ -119,6 +119,7 @@
 - **근거**: [17-timer-nonowner-urgent--d-light.png](ux-review/17-timer-nonowner-urgent--d-light.png), [17-timer-nonowner-urgent--m-light.png](ux-review/17-timer-nonowner-urgent--m-light.png) · `src/components/timer/CountdownDisplay.tsx:80-92`, `src/app/globals.css:98-106`
 
 #### UX-09. 라이트 모드 상태·액션 배지와 증감량 텍스트가 AA 4.5:1에 미달한다
+- **상태**: 해결 — `Badge` 라이트 배경을 green-700(4.94:1), red-600(4.76:1), cyan-700(5.28:1), amber-700(5.05:1)으로 올리고, 로그 변경량과 통계 랭킹 시간을 `text-green-700`으로 바꿨다. purple-600(5.53:1), blue-600(5.26:1), gray-500(4.84:1)은 점검 결과 통과라 그대로 두었다.
 - **심각도**: major · **영역**: 접근성 / 일관성
 - **관찰**: 12px 굵은 흰 글씨 배지의 대비가 bg-green-600에서 3.3:1(실행 중, 추가, 진행 중), bg-red-500에서 3.76:1(만료, 차감), cyan-600에서 3.68:1(활성화), amber-500에서 2.15:1(재시작)이다. 로그 '변경량' 열과 통계 랭킹의 `text-green-600`(12~14px)도 흰 배경에서 약 3.3:1이다. 다크 모드는 틴트 배경 패턴이라 모두 통과한다. 만료 화면에서는 큰 숫자가 회색이라, 상태를 텍스트로 알려 주는 요소가 사실상 이 작은 배지 하나다.
 - **이유**: 상태와 증감은 가장 자주 확인하는 정보인데, 가장 작은 글씨에 대비까지 낮다. WCAG 1.4.3(AA) 미달이다.
