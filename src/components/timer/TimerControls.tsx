@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/utils";
@@ -75,6 +75,9 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   const [recentActors, setRecentActors] = useState<string[]>([]);
   const [defaultActor, setDefaultActor] = useState("");
   const [quickMode, setQuickMode] = useState(false);
+  // 실패 시 입력을 되돌릴 때, 요청 중에 새로 입력한 값을 덮어쓰지 않도록 최신 입력을 들고 있는다
+  const inputsRef = useRef({ hours, minutes, seconds });
+  inputsRef.current = { hours, minutes, seconds };
 
   useEffect(() => {
     setRecentActors(getRecentActors());
@@ -108,13 +111,21 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
       log: {} as TimerLogResponse,
     });
 
-    // 입력 즉시 초기화
-    toast(`${action === "ADD" ? "추가" : "차감"} 완료`, "success");
+    // 입력 즉시 초기화 (실패하면 restoreInputs로 되돌린다)
+    const submitted = { hours, minutes, seconds };
     saveRecentActor(actor);
     setRecentActors(getRecentActors());
     setHours(0);
     setMinutes(0);
     setSeconds(0);
+
+    function restoreInputs() {
+      const current = inputsRef.current;
+      if (current.hours !== 0 || current.minutes !== 0 || current.seconds !== 0) return;
+      setHours(submitted.hours);
+      setMinutes(submitted.minutes);
+      setSeconds(submitted.seconds);
+    }
 
     // 백그라운드에서 서버 확정
     try {
@@ -133,6 +144,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
           status: status ?? "RUNNING",
           log: {} as TimerLogResponse,
         });
+        restoreInputs();
         setError(json.error.message);
         toast(json.error.message, "error");
         return;
@@ -140,6 +152,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
 
       const json = (await res.json()) as ApiSuccessResponse<TimerModifyResponse>;
       onModified?.(json.data); // 서버 값으로 확정
+      toast(`${action === "ADD" ? "추가" : "차감"} 완료`, "success");
     } catch {
       // 롤백
       onModified?.({
@@ -148,6 +161,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
         status: status ?? "RUNNING",
         log: {} as TimerLogResponse,
       });
+      restoreInputs();
       setError("시간 변경에 실패했습니다.");
       toast("시간 변경에 실패했습니다.", "error");
     }
@@ -207,6 +221,12 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
 
   return (
     <div className={cn("space-y-5", className)}>
+      {/* 만료 상태에서 추가는 곧 재시작이므로 미리 알린다 */}
+      {status === "EXPIRED" && (
+        <p className="text-sm text-muted-foreground">
+          만료된 타이머입니다. 시간을 추가하면 타이머가 다시 시작됩니다.
+        </p>
+      )}
       {/* 시청자 닉네임 */}
       <div>
         <Input

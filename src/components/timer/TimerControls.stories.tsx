@@ -38,3 +38,7 @@ export const Default: Story = {};
 export const Subtract: Story = {
   args: { selectedAction: "SUBTRACT" },
 };
+
+export const Expired: Story = {
+  args: { status: "EXPIRED", remainingSeconds: 0 },
+};
