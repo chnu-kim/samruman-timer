@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { CountdownDisplay } from "@/components/timer/CountdownDisplay";
@@ -22,6 +22,7 @@ import { FrequencyChart } from "@/components/graph/FrequencyChart";
 import { useKeyboardShortcuts, SHORTCUT_HELP } from "@/hooks/useKeyboardShortcuts";
 import { usePolling } from "@/hooks/usePolling";
 import { authFetch } from "@/lib/auth-fetch";
+import { hasExternalChange, type SyncedTimerSnapshot } from "@/lib/timer-sync";
 import type {
   ApiSuccessResponse,
   ApiErrorResponse,
@@ -101,40 +102,6 @@ export default function TimerDetailPage() {
   const [graphData, setGraphData] = useState<GraphResponse | null>(null);
   const [graphLoading, setGraphLoading] = useState(false);
   const [graphError, setGraphError] = useState(false);
-
-  // 폴링: 서버 동기화
-  const pollInterval = timer?.status === "RUNNING" ? 5000 : 15000;
-
-  const pollTimer = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/timers/${timerId}`);
-      if (!res.ok) return;
-      const json = (await res.json()) as ApiSuccessResponse<TimerDetailResponse>;
-      const serverData = json.data;
-
-      setTimer((prev) => {
-        if (!prev) return prev;
-        if (prev.status !== serverData.status) {
-          return serverData;
-        }
-        if (prev.status === "RUNNING") {
-          const diff = Math.abs(prev.remainingSeconds - serverData.remainingSeconds);
-          if (diff >= 2) {
-            return { ...prev, remainingSeconds: serverData.remainingSeconds };
-          }
-        }
-        return prev;
-      });
-    } catch {
-      // 폴링 실패는 무시
-    }
-  }, [timerId]);
-
-  usePolling({
-    fn: pollTimer,
-    interval: pollInterval,
-    enabled: !loading && !error && !notFound && !!timer,
-  });
 
   // 추가/차감 방향. 세그먼트, 프리셋 라벨, 단축키가 이 상태 하나를 공유한다
   const [selectedAction, setSelectedAction] = useState<ModifyAction>("ADD");
@@ -220,6 +187,57 @@ export default function TimerDetailPage() {
   useEffect(() => {
     fetchGraph(graphMode);
   }, [graphMode, fetchGraph]);
+
+  // 폴링: 서버 동기화
+  const pollInterval = timer?.status === "RUNNING" ? 5000 : 15000;
+
+  // 화면에 마지막으로 반영한 값과 그 시각. 폴링 값이 다른 기기의 변경인지 판단하는 기준이다
+  const syncedRef = useRef<SyncedTimerSnapshot | null>(null);
+  useEffect(() => {
+    syncedRef.current = timer
+      ? { status: timer.status, remainingSeconds: timer.remainingSeconds, syncedAtMs: Date.now() }
+      : null;
+  }, [timer]);
+
+  const pollTimer = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/timers/${timerId}`);
+      if (!res.ok) return;
+      const json = (await res.json()) as ApiSuccessResponse<TimerDetailResponse>;
+      const serverData = json.data;
+      const synced = syncedRef.current;
+      const externalChange = !!synced && hasExternalChange(synced, serverData, Date.now());
+
+      setTimer((prev) => {
+        if (!prev) return prev;
+        if (prev.status !== serverData.status) {
+          return serverData;
+        }
+        if (prev.status === "RUNNING") {
+          const diff = Math.abs(prev.remainingSeconds - serverData.remainingSeconds);
+          if (diff >= 2) {
+            return { ...prev, remainingSeconds: serverData.remainingSeconds };
+          }
+        }
+        return prev;
+      });
+
+      // 상태 전이(만료 등)나 다른 기기의 조작이 있을 때만 기록과 그래프를 다시 불러온다.
+      // 2페이지 이후를 보고 있으면 목록이 밀리지 않게 로그는 건너뛴다
+      if (externalChange) {
+        if (logPage === 1) fetchLogs(1, activeFilters);
+        fetchGraph(graphMode);
+      }
+    } catch {
+      // 폴링 실패는 무시
+    }
+  }, [timerId, logPage, activeFilters, graphMode, fetchLogs, fetchGraph]);
+
+  usePolling({
+    fn: pollTimer,
+    interval: pollInterval,
+    enabled: !loading && !error && !notFound && !!timer,
+  });
 
   function handleModified(data: TimerModifyResponse) {
     setTimer((prev) =>

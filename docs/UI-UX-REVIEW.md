@@ -312,6 +312,7 @@
 - **근거**: [10-project-detail-nonowner--d-light.png](ux-review/10-project-detail-nonowner--d-light.png) · `src/app/projects/[id]/page.tsx:254-259, 431-433`, `src/components/timer/CountdownDisplay.tsx:39-59`
 
 #### UX-35. 타이머 상세의 폴링이 잔여 시간과 상태만 갱신해서, 다른 기기의 변경 기록과 만료 로그가 나타나지 않는다
+- **상태**: 해결 — 폴링 결과가 상태 전이이거나, 마지막 반영 값에서 흐른 시간을 뺀 기대값과 3초 이상 다를 때만(`hasExternalChange`, `src/lib/timer-sync.ts`) 현재 필터 그대로 로그(1페이지를 보고 있을 때만)와 그래프를 다시 불러온다. 폴링 주기(RUNNING 5초, 그 외 15초)와 탭 비활성 시 중단은 그대로다.
 - **심각도**: minor · **영역**: 타이머 상태
 - **관찰**: `pollTimer`는 `setTimer`만 호출한다. 로그와 그래프는 초기 로드, 필터 변경, 이 탭에서 직접 수정했을 때만 다시 불러온다. 휴대폰 하단 바로 추가하면 데스크톱의 카운트다운은 바뀌지만 기록은 그대로다.
 - **이유**: 숫자가 왜 바뀌었는지 화면에서 확인할 수 없다.
