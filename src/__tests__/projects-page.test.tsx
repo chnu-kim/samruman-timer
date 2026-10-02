@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import ProjectsPage from "@/app/projects/page";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
+}));
+
+vi.mock("@/components/ui/Toast", () => ({
+  useToast: () => ({ toast: vi.fn() }),
 }));
 
 function jsonResponse(data: unknown) {
@@ -40,5 +44,68 @@ describe("프로젝트 목록 탭", () => {
     fireEvent.keyDown(others, { key: "ArrowLeft" });
     expect(mine).toHaveAttribute("aria-selected", "true");
     expect(document.activeElement).toBe(mine);
+  });
+});
+
+describe("프로젝트 목록 tabpanel (UX-44)", () => {
+  it("탭의 aria-controls가 실제 tabpanel을 가리킨다", async () => {
+    render(<ProjectsPage />);
+    const mine = await screen.findByRole("tab", { name: /내 프로젝트/ });
+    const panel = screen.getByRole("tabpanel");
+    expect(mine).toHaveAttribute("aria-controls", panel.id);
+    expect(panel).toHaveAttribute("aria-labelledby", mine.id);
+  });
+});
+
+describe("신규 유저의 검색·정렬 (UX-46)", () => {
+  function stubProjects(mineTotal: number, loggedIn = true) {
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/api/auth/me")) {
+        return loggedIn
+          ? jsonResponse({ id: "u1", chzzkUserId: "c1", nickname: "삼루먼", profileImageUrl: null })
+          : new Response(null, { status: 401 });
+      }
+      const total = url.startsWith("/api/projects/mine") ? mineTotal : 0;
+      return jsonResponse({ projects: [], pagination: { page: 1, limit: 12, total, totalPages: 1 } });
+    }) as typeof fetch;
+  }
+
+  it("내 프로젝트가 0개면 검색창과 정렬을 숨긴다", async () => {
+    stubProjects(0);
+    render(<ProjectsPage />);
+    await screen.findByRole("tab", { name: /내 프로젝트 \(0\)/ });
+    await waitFor(() =>
+      expect(screen.queryByRole("textbox", { name: "프로젝트 검색" })).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByRole("combobox", { name: "정렬 기준" })).not.toBeInTheDocument();
+  });
+
+  it("다른 프로젝트 탭에서는 검색창을 보여 준다", async () => {
+    stubProjects(0);
+    render(<ProjectsPage />);
+    fireEvent.click(await screen.findByRole("tab", { name: /다른 프로젝트/ }));
+    expect(screen.getByRole("textbox", { name: "프로젝트 검색" })).toBeInTheDocument();
+  });
+
+  it("내 프로젝트가 있으면 검색창을 보여 준다", async () => {
+    stubProjects(3);
+    render(<ProjectsPage />);
+    await screen.findByRole("tab", { name: /내 프로젝트 \(3\)/ });
+    expect(screen.getByRole("textbox", { name: "프로젝트 검색" })).toBeInTheDocument();
+  });
+
+  it("로그인하지 않았으면 검색창을 보여 준다", async () => {
+    stubProjects(0, false);
+    render(<ProjectsPage />);
+    expect(await screen.findByRole("textbox", { name: "프로젝트 검색" })).toBeInTheDocument();
+  });
+});
+
+describe("새 프로젝트 폼 (UX-47)", () => {
+  it("폼을 열면 이름 입력칸에 포커스가 간다", async () => {
+    render(<ProjectsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /새 프로젝트/ }));
+    expect(screen.getByLabelText("프로젝트 이름")).toHaveFocus();
   });
 });

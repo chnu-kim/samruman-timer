@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatAxisSeconds, formatHoursFromSeconds, formatTimestampShort, formatHourShort } from "@/lib/utils";
+import { formatAxisSeconds, formatHoursFromSeconds, formatTimestampShort, formatHourShort, displayActorName } from "@/lib/utils";
 
 describe("formatHoursFromSeconds", () => {
   it("초를 시간 단위 문자열로 변환한다", () => {
@@ -51,5 +51,22 @@ describe("formatAxisSeconds", () => {
   it("2시간 경계에서 단위를 바꾼다", () => {
     expect(formatAxisSeconds(3600, 7199)).toBe("60m");
     expect(formatAxisSeconds(3600, 7200)).toBe("1h");
+  });
+});
+
+// UX-73: 시스템이 남긴 만료·활성화 로그의 행위자는 '자동'으로 보여 준다
+describe("displayActorName", () => {
+  it("actorUserId가 없는 EXPIRE·ACTIVATE 로그는 '자동'으로 표시한다", () => {
+    expect(displayActorName({ actionType: "EXPIRE", actorName: "system", actorUserId: null })).toBe("자동");
+    expect(displayActorName({ actionType: "ACTIVATE", actorName: "system", actorUserId: null })).toBe("자동");
+  });
+
+  it("시청자 닉네임 로그는 그대로 표시한다", () => {
+    expect(displayActorName({ actionType: "ADD", actorName: "system", actorUserId: null })).toBe("system");
+    expect(displayActorName({ actionType: "ADD", actorName: "치즈냥", actorUserId: "u1" })).toBe("치즈냥");
+  });
+
+  it("사람이 남긴 로그는 행위 종류와 무관하게 이름을 유지한다", () => {
+    expect(displayActorName({ actionType: "EXPIRE", actorName: "스트리머", actorUserId: "u1" })).toBe("스트리머");
   });
 });

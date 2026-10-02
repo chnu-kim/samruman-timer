@@ -77,8 +77,8 @@ App
 ├── ProjectDetailPage
 │   ├── ProjectHeader
 │   ├── CreateTimerForm (모달 또는 인라인)
-│   └── TimerCard[]
-│       ├── CountdownDisplay (소형)
+│   └── 타이머 카드 (타이머 화면 링크, 프로젝트당 1개)
+│       ├── CountdownDisplay (대형)
 │       └── StatusBadge
 │
 ├── TimerDetailPage
@@ -154,7 +154,7 @@ App
 
 | 브레이크포인트 | 레이아웃 |
 |---------------|---------|
-| < 640px (모바일) | 단일 열, 카운트다운 축소, 그래프 가로 스크롤 |
+| < 640px (모바일) | 단일 열, 카운트다운 축소, 그래프는 컨테이너 폭에 맞춰 축소(ResponsiveContainer, 가로 스크롤 없음) |
 | 640-1024px (태블릿) | 2열 그리드, 그래프 전체 폭 |
 | > 1024px (데스크톱) | 3열 그리드, 타이머 상세 사이드바 레이아웃 가능 |
 

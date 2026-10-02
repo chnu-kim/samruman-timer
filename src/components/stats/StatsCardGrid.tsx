@@ -14,12 +14,10 @@ export function StatsCardGrid({ summary }: StatsCardGridProps) {
       <StatsCard
         label="총 후원 시간"
         value={formatDuration(summary.totalAddedSeconds)}
-        subtext={`${summary.totalAddedSeconds.toLocaleString()}초`}
       />
       <StatsCard
         label="총 차감 시간"
         value={formatDuration(summary.totalSubtractedSeconds)}
-        subtext={`${summary.totalSubtractedSeconds.toLocaleString()}초`}
       />
       <StatsCard
         label="순 추가 시간"

@@ -41,4 +41,18 @@ describe("GoalCard", () => {
     expect(within(dialog).getByRole("button", { name: "취소하기" })).toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: "취소" })).not.toBeInTheDocument();
   });
+
+  // UX-70: 삭제 확인 라벨을 다른 화면과 같은 '삭제'로 통일한다
+  it("목표 삭제 확인 버튼 라벨은 '삭제'다", () => {
+    render(
+      <ToastProvider>
+        <GoalCard goal={goal} projectId="p1" isOwner />
+      </ToastProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "10시간 달성 목표 삭제" }));
+
+    const dialog = screen.getByRole("dialog", { name: "목표 삭제" });
+    expect(within(dialog).getByRole("button", { name: "삭제" })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "삭제하기" })).not.toBeInTheDocument();
+  });
 });

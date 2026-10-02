@@ -22,7 +22,7 @@ paths:
 
 - 아이콘 전용 버튼에는 `aria-label`, 폼 요소에는 연결된 `<label>`.
 - 다이얼로그는 `ui/ConfirmDialog`·`ui/FormDialog`를 재사용한다 (native `<dialog>`, `aria-modal`, Escape 처리 포함).
-- Toast: 에러는 `role="alert"`, 그 외는 `role="status"`.
+- Toast: 에러는 토스트마다 `role="alert"`. 성공·정보는 토스트 자체에 role을 두지 않고, `ToastProvider`가 항상 렌더해 두는 `role="status"` live region(sr-only)에 문구를 넣는다. 토스트와 함께 새로 삽입된 status 노드는 스크린리더가 읽지 않을 수 있기 때문이다.
 - 모바일 우선. 터치 타겟은 최소 44px, 차트는 `ResponsiveContainer`로 감싼다.
 
 ## 상태

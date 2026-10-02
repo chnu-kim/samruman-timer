@@ -122,6 +122,34 @@ describe("TimerControls", () => {
     expect(subtract).toHaveAttribute("aria-checked", "true");
   });
 
+  // UX-66: 표준 radio 패턴 — 선택된 항목만 탭 정지, 화살표 키로 선택과 포커스 이동
+  it("추가/차감 radio는 선택된 항목만 탭 정지이고 화살표 키로 선택과 포커스가 함께 옮겨진다", () => {
+    render(<Harness timerId={timerId} status="RUNNING" />);
+    const add = screen.getByRole("radio", { name: "추가" });
+    const subtract = screen.getByRole("radio", { name: "차감" });
+    expect(screen.getByRole("radiogroup", { name: "변경 유형" })).toBeInTheDocument();
+    expect(add).toHaveAttribute("tabindex", "0");
+    expect(subtract).toHaveAttribute("tabindex", "-1");
+
+    add.focus();
+    fireEvent.keyDown(add, { key: "ArrowRight" });
+    expect(subtract).toHaveAttribute("aria-checked", "true");
+    expect(subtract).toHaveAttribute("tabindex", "0");
+    expect(add).toHaveAttribute("tabindex", "-1");
+    expect(document.activeElement).toBe(subtract);
+
+    fireEvent.keyDown(subtract, { key: "ArrowLeft" });
+    expect(add).toHaveAttribute("aria-checked", "true");
+    expect(document.activeElement).toBe(add);
+  });
+
+  // UX-72: 분·초가 59로 잘린다는 것을 입력칸 아래 힌트로 알린다
+  it("분·초 입력에 0~59 범위 힌트가 연결되어 있다", () => {
+    render(<Harness timerId={timerId} status="RUNNING" />);
+    expect(screen.getByRole("spinbutton", { name: "분" })).toHaveAccessibleDescription(/0~59/);
+    expect(screen.getByRole("spinbutton", { name: "초" })).toHaveAccessibleDescription(/0~59/);
+  });
+
   // UX-02: 방향 상태는 상위가 소유한다
   it("reflects selectedAction prop and reports changes via onActionChange", () => {
     const onActionChange = vi.fn();

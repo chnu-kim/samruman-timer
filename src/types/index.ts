@@ -182,6 +182,8 @@ export interface TimerCreateResponse {
 export interface TimerDetailResponse {
   id: string;
   projectId: string;
+  /** 브레드크럼에 상위 프로젝트 이름을 보여 주기 위해 함께 내려 준다 */
+  projectName: string;
   title: string;
   description: string | null;
   remainingSeconds: number;

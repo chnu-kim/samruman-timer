@@ -58,7 +58,8 @@ interface SelectFieldProps {
   width?: string;
 }
 
-function SelectField({ value, options, onChange, suffix, label, pad = 0, width = "w-20" }: SelectFieldProps) {
+// 기본 폭은 두 자리 값 기준이다. 모바일 다이얼로그에서도 연·월·일이 한 줄에 들어가야 한다
+function SelectField({ value, options, onChange, suffix, label, pad = 0, width = "w-14" }: SelectFieldProps) {
   return (
     <div className="flex items-center gap-1.5">
       <select
@@ -243,7 +244,7 @@ export function CreateTimerForm({ projectId, onSuccess, onCancel }: CreateTimerF
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <Input
-        label="타이머 제목"
+        label="타이머 제목 (필수)"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         required

@@ -58,6 +58,7 @@ export function CreateProjectForm({ onSuccess }: CreateProjectFormProps) {
         value={name}
         onChange={(e) => setName(e.target.value)}
         required
+        autoFocus
         maxLength={100}
         placeholder="프로젝트 이름을 입력하세요"
       />

@@ -73,7 +73,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 ? "toast-out 0.2s ease-in forwards"
                 : "toast-in 0.2s ease-out",
             }}
-            role={t.variant === "error" ? "alert" : "status"}
+            // 오류는 개별 alert로 즉시 읽힌다. 성공·정보는 아래 상시 live region이 읽는다
+            role={t.variant === "error" ? "alert" : undefined}
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -88,6 +89,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             {t.message}
           </div>
         ))}
+      </div>
+      {/* 성공·정보 토스트용 live region. 토스트와 함께 새로 삽입된 role=status 노드는
+          스크린리더가 읽지 않을 수 있으므로 영역은 항상 렌더하고 내용만 바꾼다 */}
+      <div role="status" aria-live="polite" className="sr-only">
+        {toasts
+          .filter((t) => t.variant !== "error")
+          .map((t) => (
+            <p key={t.id}>{t.message}</p>
+          ))}
       </div>
     </ToastContext.Provider>
   );

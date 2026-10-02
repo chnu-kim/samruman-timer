@@ -196,7 +196,7 @@ export function GoalCard({ goal, projectId, isOwner, onUpdate, compact = false }
         open={showDeleteDialog}
         title="목표 삭제"
         description="정말로 이 목표를 삭제하시겠습니까? 삭제된 목표는 복구할 수 없습니다."
-        confirmLabel="삭제하기"
+        confirmLabel="삭제"
         variant="danger"
         onConfirm={handleDelete}
         onCancel={() => setShowDeleteDialog(false)}

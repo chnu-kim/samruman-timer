@@ -49,6 +49,9 @@ const POSITION_LABELS: Record<Position, string> = {
   "bottom-right": "우하단",
 };
 
+// 입력 중간 상태(#ff 등)가 URL에 들어가면 오버레이 글자가 body 색을 물려받으므로 완성된 값만 반영한다
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+
 const POSITIONS: Position[] = ["top-left", "top-right", "center", "bottom-left", "bottom-right"];
 
 export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
@@ -68,6 +71,9 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
     animation: true,
   });
   const [fontSizeInput, setFontSizeInput] = useState(String(config.fontSize));
+  // 색 코드 입력칸의 미완성 값. null이면 config 값을 그대로 보여 준다
+  const [colorDraft, setColorDraft] = useState<string | null>(null);
+  const [bgDraft, setBgDraft] = useState<string | null>(null);
   const [iframeSrc, setIframeSrc] = useState<string>("");
 
   useEffect(() => {
@@ -213,6 +219,8 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
   }, [overlayUrl, toast]);
 
   const applyPreset = useCallback((preset: (typeof PRESETS)[number]) => {
+    setColorDraft(null);
+    setBgDraft(null);
     setConfig((prev) => {
       const next = { ...prev, ...preset.config };
       setFontSizeInput(String(next.fontSize));
@@ -256,7 +264,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
         <div className="flex-1 overflow-y-auto p-6 pt-5">
         {/* URL 복사 — 모달의 최종 목적이므로 맨 위에 둔다 */}
         <div className="mb-5">
-          <label className="text-sm font-medium text-foreground">OBS 브라우저 소스 URL</label>
+          <span className="text-sm font-medium text-foreground">OBS 브라우저 소스 URL</span>
           {/* 오버레이 페이지는 URL 파라미터만 읽으므로 저장만으로는 방송 화면이 바뀌지 않는다 */}
           <p className="mt-0.5 text-xs text-muted-foreground">
             URL을 바꿨다면 OBS 브라우저 소스에 새로 붙여넣어야 방송에 반영됩니다.
@@ -274,7 +282,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
 
         {/* 프리셋 테마 */}
         <div className="mb-5">
-          <label className="text-sm font-medium text-foreground">프리셋 테마</label>
+          <span className="text-sm font-medium text-foreground">프리셋 테마</span>
           <div className="mt-1.5 flex flex-wrap gap-2">
             {PRESETS.map((preset) => (
               <button
@@ -291,9 +299,9 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
 
         {/* 폰트 크기 슬라이더 + 직접 입력 */}
         <div className="mb-5">
-          <label className="text-sm font-medium text-foreground">
+          <span className="text-sm font-medium text-foreground">
             폰트 크기
-          </label>
+          </span>
           <div className="mt-1.5 flex items-center gap-3">
             <input
               type="range"
@@ -347,41 +355,65 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
         {/* 색상 선택 — P1 #9: responsive grid */}
         <div className="mb-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="text-sm font-medium text-foreground">텍스트 색상</label>
+            <span className="text-sm font-medium text-foreground">텍스트 색상</span>
             <div className="mt-1.5 flex items-center gap-2">
               {/* P1 #6: 44px color input */}
               <input
                 type="color"
                 value={config.color}
-                onChange={(e) => setConfig((prev) => ({ ...prev, color: e.target.value }))}
+                onChange={(e) => {
+                  setColorDraft(null);
+                  setConfig((prev) => ({ ...prev, color: e.target.value }));
+                }}
                 className="w-11 h-11 rounded border border-border cursor-pointer"
                 aria-label="텍스트 색상"
               />
               <Input
-                value={config.color}
-                onChange={(e) => setConfig((prev) => ({ ...prev, color: e.target.value }))}
-                className="flex-1 font-mono text-sm"
+                value={colorDraft ?? config.color}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (HEX_COLOR.test(v)) {
+                    setColorDraft(null);
+                    setConfig((prev) => ({ ...prev, color: v }));
+                  } else {
+                    setColorDraft(v);
+                  }
+                }}
+                aria-invalid={colorDraft !== null}
+                className="flex-1 font-mono text-sm aria-[invalid=true]:border-red-500"
                 maxLength={7}
                 aria-label="텍스트 색상 코드"
               />
             </div>
           </div>
           <div>
-            <label className="text-sm font-medium text-foreground">배경색</label>
+            <span className="text-sm font-medium text-foreground">배경색</span>
             <div className="mt-1.5 flex items-center gap-2">
               {/* P1 #6: 44px color input */}
               <input
                 type="color"
                 value={config.bg === "transparent" ? "#000000" : config.bg}
-                onChange={(e) => setConfig((prev) => ({ ...prev, bg: e.target.value }))}
+                onChange={(e) => {
+                  setBgDraft(null);
+                  setConfig((prev) => ({ ...prev, bg: e.target.value }));
+                }}
                 className="w-11 h-11 rounded border border-border cursor-pointer"
                 aria-label="배경색"
               />
               <div className="flex-1 flex items-center gap-1">
                 <Input
-                  value={config.bg}
-                  onChange={(e) => setConfig((prev) => ({ ...prev, bg: e.target.value }))}
-                  className="flex-1 font-mono text-sm"
+                  value={bgDraft ?? config.bg}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === "transparent" || HEX_COLOR.test(v)) {
+                      setBgDraft(null);
+                      setConfig((prev) => ({ ...prev, bg: v }));
+                    } else {
+                      setBgDraft(v);
+                    }
+                  }}
+                  aria-invalid={bgDraft !== null}
+                  className="flex-1 font-mono text-sm aria-[invalid=true]:border-red-500"
                   placeholder="transparent"
                   aria-label="배경색 코드"
                 />
@@ -390,7 +422,10 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
             {/* P1 #7: 44px touch target for reset button */}
             <button
               type="button"
-              onClick={() => setConfig((prev) => ({ ...prev, bg: "transparent" }))}
+              onClick={() => {
+                setBgDraft(null);
+                setConfig((prev) => ({ ...prev, bg: "transparent" }));
+              }}
               className="mt-1 min-h-11 px-1 inline-flex items-center text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
               투명으로 초기화
@@ -400,7 +435,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
 
         {/* 위치 선택 비주얼 그리드 — P1 #5: larger grid */}
         <div className="mb-5">
-          <label className="text-sm font-medium text-foreground">위치</label>
+          <span className="text-sm font-medium text-foreground">위치</span>
           <div className="mt-1.5 grid grid-cols-3 grid-rows-3 gap-1 w-56 h-40 border border-border rounded-lg p-1 bg-muted">
             {/* Row 1 */}
             <button
@@ -498,7 +533,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
 
         {/* 실시간 미리보기 — P1 #10: debounced iframe, P2 #11: CSS var background */}
         <div className="mb-5">
-          <label className="text-sm font-medium text-foreground">미리보기</label>
+          <span className="text-sm font-medium text-foreground">미리보기</span>
           <div
             className="mt-1.5 rounded-lg border border-border overflow-hidden"
             style={{ height: 200 }}
@@ -510,7 +545,8 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                 title="오버레이 미리보기"
                 style={{
                   border: "none",
-                  background: config.bg === "transparent" ? "var(--muted)" : config.bg,
+                  // 투명 배경은 테마와 무관하게 방송 화면에 가까운 중간 어두운 색으로 미리 본다
+                  background: config.bg === "transparent" ? "#3f3f46" : config.bg,
                 }}
               />
             )}
@@ -542,6 +578,8 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
               tabIndex={isDirty ? 0 : -1}
               onClick={() => {
                 if (savedConfig) {
+                  setColorDraft(null);
+                  setBgDraft(null);
                   setConfig({ ...savedConfig });
                 }
               }}

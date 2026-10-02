@@ -13,7 +13,7 @@ export default function CallbackPage() {
   }, [router]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
+    <div className="flex min-h-[60vh] items-center justify-center bg-background">
       <p className="text-sm text-muted-foreground">
         로그인 처리 중...
       </p>

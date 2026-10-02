@@ -10,7 +10,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EditableText } from "@/components/ui/EditableText";
 import { FormDialog } from "@/components/ui/FormDialog";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { PlusIcon, TimerIcon, TrashIcon, LinkIcon, ChartBarIcon } from "@/components/ui/Icons";
+import { PlusIcon, TimerIcon, TrashIcon, LinkIcon, ChartBarIcon, ChevronRightIcon } from "@/components/ui/Icons";
 import { ProjectDetailSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import { reconcilePolledTimer, type SyncedTimerSnapshot } from "@/lib/timer-sync";
@@ -65,7 +65,7 @@ function GoalSection({
     <section className="mt-6 space-y-4" aria-label="목표">
       {/* 헤더 — 제목 + 추가 버튼 */}
       <div className="flex items-center justify-between gap-4">
-        <h2 className="text-sm font-bold text-foreground">목표</h2>
+        <h2 className="border-l-2 border-accent pl-3 text-lg font-bold">목표</h2>
         {isOwner && (
           <Button
             variant="primary"
@@ -464,9 +464,13 @@ export default function ProjectDetailPage() {
                 createdAt={timers[0].createdAt}
                 size="large"
               />
-              <Badge variant={displayStatus === "SCHEDULED" ? "scheduled" : displayStatus === "RUNNING" ? "running" : "expired"}>
-                {displayStatus === "SCHEDULED" ? "예약됨" : displayStatus === "RUNNING" ? "실행 중" : "만료"}
-              </Badge>
+              {/* 타이머 화면으로 가는 유일한 링크이므로 터치 기기에서도 보이는 이동 단서를 둔다 */}
+              <div className="flex shrink-0 items-center gap-1">
+                <Badge variant={displayStatus === "SCHEDULED" ? "scheduled" : displayStatus === "RUNNING" ? "running" : "expired"}>
+                  {displayStatus === "SCHEDULED" ? "예약됨" : displayStatus === "RUNNING" ? "실행 중" : "만료"}
+                </Badge>
+                <ChevronRightIcon className="w-5 h-5 text-muted-foreground" />
+              </div>
             </div>
             {timers[0].title && (
               <p className="mt-2 text-sm text-muted-foreground">{timers[0].title}</p>
@@ -484,17 +488,20 @@ export default function ProjectDetailPage() {
         />
       </FormDialog>
 
-      {/* 목표 섹션 */}
-      <GoalSection
-        goals={goals}
-        projectId={projectId}
-        isOwner={isOwner}
-        hasTimer={timers.length > 0}
-        showGoalForm={showGoalForm}
-        onShowGoalForm={() => setShowGoalForm(true)}
-        onHideGoalForm={() => setShowGoalForm(false)}
-        onGoalUpdate={fetchGoals}
-      />
+      {/* 목표 섹션. 타이머가 없으면 누를 수 없는 버튼과 빈 탭만 보이므로 숨긴다.
+          타이머를 삭제한 뒤에도 남은 목표 기록은 볼 수 있게 목표가 있으면 보여 준다 */}
+      {(timers.length > 0 || goals.length > 0) && (
+        <GoalSection
+          goals={goals}
+          projectId={projectId}
+          isOwner={isOwner}
+          hasTimer={timers.length > 0}
+          showGoalForm={showGoalForm}
+          onShowGoalForm={() => setShowGoalForm(true)}
+          onHideGoalForm={() => setShowGoalForm(false)}
+          onGoalUpdate={fetchGoals}
+        />
+      )}
 
       <ConfirmDialog
         open={showDeleteDialog}

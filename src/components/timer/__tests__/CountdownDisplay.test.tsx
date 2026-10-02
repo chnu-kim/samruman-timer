@@ -165,3 +165,43 @@ describe("CountdownDisplay", () => {
     expect(screen.getByText(/시작 대기 중/)).toBeInTheDocument();
   });
 });
+
+describe("CountdownDisplay 서브텍스트", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-15T12:00:00Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // UX-49: 경과 시간은 시각처럼 읽히지 않게 단위를 붙인다
+  it("경과 시간을 '72시간 2분 경과'처럼 단위로 표시한다", () => {
+    const createdAt = new Date(Date.now() - (72 * 3600 + 2 * 60 + 53) * 1000).toISOString();
+    render(
+      <CountdownDisplay remainingSeconds={3600} status="RUNNING" createdAt={createdAt} size="large" />,
+    );
+    expect(screen.getByText(/종료 예정/)).toHaveTextContent("(72시간 2분 경과)");
+    expect(screen.getByText(/종료 예정/)).not.toHaveTextContent("72:02:53");
+  });
+
+  it("경과가 1분 미만이면 경과를 생략한다", () => {
+    const createdAt = new Date(Date.now() - 30 * 1000).toISOString();
+    render(
+      <CountdownDisplay remainingSeconds={3600} status="RUNNING" createdAt={createdAt} size="large" />,
+    );
+    expect(screen.getByText(/종료 예정/)).not.toHaveTextContent("경과");
+  });
+
+  // UX-54: 만료 상태에도 상태를 알리는 서브텍스트를 둔다
+  it("large 만료 상태에서 '만료됨'을 표시한다", () => {
+    render(<CountdownDisplay remainingSeconds={0} status="EXPIRED" size="large" />);
+    expect(screen.getByText("만료됨")).toBeInTheDocument();
+  });
+
+  it("compact 만료 상태에서는 '만료됨'을 넣지 않는다", () => {
+    render(<CountdownDisplay remainingSeconds={0} status="EXPIRED" />);
+    expect(screen.queryByText("만료됨")).not.toBeInTheDocument();
+  });
+});

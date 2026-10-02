@@ -34,7 +34,7 @@ describe("인증 흐름 통합 테스트", () => {
   });
 
   it("1. login → 리다이렉트 URL + state 쿠키", async () => {
-    const res = await login();
+    const res = await login(new NextRequest(new URL("http://localhost:3000/api/auth/login")));
     expect(res.status).toBe(307);
     expect(res.headers.get("Location")).toContain("chzzk.naver.com");
 
@@ -69,6 +69,42 @@ describe("인증 흐름 통합 테스트", () => {
     const sessionCookie = setCookies.find((c) => c.startsWith("session="));
     expect(sessionCookie).toBeDefined();
     expect(sessionCookie).toContain("HttpOnly");
+  });
+
+  // UX-74: login이 심은 oauth_next 쿠키를 브라우저가 그대로 돌려주면 callback이 그 경로로 보낸다
+  it("2-1. login?next → callback이 쿠키로 받은 next로 리다이렉트 (쿠키 인코딩 왕복)", async () => {
+    vi.mocked(exchangeCode).mockResolvedValue({
+      accessToken: "access-token",
+      refreshToken: "refresh-token",
+      expiresIn: 3600,
+    });
+    vi.mocked(getUserInfo).mockResolvedValue({
+      id: "chzzk-user-1",
+      nickname: "테스터",
+      profileImageUrl: null,
+    });
+    db._stmt.first.mockResolvedValue(null);
+
+    const next = "/timers/abc?a=1&b=2";
+    const loginRes = await login(
+      new NextRequest(new URL(`http://localhost:3000/api/auth/login?next=${encodeURIComponent(next)}`)),
+    );
+    // Set-Cookie의 name=value 부분을 다음 요청의 Cookie 헤더로 그대로 옮긴다
+    const cookieHeader = loginRes.headers
+      .getSetCookie()
+      .filter((c) => c.startsWith("oauth_state=") || c.startsWith("oauth_next="))
+      .map((c) => c.split(";")[0])
+      .join("; ");
+    const state = /oauth_state=([^;]+)/.exec(cookieHeader)![1];
+
+    const req = new NextRequest(
+      new URL(`http://localhost:3000/api/auth/callback?code=valid-code&state=${state}`),
+      { headers: { cookie: cookieHeader } },
+    );
+    const res = await callback(req as never);
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("Location")).toBe(`http://localhost:3000${next}`);
   });
 
   it("3. me → 사용자 정보 (미들웨어가 주입한 x-user-id 기반)", async () => {

@@ -18,6 +18,16 @@ interface HourlyActivityChartProps {
   className?: string;
 }
 
+/** 스크린리더용 차트 요약. 막대(추가+차감 횟수)가 가장 높은 시간대와 총 횟수를 알린다 */
+export function summarizeHourly(data: HourlyDistribution[]): string {
+  const total = data.reduce((sum, d) => sum + d.adds + d.subtracts, 0);
+  if (total === 0) return "시간대별 이벤트 횟수 그래프, 기록 없음";
+  const peak = data.reduce((best, d) =>
+    d.adds + d.subtracts > best.adds + best.subtracts ? d : best,
+  );
+  return `시간대별 이벤트 횟수 그래프, 최다 ${peak.hour}시 ${peak.adds + peak.subtracts}회, 총 ${total}회`;
+}
+
 export function HourlyActivityChart({ data, className }: HourlyActivityChartProps) {
   if (data.length === 0) {
     return (
@@ -34,7 +44,7 @@ export function HourlyActivityChart({ data, className }: HourlyActivityChartProp
   });
 
   return (
-    <div className={cn("h-64 w-full", className)} role="img" aria-label="시간대별 활동 그래프">
+    <div className={cn("h-64 w-full", className)} role="img" aria-label={summarizeHourly(fullData)}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={fullData} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-foreground)" opacity={0.1} />

@@ -1,3 +1,5 @@
+import type { ActionType } from "@/types";
+
 export function cn(...classes: (string | false | null | undefined)[]): string {
   return classes.filter(Boolean).join(" ");
 }
@@ -74,4 +76,19 @@ export function formatRelativeDate(iso: string): string {
   if (diffDays === 1) return "어제";
   if (diffDays < 30) return `${diffDays}일 전`;
   return date.toLocaleDateString("ko-KR");
+}
+
+/**
+ * 변경 기록의 행위자 표시명. 만료·예약 활성화는 서버가 actor_name 'system'으로 남기는데,
+ * 시청자 닉네임처럼 읽히지 않도록 화면에서만 '자동'으로 바꾼다(DB 값은 유지).
+ */
+export function displayActorName(log: {
+  actionType: ActionType;
+  actorName: string;
+  actorUserId: string | null;
+}): string {
+  if (log.actorUserId === null && (log.actionType === "EXPIRE" || log.actionType === "ACTIVATE")) {
+    return "자동";
+  }
+  return log.actorName;
 }

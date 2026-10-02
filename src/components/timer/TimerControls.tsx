@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useId } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/utils";
@@ -80,6 +80,11 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   inputsRef.current = { hours, minutes, seconds };
   // 겹친 요청 중 먼저 실패한 쪽이 이미 대체된 금액을 되살리지 않도록 제출 순번을 센다
   const submitSeqRef = useRef(0);
+  // 추가/차감 radio: 표준 radio 패턴처럼 선택된 항목만 탭 정지이고 화살표 키로 선택과 포커스를 옮긴다
+  const addRadioRef = useRef<HTMLSpanElement>(null);
+  const subtractRadioRef = useRef<HTMLSpanElement>(null);
+  const actionGroupLabelId = useId();
+  const timeHintId = useId();
 
   useEffect(() => {
     setRecentActors(getRecentActors());
@@ -214,6 +219,21 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
     toast("기본 닉네임이 해제되었습니다", "success");
   }
 
+  function handleActionKeyDown(e: React.KeyboardEvent, action: ModifyAction) {
+    if (e.key === " " || e.key === "Enter") {
+      e.preventDefault();
+      onActionChange(action);
+      return;
+    }
+    if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) {
+      e.preventDefault();
+      // 항목이 둘뿐이라 어느 방향이든 다른 쪽으로 옮긴다
+      const next: ModifyAction = action === "ADD" ? "SUBTRACT" : "ADD";
+      onActionChange(next);
+      (next === "ADD" ? addRadioRef : subtractRadioRef).current?.focus();
+    }
+  }
+
   if (status === "SCHEDULED") {
     return (
       <div className={className}>
@@ -293,11 +313,11 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
 
       {/* 추가/차감 토글 */}
       <div>
-        <label className="mb-1.5 block text-sm font-medium text-foreground">변경 유형</label>
+        <span id={actionGroupLabelId} className="mb-1.5 block text-sm font-medium text-foreground">변경 유형</span>
         <div
           className="relative grid grid-cols-2 rounded-xl border border-border bg-muted p-1"
           role="radiogroup"
-          aria-label="변경 유형 선택"
+          aria-labelledby={actionGroupLabelId}
         >
           {/* 슬라이딩 인디케이터 */}
           <div
@@ -307,11 +327,12 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
             )}
           />
           <span
+            ref={addRadioRef}
             role="radio"
             aria-checked={selectedAction === "ADD"}
-            tabIndex={0}
+            tabIndex={selectedAction === "ADD" ? 0 : -1}
             onClick={() => onActionChange("ADD")}
-            onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); onActionChange("ADD"); } }}
+            onKeyDown={(e) => handleActionKeyDown(e, "ADD")}
             className={cn(
               "relative z-10 flex items-center justify-center rounded-lg py-2.5 text-sm font-medium transition-colors duration-200 select-none cursor-pointer",
               selectedAction === "ADD"
@@ -322,11 +343,12 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
             추가
           </span>
           <span
+            ref={subtractRadioRef}
             role="radio"
             aria-checked={selectedAction === "SUBTRACT"}
-            tabIndex={0}
+            tabIndex={selectedAction === "SUBTRACT" ? 0 : -1}
             onClick={() => onActionChange("SUBTRACT")}
-            onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); onActionChange("SUBTRACT"); } }}
+            onKeyDown={(e) => handleActionKeyDown(e, "SUBTRACT")}
             className={cn(
               "relative z-10 flex items-center justify-center rounded-lg py-2.5 text-sm font-medium transition-colors duration-200 select-none cursor-pointer",
               selectedAction === "SUBTRACT"
@@ -355,7 +377,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
 
       {/* 시간 입력 */}
       <div>
-        <label className="text-sm font-medium text-foreground">시간</label>
+        <span className="text-sm font-medium text-foreground">시간</span>
 
         {/* 빠른 입력 프리셋 */}
         <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -401,6 +423,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
               className="w-20 text-center"
               placeholder="0"
               aria-label="분"
+              aria-describedby={timeHintId}
             />
             <span className="text-sm text-muted-foreground">분</span>
             <Input
@@ -413,9 +436,16 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
               className="w-20 text-center"
               placeholder="0"
               aria-label="초"
+              aria-describedby={timeHintId}
             />
             <span className="text-sm text-muted-foreground">초</span>
           </div>
+        )}
+        {/* 59를 넘기면 59로 잘리므로 범위를 미리 알린다 */}
+        {!quickMode && (
+          <p id={timeHintId} className="mt-1 text-xs text-muted-foreground">
+            분과 초는 0~59까지 입력할 수 있습니다.
+          </p>
         )}
       </div>
 

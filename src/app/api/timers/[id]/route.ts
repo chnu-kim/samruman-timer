@@ -17,7 +17,7 @@ export const GET = withErrorHandler(async (
               t.scheduled_start_at,
               t.created_by, t.created_at, t.updated_at,
               u.id AS creator_id, u.nickname AS creator_nickname,
-              p.owner_user_id
+              p.owner_user_id, p.name AS project_name
        FROM timers t
        JOIN users u ON u.id = t.created_by
        JOIN projects p ON p.id = t.project_id
@@ -39,6 +39,7 @@ export const GET = withErrorHandler(async (
       creator_id: string;
       creator_nickname: string;
       owner_user_id: string;
+      project_name: string;
     }>();
 
   if (!row || row.status === "DELETED") {
@@ -77,6 +78,7 @@ export const GET = withErrorHandler(async (
     data: {
       id: checked.id,
       projectId: checked.projectId,
+      projectName: row.project_name,
       title: checked.title,
       description: checked.description,
       remainingSeconds,
@@ -182,7 +184,7 @@ export const PATCH = withErrorHandler(async (
               t.base_remaining_seconds, t.last_calculated_at, t.status,
               t.scheduled_start_at, t.created_at, t.updated_at,
               u.id AS creator_id, u.nickname AS creator_nickname,
-              p.owner_user_id
+              p.owner_user_id, p.name AS project_name
        FROM timers t
        JOIN users u ON u.id = t.created_by
        JOIN projects p ON p.id = t.project_id
@@ -203,6 +205,7 @@ export const PATCH = withErrorHandler(async (
       creator_id: string;
       creator_nickname: string;
       owner_user_id: string;
+      project_name: string;
     }>();
 
   const timer: Timer = {
@@ -230,6 +233,7 @@ export const PATCH = withErrorHandler(async (
     data: {
       id: timer.id,
       projectId: timer.projectId,
+      projectName: updated!.project_name,
       title: timer.title,
       description: timer.description,
       remainingSeconds,

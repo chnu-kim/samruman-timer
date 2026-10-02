@@ -37,6 +37,8 @@
 CHZZK OAuth 인증을 시작한다.
 
 - **인증**: 불필요
+- **쿼리 파라미터**:
+  - `next` (string, 선택): 로그인 후 돌아갈 같은 출처 상대 경로(예: `/timers/abc`). `/`로 시작하고 `//`·역슬래시·공백·제어 문자가 없으며 `/login`·`/api/`가 아닌 경로만 받는다(AUTH.md 참조). 통과하면 `oauth_next` 쿠키에 저장하고, 아니면 무시한다
 - **응답**: `302 Redirect` → CHZZK 인증 페이지
 
 ### GET /api/auth/callback
@@ -47,8 +49,8 @@ CHZZK OAuth 콜백을 처리한다.
 - **쿼리 파라미터**:
   - `code` (string, 필수): Authorization code
   - `state` (string, 필수): CSRF state
-- **응답**: `302 Redirect` → `/` (세션 쿠키 설정)
-- **에러**: state 불일치 또는 토큰 교환 실패 시 `/login?error=auth_failed`로 리다이렉트
+- **응답**: `302 Redirect` → `oauth_next` 쿠키의 경로(다시 검증), 없으면 `/` (세션 쿠키 설정, `oauth_next` 삭제)
+- **에러**: state 불일치 또는 토큰 교환 실패 시 `/login?error=auth_failed`로 리다이렉트(`oauth_next` 삭제)
 
 ### POST /api/auth/logout
 
@@ -329,6 +331,7 @@ CHZZK OAuth 콜백을 처리한다.
   "data": {
     "id": "timer_id",
     "projectId": "project_id",
+    "projectName": "프로젝트 이름",
     "title": "타이머 제목",
     "description": "설명",
     "remainingSeconds": 3600,
@@ -338,6 +341,7 @@ CHZZK OAuth 콜백을 처리한다.
       "id": "user_id",
       "nickname": "닉네임"
     },
+    "projectOwnerId": "user_id",
     "createdAt": "2025-01-01T00:00:00Z",
     "updatedAt": "2025-01-01T00:00:00Z"
   }
