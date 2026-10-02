@@ -525,4 +525,39 @@ describe("TimerControls", () => {
       });
     });
   });
+
+  // UX-15·UX-16: 모바일 하단 바는 즉시 적용되므로 그 사실과 기록될 닉네임을 항상 보여 준다
+  describe("mobile quick bar caption", () => {
+    it("asks for a nickname and disables the bar when no actor is available", () => {
+      render(<Harness timerId={timerId} status="RUNNING" />);
+      expect(screen.getByText("닉네임을 먼저 입력하세요")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "+1h" })).toBeDisabled();
+    });
+
+    it("shows the typed nickname as the target", () => {
+      render(<Harness timerId={timerId} status="RUNNING" />);
+      fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: " 치즈냥 " } });
+      expect(screen.getByText("즉시 적용 → 치즈냥")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "+1h" })).toBeEnabled();
+    });
+
+    it("falls back to the default nickname and submits with the shown name", async () => {
+      localStorageMock.setItem("defaultActorName", "기본냥");
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { id: timerId, remainingSeconds: 7200, status: "RUNNING", log: { id: "l1" } } }),
+      });
+      render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3600} />);
+
+      // 기본 닉네임이 입력란에 채워진 뒤 비워도 기본 닉네임으로 기록된다
+      fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "" } });
+      expect(screen.getByText("즉시 적용 → 기본냥")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "+1h" }));
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body).toEqual({ action: "ADD", deltaSeconds: 3600, actorName: "기본냥" });
+      await waitFor(() => expect(mockToast).toHaveBeenCalledWith("추가 완료", "success"));
+    });
+  });
 });

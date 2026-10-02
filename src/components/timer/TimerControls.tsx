@@ -91,6 +91,8 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   }, []);
 
   const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+  // 즉시 적용(빠른 적용 모드, 하단 바)이 기록할 닉네임. 표시와 제출이 어긋나지 않도록 한 곳에서 정한다
+  const quickActor = actorName.trim() || defaultActor;
   function addPreset(presetSeconds: number) {
     const current = hours * 3600 + minutes * 60 + seconds;
     const next = current + presetSeconds;
@@ -177,13 +179,12 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
 
   // 빠른 적용 모드: 프리셋 탭 한 번으로 즉시 적용
   async function handleQuickApply(presetSeconds: number) {
-    const actor = actorName.trim() || defaultActor;
-    if (!actor) {
+    if (!quickActor) {
       setError("닉네임을 먼저 입력해주세요.");
       toast("닉네임을 먼저 입력해주세요.", "error");
       return;
     }
-    await submitModify(selectedAction, presetSeconds, actor);
+    await submitModify(selectedAction, presetSeconds, quickActor);
   }
 
   async function handleSubmit() {
@@ -243,7 +244,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
         />
         {/* 최근 닉네임 칩 */}
         {recentActors.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
+          <div className="mt-2 flex flex-wrap gap-2">
             {recentActors.map((name) => {
               const isDefault = name === defaultActor;
               const isSelected = name === actorName;
@@ -253,7 +254,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
                   type="button"
                   onClick={() => setActorName(name)}
                   className={cn(
-                    "rounded-full border px-3 py-1 text-xs cursor-pointer transition-colors",
+                    "rounded-full border px-3 py-2 text-xs cursor-pointer transition-colors",
                     isDefault
                       ? "border-accent text-accent hover:bg-accent/10"
                       : "border-border text-muted-foreground hover:bg-accent/10 hover:text-foreground",
@@ -267,12 +268,13 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
             })}
           </div>
         )}
-        <div className="mt-1.5 flex items-center gap-2">
+        {/* 버튼 터치 영역(px-2)만 넓히고 글자는 칩과 왼쪽 정렬을 맞춘다 */}
+        <div className="mt-1.5 -ml-2 flex items-center gap-2">
           {actorName.trim() && actorName.trim() !== defaultActor && (
             <button
               type="button"
               onClick={handleSetDefault}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              className="min-h-11 px-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
               기본 닉네임으로 설정
             </button>
@@ -281,7 +283,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
             <button
               type="button"
               onClick={handleClearDefault}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              className="min-h-11 px-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
               기본 닉네임 해제
             </button>
@@ -436,13 +438,14 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
       )}
 
       {/* 모바일 하단 고정 빠른 액션 바 */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background/95 backdrop-blur-sm px-4 py-3 safe-area-bottom">
+      {/* data-quick-bar: 바가 있을 때 body 하단 여백을 잡는다(globals.css) */}
+      <div data-quick-bar className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background/95 backdrop-blur-sm px-4 py-3 safe-area-bottom">
         <div className="flex items-center gap-2">
           {QUICK_PRESETS.map((preset) => (
             <button
               key={preset.label}
               type="button"
-              disabled={!actorName.trim() && !defaultActor}
+              disabled={!quickActor}
               onClick={() => handleQuickApply(preset.seconds)}
               className={cn(
                 "flex-1 rounded-lg py-3 min-h-[48px] text-sm font-bold transition-colors disabled:opacity-50",
@@ -455,14 +458,11 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
             </button>
           ))}
         </div>
-        {!actorName.trim() && !defaultActor && (
-          <p className="mt-1.5 text-center text-xs text-muted-foreground">
-            닉네임을 먼저 입력하세요
-          </p>
-        )}
+        {/* 카드 프리셋(누적)과 달리 확인 없이 바로 적용되고, 누구 이름으로 기록되는지 항상 보여 준다 */}
+        <p className="mt-1.5 truncate text-center text-xs text-muted-foreground">
+          {quickActor ? `즉시 적용 → ${quickActor}` : "닉네임을 먼저 입력하세요"}
+        </p>
       </div>
-      {/* 모바일 하단바 높이 보정 */}
-      <div className="md:hidden h-20" />
     </div>
   );
 }
