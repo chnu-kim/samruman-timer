@@ -26,6 +26,7 @@ import type {
   ApiSuccessResponse,
   TimerDetailResponse,
   TimerModifyResponse,
+  ModifyAction,
   TimerLogsResponse,
   TimerLogResponse,
   ActionType,
@@ -132,8 +133,8 @@ export default function TimerDetailPage() {
     enabled: !loading && !error && !!timer,
   });
 
-  // 키보드 단축키 상태
-  const [selectedAction, setSelectedAction] = useState<"ADD" | "SUBTRACT">("ADD");
+  // 추가/차감 방향. 세그먼트, 프리셋 라벨, 단축키가 이 상태 하나를 공유한다
+  const [selectedAction, setSelectedAction] = useState<ModifyAction>("ADD");
 
   const isOwner = !!user && user.id === timer?.projectOwnerId;
 
@@ -275,7 +276,8 @@ export default function TimerDetailPage() {
   }, []);
 
   const { showHelp, setShowHelp } = useKeyboardShortcuts({
-    enabled: isOwner && !!timer && timer.status !== "SCHEDULED",
+    // 모달이 열려 있으면 뒤쪽 화면의 시간을 바꾸지 않는다
+    enabled: isOwner && !!timer && timer.status !== "SCHEDULED" && !showDeleteDialog && !showOverlaySettings,
     onPreset: handleKeyboardPreset,
     onToggleAction: handleToggleAction,
     onRefresh: handleRefresh,
@@ -470,6 +472,8 @@ export default function TimerDetailPage() {
             timerId={timerId}
             status={timer.status}
             remainingSeconds={timer.remainingSeconds}
+            selectedAction={selectedAction}
+            onActionChange={setSelectedAction}
             onModified={handleModified}
             className="mt-3"
           />

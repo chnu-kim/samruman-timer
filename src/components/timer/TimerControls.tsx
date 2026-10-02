@@ -12,6 +12,9 @@ interface TimerControlsProps {
   timerId: string;
   status?: TimerStatus;
   remainingSeconds?: number;
+  /** 추가/차감 방향. 단축키와 같은 상태를 쓰도록 상위(page)가 소유한다 */
+  selectedAction: ModifyAction;
+  onActionChange: (action: ModifyAction) => void;
   onModified?: (data: TimerModifyResponse) => void;
   className?: string;
 }
@@ -62,13 +65,12 @@ function saveDefaultActor(name: string) {
   localStorage.setItem(DEFAULT_ACTOR_KEY, name);
 }
 
-export function TimerControls({ timerId, status, remainingSeconds, onModified, className }: TimerControlsProps) {
+export function TimerControls({ timerId, status, remainingSeconds, selectedAction, onActionChange, onModified, className }: TimerControlsProps) {
   const { toast } = useToast();
   const [actorName, setActorName] = useState("");
   const [hours, setHours] = useState(0);
   const [minutes, setMinutes] = useState(0);
   const [seconds, setSeconds] = useState(0);
-  const [selectedAction, setSelectedAction] = useState<ModifyAction>("ADD");
   const [error, setError] = useState("");
   const [recentActors, setRecentActors] = useState<string[]>([]);
   const [defaultActor, setDefaultActor] = useState("");
@@ -282,8 +284,8 @@ export function TimerControls({ timerId, status, remainingSeconds, onModified, c
             role="radio"
             aria-checked={selectedAction === "ADD"}
             tabIndex={0}
-            onClick={() => setSelectedAction("ADD")}
-            onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); setSelectedAction("ADD"); } }}
+            onClick={() => onActionChange("ADD")}
+            onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); onActionChange("ADD"); } }}
             className={cn(
               "relative z-10 flex items-center justify-center rounded-lg py-2.5 text-sm font-medium transition-colors duration-200 select-none cursor-pointer",
               selectedAction === "ADD"
@@ -297,8 +299,8 @@ export function TimerControls({ timerId, status, remainingSeconds, onModified, c
             role="radio"
             aria-checked={selectedAction === "SUBTRACT"}
             tabIndex={0}
-            onClick={() => setSelectedAction("SUBTRACT")}
-            onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); setSelectedAction("SUBTRACT"); } }}
+            onClick={() => onActionChange("SUBTRACT")}
+            onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); onActionChange("SUBTRACT"); } }}
             className={cn(
               "relative z-10 flex items-center justify-center rounded-lg py-2.5 text-sm font-medium transition-colors duration-200 select-none cursor-pointer",
               selectedAction === "SUBTRACT"
@@ -343,7 +345,8 @@ export function TimerControls({ timerId, status, remainingSeconds, onModified, c
                   : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground",
               )}
             >
-              +{preset.label}
+              {/* 빠른 적용은 확인 없이 바로 반영되므로 라벨 부호가 실제 방향을 따른다 */}
+              {quickMode && selectedAction === "SUBTRACT" ? "-" : "+"}{preset.label}
             </button>
           ))}
         </div>
@@ -397,6 +400,7 @@ export function TimerControls({ timerId, status, remainingSeconds, onModified, c
       {!quickMode && (
         <Button
           size="lg"
+          variant={selectedAction === "SUBTRACT" ? "danger" : "primary"}
           disabled={totalSeconds <= 0}
           onClick={handleSubmit}
           className="w-full"

@@ -128,6 +128,36 @@ describe("GET /api/timers/[id]/stats", () => {
     expect(json.data.dailyActivity[0].date).toBe("2025-01-01");
   });
 
+  // UX-06: created_at은 UTC이므로 시간대·일별 집계는 KST(+9시간)로 옮겨서 묶어야 한다
+  it("시간대·일별 집계는 KST(+9시간) 기준으로 묶는다", async () => {
+    const db = createMockDB();
+    db._stmt.first
+      .mockResolvedValueOnce({ id: "timer1", owner_user_id: "owner1" })
+      .mockResolvedValueOnce({
+        total_added: 0,
+        total_subtracted: 0,
+        total_events: 0,
+        unique_donors: 0,
+      });
+    db._stmt.all
+      .mockResolvedValueOnce({ results: [] })
+      .mockResolvedValueOnce({ results: [] })
+      .mockResolvedValueOnce({ results: [] });
+    vi.mocked(getDB).mockResolvedValue(db as unknown as D1Database);
+
+    await callGET("timer1");
+
+    const sqls = db.prepare.mock.calls.map((c: unknown[]) => String(c[0]));
+    const hourlySql = sqls.find((s: string) => s.includes("hour_of_day"));
+    const dailySql = sqls.find((s: string) => s.includes("AS date"));
+
+    expect(hourlySql).toContain("strftime('%H', created_at, '+9 hours')");
+    expect(dailySql).toContain("DATE(created_at, '+9 hours')");
+    // UTC 그대로 묶는 표현이 남아 있지 않다
+    expect(hourlySql).not.toContain("strftime('%H', created_at)");
+    expect(dailySql).not.toContain("DATE(created_at)");
+  });
+
   it("donorLimit 파라미터 적용", async () => {
     const db = createMockDB();
     db._stmt.first

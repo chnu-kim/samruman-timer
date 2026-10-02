@@ -58,12 +58,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
+      {/* 토스트에는 누를 요소가 없으므로 탭이 아래(모바일 하단 빠른 액션 바 등)로 통과하게 둔다.
+          md 미만에서는 하단 바 위로 올려 버튼 라벨을 가리지 않게 한다 */}
+      <div className="fixed bottom-24 md:bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
         {toasts.map((t) => (
           <div
             key={t.id}
             className={cn(
-              "pointer-events-auto flex items-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium shadow-md",
+              "flex items-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium shadow-md",
               variantStyles[t.variant],
             )}
             style={{
