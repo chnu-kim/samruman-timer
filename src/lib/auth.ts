@@ -34,7 +34,11 @@ export async function signJwt(
 
 export async function verifyJwt(token: string): Promise<JwtPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, getSecret());
+    // 서명 알고리즘을 고정하고 만료가 없는 토큰은 받지 않는다
+    const { payload } = await jwtVerify(token, getSecret(), {
+      algorithms: ["HS256"],
+      requiredClaims: ["exp", "iat"],
+    });
     return payload as unknown as JwtPayload;
   } catch {
     return null;
