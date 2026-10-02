@@ -241,6 +241,7 @@
 - **근거**: [12-timer-overlay-settings--d-light.png](ux-review/12-timer-overlay-settings--d-light.png) · `src/components/timer/OverlaySettings.tsx:336-341, 356-361, 380-433`
 
 #### UX-26. 모든 차트의 축 눈금과 범례 글자가 opacity 0.4라 거의 읽히지 않는다
+- **상태**: 해결 — 5개 차트 축에서 `opacity`를 없애고 눈금 글자를 `--color-muted-foreground`(라이트 4.89:1, 다크 7.11:1), 축선을 `--color-border`로 바꿨다. 범례 글자는 Recharts가 계열 색을 인라인으로 넣어 `wrapperStyle`이 닿지 않으므로 `labelStyle`로 본문색을 지정했다.
 - **심각도**: minor · **영역**: 접근성 / 통계 / 타이머 조작
 - **관찰**: XAxis와 YAxis에 `opacity={0.4}`가 걸려 11px 눈금까지 흐려진다. 대비는 약 1.6~2.5:1(라이트)이다. 통계 범례의 '추가'(초록 글자)는 약 2:1이다.
 - **이유**: 툴팁은 hover나 탭이 필요하므로, 정적으로 값을 읽는 수단은 축뿐이다(WCAG 1.4.3).
