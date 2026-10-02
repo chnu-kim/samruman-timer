@@ -50,7 +50,9 @@ GET /api/auth/login
     &state={random_state}
 ```
 
-- `state` 파라미터(`crypto.randomUUID()`)를 생성하여 `oauth_state` 쿠키(httpOnly, SameSite=Lax, 10분, `Secure` 미지정)에 저장 (CSRF 방지)
+- `state` 파라미터(`crypto.randomUUID()`)를 생성하여 state 쿠키(httpOnly, SameSite=Lax, Path=/, 10분)에 저장 (CSRF 방지). 쿠키 이름은 `oauthStateCookieName()`이 정한다
+  - `NODE_ENV`가 `development`가 아니면 `__Host-oauth_state` + `Secure`. `__Host-` 접두사는 HTTPS에서만 설정되므로 평문 HTTP 응답이 공격자의 state를 심어 로그인 CSRF를 일으킬 수 없다
+  - development(http://localhost)에서는 Secure를 쓸 수 없어 `oauth_state`
 - 선택 쿼리 `next`: 로그인 후 돌아갈 경로. `sanitizeNextPath()`(`src/lib/safe-redirect.ts`)를 통과하면 `oauth_next` 쿠키(httpOnly, SameSite=Lax, `NODE_ENV`가 `development`가 아닐 때 Secure, 10분)에 저장하고, 없거나 허용되지 않으면 이전 시도의 `oauth_next`를 지운다
 
 #### `next` 검증 규칙 (오픈 리다이렉트 방지)
@@ -71,11 +73,11 @@ refresh까지 실패해 `authFetch()`가 세션 만료를 알리면 `SessionExpi
 
 ### 2단계: 콜백 처리 (`/api/auth/callback`)
 
-1. `state` 검증 (`oauth_state` 쿠키와 비교). `code`·`state`가 없거나 다르면 `/login?error=auth_failed`로 리다이렉트
+1. `state` 검증 (state 쿠키와 비교). `code`·`state`가 없거나 다르면 `/login?error=auth_failed`로 리다이렉트
 2. Authorization code로 access token 교환
 3. Access token으로 CHZZK 사용자 정보 조회
 4. DB에서 사용자 조회 또는 생성 (upsert)
-5. Access JWT 생성, 새 `family_id`로 refresh token 발급·DB 저장, `session`·`refresh` 쿠키 설정, `oauth_state` 삭제
+5. Access JWT 생성, 새 `family_id`로 refresh token 발급·DB 저장, `session`·`refresh` 쿠키 설정, state 쿠키 삭제
 6. `oauth_next` 쿠키의 경로로 리다이렉트(다시 검증, 없거나 허용되지 않으면 메인 페이지 `/`). 성공·실패 모두 `oauth_next`를 지운다
 
 토큰 교환·사용자 조회 등에서 예외가 나면 `/login?error=auth_failed`로 보낸다. 로그인 화면은 `error` 쿼리가 있으면 실패 메시지를 보여 준다. `src/app/(auth)/callback/page.tsx`는 실제 콜백을 처리하지 않고 `/`로 보내기만 한다(실제 콜백은 `/api/auth/callback`).
@@ -117,7 +119,7 @@ Content-Type: application/json
 
 | 항목 | 값 |
 |------|-----|
-| 알고리즘 | HS256 |
+| 알고리즘 | HS256 (검증 시 `algorithms: ["HS256"]`로 고정, `exp`·`iat` 필수) |
 | 서명 키 | 환경변수 `JWT_SECRET` |
 | 만료 시간 | 15분 |
 | 쿠키 이름 | `session` (`Max-Age` 900초) |
@@ -207,8 +209,8 @@ CREATE INDEX idx_refresh_tokens_user ON refresh_tokens(user_id);
 ```
 CHZZK_CLIENT_ID=       # CHZZK OAuth 클라이언트 ID
 CHZZK_CLIENT_SECRET=   # CHZZK OAuth 클라이언트 시크릿
-JWT_SECRET=            # JWT 서명 비밀 키
-BASE_URL=              # 서비스 베이스 URL (e.g., https://timer.example.com)
+JWT_SECRET=            # JWT 서명 비밀 키 (32바이트 이상 권장, 짧으면 validateEnv가 경고)
+BASE_URL=              # 서비스 베이스 URL (e.g., https://timer.example.com). URL로 파싱되지 않으면 validateEnv가 실패
 ```
 
 ## 미들웨어 (`src/middleware.ts`)
@@ -225,18 +227,18 @@ Next 16 관례상 `proxy.ts`가 표준이지만 이 프로젝트는 `middleware.
 | GET | `/api/projects/mine` | 내 프로젝트 목록 |
 | GET | `/api/projects/others` | 다른 사용자 프로젝트 목록 |
 | PATCH / DELETE | `/api/projects/[id]` | 프로젝트 수정 / 삭제 |
-| GET | `/api/projects/[id]/stats` | (해당 라우트 없음) |
 | POST | `/api/projects/[id]/timers` | 타이머 생성 |
 | POST | `/api/projects/[id]/goals` | 목표 생성 |
-| PATCH | `/api/projects/[id]/goals/[goalId]` | 목표 수정 |
+| PATCH / DELETE | `/api/projects/[id]/goals/[goalId]` | 목표 취소 / 삭제 |
 | PATCH / DELETE | `/api/timers/[id]` | 타이머 수정 / 삭제 |
 | POST | `/api/timers/[id]/modify` | 시간 증감 |
 | PUT | `/api/timers/[id]/overlay-settings` | 오버레이 설정 저장 |
 | GET | `/api/timers/[id]/stats` | 타이머 통계 |
 | GET | `/api/auth/me` | 현재 사용자 |
-| POST | `/api/auth/logout` | 로그아웃 |
 
-목록에 없는 요청(예: `GET /api/timers/[id]`, `DELETE /api/projects/[id]/goals/[goalId]`)은 인증 없이 통과하며 `x-user-*` 헤더도 주입되지 않는다.
+목록에 없는 요청(예: `GET /api/timers/[id]`)은 인증 없이 통과하며 `x-user-*` 헤더도 주입되지 않는다.
+
+`POST /api/auth/logout`은 일부러 목록에서 뺐다. 아래 로그아웃 절 참고.
 
 ### 미들웨어 동작
 
@@ -276,7 +278,10 @@ POST /api/auth/logout
 
 1. Refresh token의 family를 전체 `REVOKED` 처리 (폐기에 실패해도 로그아웃은 진행)
 2. `session` + `refresh` 두 쿠키를 삭제 (`HttpOnly; SameSite=Lax; Path=/; Max-Age=0`, development 외 `Secure`). 응답 본문은 `{ "data": null }`
-3. 보호 라우트라 미들웨어를 먼저 거친다. Access token이 유효하면 그대로 라우트가 실행된다. Access token이 만료됐거나 없을 때는 refresh 쿠키가 유효하면 미들웨어가 갱신한 뒤 라우트가 원래 refresh 쿠키의 family를 폐기하고, refresh 쿠키가 없거나 무효하면 미들웨어에서 401로 끝나 쿠키가 지워지지 않는다
+3. `session`과 `refresh` 쿠키가 모두 없으면 401. 하나라도 있으면 토큰이 무효해도 쿠키를 지운다
+4. 보호 라우트가 아니므로 미들웨어가 rotation하지 않는다. 보호 라우트였을 때는 access 만료 상태의 로그아웃에서 미들웨어가 새로 심은 `session` 쿠키가 OpenNext의 쿠키 병합 순서 때문에 라우트의 삭제 쿠키를 덮어써 로그인이 유지됐다
+
+이미 발급된 access JWT는 무상태라 로그아웃 뒤에도 만료(최대 15분)까지 유효하다. 같은 브라우저에서는 쿠키가 지워지므로 영향이 없고, 로그아웃 전에 쿠키 값을 복사해 둔 경우에만 해당한다. 즉시 폐기가 필요해지면 JWT에 세션 세대 값을 넣고 미들웨어에서 대조한다.
 
 클라이언트(`Header`)는 결과와 무관하게 `/login`으로 이동한다.
 

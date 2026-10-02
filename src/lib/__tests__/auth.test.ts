@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
+import { SignJWT } from "jose";
 import {
   signJwt,
   verifyJwt,
@@ -72,6 +73,25 @@ describe("JWT auth", () => {
     vi.stubEnv("JWT_SECRET", "different-secret-key-at-least-32-chars!");
     const result = await verifyJwt(token);
     expect(result).toBeNull();
+  });
+
+  it("HS256이 아닌 알고리즘으로 서명된 토큰은 거부한다", async () => {
+    const key = new TextEncoder().encode("test-secret-key-at-least-32-chars-long!");
+    const token = await new SignJWT({ userId: "u", chzzkUserId: "c", nickname: "n" })
+      .setProtectedHeader({ alg: "HS512" })
+      .setIssuedAt()
+      .setExpirationTime("15m")
+      .sign(key);
+    expect(await verifyJwt(token)).toBeNull();
+  });
+
+  it("exp가 없는 토큰은 거부한다", async () => {
+    const key = new TextEncoder().encode("test-secret-key-at-least-32-chars-long!");
+    const token = await new SignJWT({ userId: "u", chzzkUserId: "c", nickname: "n" })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .sign(key);
+    expect(await verifyJwt(token)).toBeNull();
   });
 
   it("JWT_SECRET 미설정 시 에러 발생", async () => {

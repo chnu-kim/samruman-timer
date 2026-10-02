@@ -45,6 +45,14 @@ describe("GET /api/timers/[id]/graph", () => {
     expect(body.error.code).toBe("NOT_FOUND");
   });
 
+  it("삭제된 타이머는 존재 확인에서 제외해 404로 처리한다", async () => {
+    db._stmt.first.mockResolvedValue(null);
+    const res = await callGet("?mode=remaining");
+    expect(res.status).toBe(404);
+    const sql = String(db.prepare.mock.calls[0][0]);
+    expect(sql).toContain("status != 'DELETED'");
+  });
+
   describe("mode=remaining", () => {
     it("포인트 데이터를 반환한다", async () => {
       db._stmt.first.mockResolvedValueOnce({ id: "timer-1" });

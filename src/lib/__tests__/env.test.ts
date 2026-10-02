@@ -52,4 +52,24 @@ describe("validateEnv", () => {
     vi.stubEnv("JWT_SECRET", "");
     expect(() => validateEnv()).toThrow("JWT_SECRET");
   });
+
+  it("BASE_URL이 URL 형식이 아니면 에러", () => {
+    vi.stubEnv("BASE_URL", "not a url");
+    expect(() => validateEnv()).toThrow("BASE_URL");
+  });
+
+  it("JWT_SECRET이 32바이트보다 짧으면 경고만 남기고 통과", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(() => validateEnv()).not.toThrow();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("JWT_SECRET"));
+    warn.mockRestore();
+  });
+
+  it("JWT_SECRET이 32바이트 이상이면 경고하지 않는다", () => {
+    vi.stubEnv("JWT_SECRET", "x".repeat(32));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    validateEnv();
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
 });

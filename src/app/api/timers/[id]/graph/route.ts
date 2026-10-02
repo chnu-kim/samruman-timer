@@ -21,9 +21,9 @@ export const GET = withErrorHandler(async (
 
   const db = await getDB();
 
-  // 타이머 존재 확인
+  // 타이머 존재 확인 — 삭제된 타이머의 이력(후원자 닉네임 포함)은 공개하지 않는다
   const timer = await db
-    .prepare("SELECT id FROM timers WHERE id = ?")
+    .prepare("SELECT id FROM timers WHERE id = ? AND status != 'DELETED'")
     .bind(timerId)
     .first();
 

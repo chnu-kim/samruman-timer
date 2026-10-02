@@ -6,6 +6,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { formatTime } from "@/components/timer/CountdownDisplay";
 import { detectTimerChange, isStaleResponse, type TimerSnapshot } from "@/lib/overlay-animation";
 import { formatDateTime } from "@/lib/utils";
+import { isOverlayBackground, isOverlayColor } from "@/lib/overlay-style";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import type { ApiSuccessResponse, TimerDetailResponse } from "@/types";
 
@@ -23,21 +24,26 @@ function isValidPosition(value: string): value is Position {
   return value in positionStyles;
 }
 
+function colorParam(value: string | null, fallback: string): string {
+  return value && isOverlayColor(value) ? value : fallback;
+}
+
 export default function TimerOverlayPage() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const timerId = params.id;
 
   const fontSize = searchParams.get("fontSize") || "72";
-  const color = searchParams.get("color") || "#ffffff";
-  const bg = searchParams.get("bg") || "transparent";
+  const color = colorParam(searchParams.get("color"), "#ffffff");
+  const bgParam = searchParams.get("bg");
+  const bg = bgParam && isOverlayBackground(bgParam) ? bgParam : "transparent";
   const showTitle = searchParams.get("showTitle") === "true";
   const showEndDate = searchParams.get("showEndDate") === "true";
   const shadow = searchParams.get("shadow") !== "false"; // 기본 활성화: OBS에서 가독성 확보
   const positionParam = searchParams.get("position") || "center";
   const position: Position = isValidPosition(positionParam) ? positionParam : "center";
-  const urgentColor = searchParams.get("urgentColor") || "#f59e0b"; // amber-500
-  const criticalColor = searchParams.get("criticalColor") || "#ef4444"; // red-500
+  const urgentColor = colorParam(searchParams.get("urgentColor"), "#f59e0b"); // amber-500
+  const criticalColor = colorParam(searchParams.get("criticalColor"), "#ef4444"); // red-500
 
   // 기본 활성화. 끄면 변경 효과와 긴급·만료 펄스를 모두 끈다(긴급함은 색으로 전달된다)
   const animation = searchParams.get("animation") !== "false";
@@ -58,7 +64,8 @@ export default function TimerOverlayPage() {
 
   // 오버레이 모드: 헤더/푸터 숨기고 body 배경 투명 처리
   useEffect(() => {
-    document.body.style.background = bg;
+    // bg는 문자열 보간 없이 CSSOM으로만 넣는다
+    document.body.style.setProperty("background", bg, "important");
     document.body.classList.add("overlay-mode");
     const style = document.createElement("style");
     style.id = "overlay-style";
@@ -66,13 +73,12 @@ export default function TimerOverlayPage() {
       .overlay-mode header, .overlay-mode footer, .overlay-mode main {
         display: none !important;
       }
-      .overlay-mode { background: ${bg} !important; }
     `;
     document.head.appendChild(style);
 
     return () => {
       document.body.classList.remove("overlay-mode");
-      document.body.style.background = "";
+      document.body.style.removeProperty("background");
       document.getElementById("overlay-style")?.remove();
     };
   }, [bg]);

@@ -178,7 +178,7 @@ open-next.config.ts                     — @opennextjs/cloudflare 설정 (기�
 
 ```
 클라이언트 → GET /api/auth/login[?next=경로]
-  → 302 → CHZZK OAuth 동의 (oauth_state, oauth_next 쿠키 저장)
+  → 302 → CHZZK OAuth 동의 (state·oauth_next 쿠키 저장)
   → 302 → /api/auth/callback?code=xxx&state=yyy
   → 서버: state 검증 → 토큰 교환 → 사용자 정보 조회/생성
   → 서버: access JWT + refresh token 발급 → session, refresh httpOnly 쿠키 설정

@@ -53,7 +53,7 @@ describe("GET /api/auth/callback", () => {
   it("state 불일치 → 에러 리다이렉트", async () => {
     const req = createCallbackReq(
       { code: "auth-code", state: "state-1" },
-      { oauth_state: "state-different" }
+      { "__Host-oauth_state": "state-different" }
     );
     const res = await GET(req as never);
     expect(res.status).toBe(307);
@@ -63,7 +63,7 @@ describe("GET /api/auth/callback", () => {
   it("code 없음 → 에러 리다이렉트", async () => {
     const req = createCallbackReq(
       { state: "state-1" },
-      { oauth_state: "state-1" }
+      { "__Host-oauth_state": "state-1" }
     );
     const res = await GET(req as never);
     expect(res.status).toBe(307);
@@ -86,7 +86,7 @@ describe("GET /api/auth/callback", () => {
 
     const req = createCallbackReq(
       { code: "valid-code", state: "state-1" },
-      { oauth_state: "state-1" }
+      { "__Host-oauth_state": "state-1" }
     );
     const res = await GET(req as never);
 
@@ -121,7 +121,7 @@ describe("GET /api/auth/callback", () => {
 
     const req = createCallbackReq(
       { code: "valid-code", state: "state-1" },
-      { oauth_state: "state-1" }
+      { "__Host-oauth_state": "state-1" }
     );
     const res = await GET(req as never);
 
@@ -136,7 +136,7 @@ describe("GET /api/auth/callback", () => {
 
     const req = createCallbackReq(
       { code: "bad-code", state: "state-1" },
-      { oauth_state: "state-1" }
+      { "__Host-oauth_state": "state-1" }
     );
     const res = await GET(req as never);
 
@@ -173,7 +173,7 @@ describe("GET /api/auth/callback — next 리다이렉트", () => {
   function successReq(next: string) {
     return createCallbackReq(
       { code: "valid-code", state: "state-1" },
-      { oauth_state: "state-1", oauth_next: encodeURIComponent(next) }
+      { "__Host-oauth_state": "state-1", oauth_next: encodeURIComponent(next) }
     );
   }
 
@@ -206,7 +206,7 @@ describe("GET /api/auth/callback — next 리다이렉트", () => {
   it("state가 맞지 않으면 next를 쓰지 않고 oauth_next를 지운다", async () => {
     const req = createCallbackReq(
       { code: "valid-code", state: "state-1" },
-      { oauth_state: "other", oauth_next: encodeURIComponent("/timers/abc") }
+      { "__Host-oauth_state": "other", oauth_next: encodeURIComponent("/timers/abc") }
     );
     const res = await GET(req as never);
     expect(res.headers.get("Location")).toBe("http://localhost:3000/login?error=auth_failed");
