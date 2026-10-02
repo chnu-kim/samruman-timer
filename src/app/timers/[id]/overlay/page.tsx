@@ -38,7 +38,8 @@ export default function TimerOverlayPage() {
   const urgentColor = searchParams.get("urgentColor") || "#f59e0b"; // amber-500
   const criticalColor = searchParams.get("criticalColor") || "#ef4444"; // red-500
 
-  const animation = searchParams.get("animation") !== "false"; // 기본 활성화
+  // 기본 활성화. 끄면 변경 효과와 긴급·만료 펄스를 모두 끈다(긴급함은 색으로 전달된다)
+  const animation = searchParams.get("animation") !== "false";
   const [timer, setTimer] = useState<TimerDetailResponse | null>(null);
   const [displayed, setDisplayed] = useState(0);
   const [mounted, setMounted] = useState(false);
@@ -224,13 +225,15 @@ export default function TimerOverlayPage() {
                 ? { animation: "overlay-flash-add 0.6s ease-out" }
                 : animClass === "overlay-anim-subtract"
                   ? { animation: "overlay-flash-subtract 0.5s ease-out" }
-                  : isExpired
-                    ? { animation: "pulse-expired 2s ease-in-out infinite" }
-                    : isCritical
-                      ? { animation: "pulse-urgent-fast 0.8s ease-in-out infinite" }
-                      : isUrgent
-                        ? { animation: "pulse-urgent-slow 2s ease-in-out infinite" }
-                        : {}),
+                  : !animation
+                    ? {}
+                    : isExpired
+                      ? { animation: "pulse-expired 2s ease-in-out infinite" }
+                      : isCritical
+                        ? { animation: "pulse-urgent-fast 0.8s ease-in-out infinite" }
+                        : isUrgent
+                          ? { animation: "pulse-urgent-slow 2s ease-in-out infinite" }
+                          : {}),
             }}
             onAnimationEnd={() => {
               if (animClass) setAnimClass(null);
@@ -267,7 +270,7 @@ export default function TimerOverlayPage() {
                 fontWeight: 600,
                 lineHeight: 1,
                 textShadow,
-                animation: "pulse-expired 2s ease-in-out infinite",
+                animation: animation ? "pulse-expired 2s ease-in-out infinite" : undefined,
               }}
             >
               만료됨

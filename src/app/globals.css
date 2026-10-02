@@ -121,10 +121,11 @@ body {
   100% { transform: translateX(0); }
 }
 
+/* 요소의 인라인 translateX(-50%)를 덮어쓰므로 가로 중앙 정렬을 키프레임에도 포함한다 */
 @keyframes overlay-float-up {
-  0% { opacity: 1; transform: translateY(0); }
+  0% { opacity: 1; transform: translate(-50%, 0); }
   70% { opacity: 1; }
-  100% { opacity: 0; transform: translateY(-60px); }
+  100% { opacity: 0; transform: translate(-50%, -60px); }
 }
 
 .animate-fade-in {
