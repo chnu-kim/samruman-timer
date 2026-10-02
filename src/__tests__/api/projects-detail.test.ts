@@ -92,6 +92,51 @@ describe("PATCH /api/projects/[id]", () => {
     expect(res.status).toBe(404);
   });
 
+  it("name 100자 초과 → 400", async () => {
+    db._stmt.first.mockResolvedValue({ id: "proj-1", owner_user_id: "user-1", status: "ACTIVE" });
+    const req = createPatchRequest("/api/projects/proj-1", { name: "a".repeat(101) }, {
+      "x-user-id": "user-1",
+    });
+    const res = await PATCH(req as never, makeParams() as never);
+    expect(res.status).toBe(400);
+  });
+
+  it("name가 문자열이 아님 → 400", async () => {
+    db._stmt.first.mockResolvedValue({ id: "proj-1", owner_user_id: "user-1", status: "ACTIVE" });
+    const req = createPatchRequest("/api/projects/proj-1", { name: 123 }, {
+      "x-user-id": "user-1",
+    });
+    const res = await PATCH(req as never, makeParams() as never);
+    expect(res.status).toBe(400);
+  });
+
+  it("description 500자 초과 → 400", async () => {
+    db._stmt.first.mockResolvedValue({ id: "proj-1", owner_user_id: "user-1", status: "ACTIVE" });
+    const req = createPatchRequest("/api/projects/proj-1", { description: "a".repeat(501) }, {
+      "x-user-id": "user-1",
+    });
+    const res = await PATCH(req as never, makeParams() as never);
+    expect(res.status).toBe(400);
+  });
+
+  it("본문이 객체가 아님 → 400", async () => {
+    db._stmt.first.mockResolvedValue({ id: "proj-1", owner_user_id: "user-1", status: "ACTIVE" });
+    const req = createPatchRequest("/api/projects/proj-1", ["x"], {
+      "x-user-id": "user-1",
+    });
+    const res = await PATCH(req as never, makeParams() as never);
+    expect(res.status).toBe(400);
+  });
+
+  it("본문이 null → 400", async () => {
+    db._stmt.first.mockResolvedValue({ id: "proj-1", owner_user_id: "user-1", status: "ACTIVE" });
+    const req = createPatchRequest("/api/projects/proj-1", null, {
+      "x-user-id": "user-1",
+    });
+    const res = await PATCH(req as never, makeParams() as never);
+    expect(res.status).toBe(400);
+  });
+
   it("name 빈 문자열 → 400", async () => {
     db._stmt.first.mockResolvedValue({ id: "proj-1", owner_user_id: "user-1", status: "ACTIVE" });
     const req = createPatchRequest("/api/projects/proj-1", { name: "" }, {
