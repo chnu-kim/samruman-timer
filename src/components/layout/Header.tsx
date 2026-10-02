@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { LogoIcon, LogOutIcon } from "@/components/ui/Icons";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { loginUrlWithNext } from "@/lib/safe-redirect";
 import { cn } from "@/lib/utils";
 import type { MeResponse } from "@/types";
 
@@ -28,6 +29,15 @@ export function Header({ initialUser }: HeaderProps = {}) {
       .catch(() => {})
       .finally(() => setLoaded(true));
   }, [initialUser]);
+
+  // 헤더는 레이아웃에 있어 페이지 이동 때 다시 그려지지 않으므로, 누르는 시점의 경로로 next를 만든다
+  function handleLoginClick(e: React.MouseEvent<HTMLAnchorElement>) {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const url = loginUrlWithNext(window.location.pathname + window.location.search);
+    if (url === "/login") return;
+    e.preventDefault();
+    window.location.href = url;
+  }
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -70,6 +80,7 @@ export function Header({ initialUser }: HeaderProps = {}) {
           ) : (
             <Link
               href="/login"
+              onClick={handleLoginClick}
               className="inline-flex items-center justify-center rounded-lg border border-border bg-transparent px-3 h-8 text-sm font-medium hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               로그인
