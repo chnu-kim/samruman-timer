@@ -9,7 +9,7 @@ import {
   Tooltip,
   CartesianGrid,
 } from "recharts";
-import { cn, formatHoursFromSeconds, formatTimestampShort } from "@/lib/utils";
+import { cn, formatAxisSeconds, formatHoursFromSeconds, formatTimestampShort } from "@/lib/utils";
 import type { RemainingGraphPoint } from "@/types";
 
 interface RemainingChartProps {
@@ -26,6 +26,8 @@ export function RemainingChart({ points, className }: RemainingChartProps) {
     );
   }
 
+  const maxSeconds = Math.max(...points.map((p) => p.remainingSeconds));
+
   return (
     <div className={cn("h-64 w-full", className)} role="img" aria-label="잔여 시간 추이 그래프">
       <ResponsiveContainer width="100%" height="100%">
@@ -38,10 +40,10 @@ export function RemainingChart({ points, className }: RemainingChartProps) {
             stroke="var(--color-border)"
           />
           <YAxis
-            tickFormatter={(v: number) => `${(v / 3600).toFixed(0)}h`}
+            tickFormatter={(v: number) => formatAxisSeconds(v, maxSeconds)}
             tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
             stroke="var(--color-border)"
-            width={40}
+            width={44}
           />
           <Tooltip
             labelFormatter={(label) => formatTimestampShort(String(label))}

@@ -225,6 +225,7 @@
 - **근거**: [12-timer-overlay-settings--d-light.png](ux-review/12-timer-overlay-settings--d-light.png), [12-timer-overlay-settings--m-light.png](ux-review/12-timer-overlay-settings--m-light.png) · `src/components/timer/OverlaySettings.tsx:250, 468-544`
 
 #### UX-22. 오버레이 미리보기가 고정 높이 200px에 실제 크기로 렌더되어 1080p 출력과 비율이 다르다
+- **상태**: 보류 — 구조 변경 필요(1920x1080 iframe 스케일링과 ResizeObserver), 수요 확인 후. URL을 다시 붙여넣으라는 안내(UX-20)로 먼저 대응했다.
 - **심각도**: minor · **영역**: 오버레이
 - **관찰**: 620x198 iframe이 축소 없이 1:1로 그린다. 96px이면 미리보기를 거의 다 채우지만 실제 1080p 화면에서는 높이의 약 9%다. 200px이면 숫자가 928px로 넘쳐 잘린다.
 - **이유**: 크기와 위치를 고르는 유일한 도구가 비율을 왜곡한다.
@@ -264,6 +265,7 @@
 - **근거**: [11-timer-running-owner--d-light.png](ux-review/11-timer-running-owner--d-light.png), [19-timer-stats--d-light.png](ux-review/19-timer-stats--d-light.png) · `src/components/graph/RemainingChart.tsx:35-48`, `CumulativeChart.tsx:40-46`, `FrequencyChart.tsx:40-46`, `src/components/stats/HourlyActivityChart.tsx:44-52, 69-73`, `DailyActivityChart.tsx:51-58`
 
 #### UX-27. 잔여·누적 그래프의 Y축 눈금이 정수 시간으로 반올림되어 중복되거나 틀린 라벨이 붙는다
+- **상태**: 해결 — Y축 눈금을 `formatAxisSeconds`로 바꿨다. 축 최댓값이 2시간 미만이면 분, 아니면 시간 단위이고 소수 한 자리까지 쓴다(5.5h, 16.7m). 라벨이 길어진 만큼 축 폭을 40→44px로 늘렸다.
 - **심각도**: minor · **영역**: 타이머 상태 / 모바일
 - **관찰**: `${(v/3600).toFixed(0)}h` 때문에 15번 화면은 '3h, 3h, 2h, 1h, 0h', 16번은 '2h, 2h, 1h, 1h, 0h', 17번은 '1h, 1h, 1h, 0h, 0h'로 나온다. 11번의 '6h, 17h' 눈금은 실제로는 5.5h, 16.5h다.
 - **이유**: 잔여 시간이 짧은 만료 임박 타이머일수록 축이 의미를 잃는다.
@@ -295,6 +297,7 @@
 - **근거**: [07-project-detail-running-owner--m-light.png](ux-review/07-project-detail-running-owner--m-light.png), [10-project-detail-nonowner--m-light.png](ux-review/10-project-detail-nonowner--m-light.png) · `src/components/ui/Badge.tsx:25-27`, `src/app/projects/[id]/page.tsx:423-433`
 
 #### UX-31. 소유자 화면의 h1에 `role="button"`이 붙어 heading 의미가 사라진다
+- **상태**: 해결 — h1/p에서 role, tabIndex, aria-label, onKeyDown을 빼고 onClick만 남겼다. 편집 버튼 이름은 prop 없이 태그로 구분해 '제목 편집'(h1), '설명 편집'(p)이다(호출부 4곳 모두 이 구분과 맞는다).
 - **심각도**: minor · **영역**: 접근성
 - **관찰**: 편집 가능 상태에서 `<h1 role="button" aria-label="… — 클릭하여 편집">`로 렌더된다. 그래서 소유자 페이지에는 접근성 트리상 h1이 없다. 옆에 '편집' 버튼이 따로 있어 탭 순서에도 두 번 들어가고, 제목과 설명 버튼 이름이 둘 다 '편집'이다.
 - **이유**: 스크린리더의 heading 탐색으로 페이지 제목을 찾을 수 없다(WCAG 1.3.1).
@@ -302,6 +305,7 @@
 - **근거**: [07-project-detail-running-owner--d-light.png](ux-review/07-project-detail-running-owner--d-light.png), [11-timer-running-owner--d-light.png](ux-review/11-timer-running-owner--d-light.png) · `src/components/ui/EditableText.tsx:121-138`
 
 #### UX-32. 편집 연필 아이콘이 hover나 focus 때만 보여 터치 기기에서는 편집 가능 여부를 알 수 없다
+- **상태**: 해결 — 편집 버튼에 `[@media(hover:none)]:opacity-100`을 더했다.
 - **심각도**: minor · **영역**: 프로젝트 상세
 - **관찰**: 아이콘이 `opacity-0 group-hover:opacity-100`이라 모바일 캡처의 제목과 설명 옆에 편집 단서가 없다.
 - **이유**: 소유자가 이름과 설명을 고칠 수 있다는 것을 발견하기 어렵다.
@@ -341,6 +345,7 @@
 - **근거**: [22-project-notfound--d-light.png](ux-review/22-project-notfound--d-light.png), [22-project-notfound--m-light.png](ux-review/22-project-notfound--m-light.png), [23-timer-notfound--d-light.png](ux-review/23-timer-notfound--d-light.png) · `src/app/projects/[id]/page.tsx:200-209, 302-309`, `src/app/timers/[id]/page.tsx:142-146, 350-356`, `src/app/timers/[id]/stats/page.tsx:73-75`
 
 #### UX-37. 프로젝트 카드에 타이머 유무나 상태가 없어 진행 중인 타이머를 목록에서 고를 수 없다
+- **상태**: 해결 — 최소안. 이미 내려오는 `timerCount`가 0이면 카드 메타 줄에 '타이머 없음'을 표시한다. 상태 배지(목록 API 변경)는 하지 않았다. `docs/UI.md:8`도 실제 표시에 맞게 고쳤다.
 - **심각도**: minor · **영역**: 인증·프로젝트 목록 / 모바일
 - **관찰**: 4개 카드(타이머 없음, 예약, 실행, 만료)가 시각적으로 똑같다. API의 `ProjectListItem.timerCount`는 카드에서 쓰지 않는다. `docs/UI.md:8`은 카드가 '타이머 수'를 보여 준다고 적고 있어 코드와 어긋난다.
 - **이유**: 방송 중 타이머로 급히 돌아가려면 이름을 기억하거나 카드를 하나씩 열어 봐야 한다.
@@ -348,6 +353,7 @@
 - **근거**: [03-projects-mine--d-light.png](ux-review/03-projects-mine--d-light.png), [02-projects-loggedout--d-light.png](ux-review/02-projects-loggedout--d-light.png) · `src/components/project/ProjectCard.tsx:12-33`, `src/types/index.ts:126-133`, `docs/UI.md:8`
 
 #### UX-38. `cn()`이 단순 문자열 결합이라 아이콘 크기 지정(`w-4 h-4`)이 무시되고, 검색 아이콘이 플레이스홀더에 붙는다
+- **상태**: 해결 — 의존성 없이 Icons.tsx의 `iconClass()`가 className에 접두사 없는 `w-`/`h-`/`size-`가 있으면 그 축의 기본값(w-6, h-6)을 붙이지 않는다. `cn`의 전역 동작은 그대로다(`sm:w-5`만 있으면 기본값을 유지).
 - **심각도**: minor · **영역**: 인증·프로젝트 목록 / 전역
 - **관찰**: 아이콘 기본값 `w-6 h-6`과 넘겨준 `w-4 h-4`가 함께 붙고, CSS 순서상 w-6가 이긴다. 그래서 검색 아이콘이 24px이 되어 `pl-9` 입력의 텍스트 시작점과 맞닿는다. h-8 버튼 안의 + 아이콘도 24px이다.
 - **이유**: 코드가 의도한 크기와 실제 렌더가 다르고, 이 문제가 아이콘을 쓰는 모든 곳에 퍼져 있다.
@@ -355,6 +361,7 @@
 - **근거**: [03-projects-mine--d-light.png](ux-review/03-projects-mine--d-light.png), [03-projects-mine--m-dark.png](ux-review/03-projects-mine--m-dark.png), [06-projects-empty-newuser--m-light.png](ux-review/06-projects-empty-newuser--m-light.png) · `src/lib/utils.ts:1-3`, `src/components/ui/Icons.tsx:7, 113`, `src/app/projects/page.tsx:160, 228, 235`
 
 #### UX-39. 프로젝트 탭을 화살표 키로 바꾸면 선택만 이동하고 포커스는 이전 탭(tabIndex=-1)에 남는다
+- **상태**: 해결 — 두 탭의 키 핸들러를 하나로 합치고 새 탭에 `focus()`를 호출한다. 프로젝트 상세의 목표 탭(`src/app/projects/[id]/page.tsx`)에도 같은 패턴이 있으나 이 지적의 범위 밖이라 두었다.
 - **심각도**: minor · **영역**: 접근성
 - **관찰**: onKeyDown은 `setActiveTab`만 호출하고 `focus()`를 옮기지 않는다.
 - **이유**: WAI-ARIA Tabs 패턴과 다르게 포커스와 선택이 갈라진다.
@@ -362,6 +369,7 @@
 - **근거**: `src/app/projects/page.tsx:185-192, 206-213`
 
 #### UX-40. 목표 취소 확인창에 '취소'와 '취소하기' 버튼이 나란히 있다
+- **상태**: 해결 — 목표 취소 확인창에만 `cancelLabel="돌아가기"`를 넘겼다. 확인 라벨 '취소하기'는 그대로다.
 - **심각도**: minor · **영역**: 일관성 / 프로젝트 상세
 - **관찰**: `confirmLabel="취소하기"`만 넘기고 cancelLabel은 기본값 '취소'를 쓴다. 확인 창 문구는 '취소된 목표는 다시 활성화할 수 없습니다'라고 경고한다.
 - **이유**: 물러서려는 사람이 되돌릴 수 없는 버튼을 누를 수 있다. 버튼 색(danger)이 달라서 위험은 중간 정도다.
@@ -369,6 +377,7 @@
 - **근거**: [07-project-detail-running-owner--d-light.png](ux-review/07-project-detail-running-owner--d-light.png) · `src/components/goal/GoalCard.tsx:184-192`, `src/components/ui/ConfirmDialog.tsx:21-22`
 
 #### UX-41. 목표 탭 '완료'에 실패하거나 취소된 목표도 들어 있다
+- **상태**: 해결 — 탭 이름을 '종료', 빈 상태를 '종료된 목표가 없습니다.'로 바꿨다. 내부 식별자(`completed`)와 '액션'→'유형' 같은 선택 용어 통일은 그대로다.
 - **심각도**: minor · **영역**: 일관성(카피)
 - **관찰**: '완료' 탭은 `inactiveGoals`(달성, 실패, 취소)를 보여 주는데, 배지는 '달성', '실패', '취소'라고 쓴다.
 - **이유**: '완료'라는 이름이 실패한 목표까지 성공한 것처럼 묶는다.
@@ -376,6 +385,7 @@
 - **근거**: [07-project-detail-running-owner--d-light.png](ux-review/07-project-detail-running-owner--d-light.png) · `src/app/projects/[id]/page.tsx:122, 172`, `src/components/goal/GoalCard.tsx:20-25`
 
 #### UX-42. 모든 페이지의 브라우저 탭 제목이 '삼루먼타이머'로 같다
+- **상태**: 해결 — 데이터를 불러온 뒤 `useDocumentTitle` 훅이 '<타이머 제목> · 삼루먼타이머', '<제목> 통계 · 삼루먼타이머', 'OBS 오버레이 · <제목>', '<프로젝트 이름> · 삼루먼타이머'로 바꾼다. 클라이언트 이동 때 루트 metadata가 다시 적용되지 않으므로 언마운트하면 이전 제목으로 되돌린다.
 - **심각도**: minor · **영역**: 정보구조
 - **관찰**: metadata가 루트 레이아웃에만 정적으로 있고, 페이지별 `document.title`이나 `generateMetadata`가 없다.
 - **이유**: 조작 탭, 통계 탭, 오버레이 탭을 동시에 열어 둔 스트리머가 탭을 구분할 수 없다.
@@ -383,6 +393,7 @@
 - **근거**: [11-timer-running-owner--d-light.png](ux-review/11-timer-running-owner--d-light.png), [19-timer-stats--d-light.png](ux-review/19-timer-stats--d-light.png) · `src/app/layout.tsx:20-23`
 
 #### UX-43. 예약 타이머를 조기 시작하거나 시작 시각을 바꿀 방법이 없다
+- **상태**: 해결 — 최소안. 예약 안내에 '시작 시각을 바꾸려면 타이머를 삭제한 뒤 다시 만드세요.'를 덧붙였다(소유자 삭제 버튼과 DELETE API가 SCHEDULED에서도 동작함을 확인). '지금 시작'은 수요 확인 후 검토한다.
 - **심각도**: minor · **영역**: 타이머 상태
 - **관찰**: SCHEDULED 패널에는 안내 문구만 있다. PATCH는 title과 description만 받는다. 남은 수단은 삭제 후 재생성이다. 예약 타이머에는 로그가 없어 잃는 데이터는 없다.
 - **이유**: 방송이 일찍 시작되면 폼을 다시 채워야 한다.
@@ -424,6 +435,12 @@
 | UX-72 | 분과 초 입력이 59를 넘으면 안내 없이 59로 잘린다 · 피드백 | '90'을 치면 59가 된다. 확인 버튼에 '(59분)'으로 표시되기는 한다. | 입력칸 옆에 '0~59' 힌트를 둔다. | `src/components/timer/TimerControls.tsx:357-373` |
 | UX-73 | 만료와 활성화 로그의 행위자가 영문 'system' 그대로 나온다 · 카피 | 시청자 열에 'system'이라는 닉네임이 있는 것처럼 읽힌다. | 표시할 때 actorUserId가 null이고 EXPIRE나 ACTIVATE이면 '자동'으로 바꿔 보여 준다(DB 값은 유지). | [16-timer-expired--m-light.png](ux-review/16-timer-expired--m-light.png) · `src/lib/timer.ts:36, 77`, `src/app/timers/[id]/page.tsx:551, 594` |
 | UX-74 | 세션이 만료되어 다시 로그인하면 항상 목록으로 간다 · 오류 처리 | 갱신이 실패할 때만 발생하므로 드물지만, 원래 보던 타이머로 다시 찾아가야 한다. | `/login?next=<경로>`로 보내고, 콜백에서 `/^\/(?!\/|\\)/`에 맞는 상대 경로만 허용해 리다이렉트한다. | `src/components/providers/SessionExpiredHandler.tsx:12-16`, `src/app/api/auth/callback/route.ts:80` |
+
+### 추가 수정
+
+리뷰 문서 밖에서 발견해 '기타 minor' 묶음과 함께 고친 결함이다.
+
+- **단축키가 Cmd/Ctrl/Alt 조합을 가로챘다** — 해결. `useKeyboardShortcuts`가 수정자 키를 X에서만 걸러, Cmd+1(브라우저 탭 전환)이 1시간 추가를 보내고 Cmd+R 새로고침이 막혔다. 모든 단축키에서 Cmd/Ctrl/Alt 조합을 무시하고(Shift는 '?' 입력에 필요해 유지), R/G도 X처럼 `e.code`(KeyR/KeyG)로 매칭해 한국어 IME에서 동작하게 했다. `src/hooks/useKeyboardShortcuts.ts`
 
 ## 5. 우선순위 제안
 

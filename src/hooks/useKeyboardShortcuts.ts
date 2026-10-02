@@ -23,10 +23,6 @@ const SHORTCUTS: Record<string, ShortcutAction> = {
   "5": { presetSeconds: 18000 },
   "0": { presetSeconds: 36000 },
   "?": { showHelp: true },
-  "r": { refresh: true },
-  "R": { refresh: true },
-  "g": { toggleGraph: true },
-  "G": { toggleGraph: true },
 };
 
 // 물리 키(e.code)로 매칭하는 단축키. 한국어 IME가 켜져 있으면 e.key가
@@ -34,6 +30,8 @@ const SHORTCUTS: Record<string, ShortcutAction> = {
 // Tab은 포커스 이동에 써야 하므로 단축키로 쓰지 않는다.
 const CODE_SHORTCUTS: Record<string, ShortcutAction> = {
   KeyX: { toggleAction: true },
+  KeyR: { refresh: true },
+  KeyG: { toggleGraph: true },
 };
 
 export function useKeyboardShortcuts({ enabled, onPreset, onToggleAction, onRefresh, onToggleGraph }: UseKeyboardShortcutsOptions) {
@@ -48,12 +46,11 @@ export function useKeyboardShortcuts({ enabled, onPreset, onToggleAction, onRefr
       return;
     }
 
-    let action: ShortcutAction | undefined = SHORTCUTS[e.key];
-    if (!action) {
-      // Cmd/Ctrl/Alt 조합(잘라내기 등)이 추가/차감 방향을 몰래 뒤집지 않게 한다
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-      action = CODE_SHORTCUTS[e.code];
-    }
+    // Cmd/Ctrl/Alt 조합은 브라우저·OS 단축키(Cmd+1 탭 전환, Cmd+R 새로고침, Cmd+X 잘라내기)에 맡긴다.
+    // Shift는 '?' 입력에 필요하므로 거르지 않는다.
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+    const action: ShortcutAction | undefined = SHORTCUTS[e.key] ?? CODE_SHORTCUTS[e.code];
     if (!action) return;
 
     // 도움말이 열려 있는 동안에는 시간을 바꾸는 단축키를 막는다('?', R, G는 유지)

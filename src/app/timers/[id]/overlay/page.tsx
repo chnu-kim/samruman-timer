@@ -6,6 +6,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { formatTime } from "@/components/timer/CountdownDisplay";
 import { detectTimerChange, isStaleResponse, type TimerSnapshot } from "@/lib/overlay-animation";
 import { formatDateTime } from "@/lib/utils";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import type { ApiSuccessResponse, TimerDetailResponse } from "@/types";
 
 type Position = "center" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
@@ -47,6 +48,7 @@ export default function TimerOverlayPage() {
   const [floatingText, setFloatingText] = useState<string | null>(null);
   const [floatingKey, setFloatingKey] = useState(0);
   const prevTimerRef = useRef<TimerSnapshot | null>(null);
+  useDocumentTitle(timer ? `OBS 오버레이 · ${timer.title}` : null);
 
   useEffect(() => {
     setMounted(true);

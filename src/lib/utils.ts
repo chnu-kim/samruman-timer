@@ -7,6 +7,18 @@ export function formatHoursFromSeconds(seconds: number): string {
   return `${h}시간`;
 }
 
+/**
+ * 그래프 Y축 눈금(초)을 읽을 수 있는 단위로 바꾼다.
+ * 축 최댓값이 2시간 미만이면 분, 아니면 시간 단위이고, 소수 한 자리까지 쓴다.
+ * 정수로 반올림하면 '1h, 1h, 0h'처럼 눈금 라벨이 겹친다.
+ */
+export function formatAxisSeconds(seconds: number, maxSeconds: number): string {
+  if (maxSeconds < 7200) {
+    return `${Number((seconds / 60).toFixed(1))}m`;
+  }
+  return `${Number((seconds / 3600).toFixed(1))}h`;
+}
+
 export function formatTimestampShort(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleString("ko-KR", {

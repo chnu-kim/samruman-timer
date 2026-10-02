@@ -218,7 +218,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
     return (
       <div className={className}>
         <p className="text-sm text-muted-foreground">
-          예약된 타이머는 시작 전까지 시간을 변경할 수 없습니다.
+          예약된 타이머는 시작 전까지 시간을 변경할 수 없습니다. 시작 시각을 바꾸려면 타이머를 삭제한 뒤 다시 만드세요.
         </p>
       </div>
     );

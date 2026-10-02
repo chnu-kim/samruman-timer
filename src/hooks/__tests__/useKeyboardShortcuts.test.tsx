@@ -63,6 +63,45 @@ describe("useKeyboardShortcuts", () => {
     expect(onPreset.mock.calls).toEqual([[3600], [18000], [36000]]);
   });
 
+  // Cmd+1(탭 전환)이 1시간 추가를 보내거나 Cmd+R 새로고침이 막히면 안 된다
+  it("Cmd/Ctrl/Alt 조합의 숫자키는 프리셋을 보내지 않고 브라우저 동작을 막지 않는다", () => {
+    const { onPreset } = setup();
+    const events = [
+      press({ key: "1", code: "Digit1", metaKey: true }),
+      press({ key: "5", code: "Digit5", ctrlKey: true }),
+      press({ key: "0", code: "Digit0", altKey: true }),
+    ];
+    expect(onPreset).not.toHaveBeenCalled();
+    expect(events.every((event) => !event.defaultPrevented)).toBe(true);
+  });
+
+  it("Cmd/Ctrl/Alt 조합의 R, G, ?는 가로채지 않는다", () => {
+    const { hook, onRefresh, onToggleGraph } = setup();
+    const events = [
+      press({ key: "r", code: "KeyR", metaKey: true }),
+      press({ key: "r", code: "KeyR", ctrlKey: true }),
+      press({ key: "R", code: "KeyR", metaKey: true, shiftKey: true }),
+      press({ key: "g", code: "KeyG", ctrlKey: true }),
+      press({ key: "?", code: "Slash", metaKey: true, shiftKey: true }),
+    ];
+    expect(onRefresh).not.toHaveBeenCalled();
+    expect(onToggleGraph).not.toHaveBeenCalled();
+    expect(hook.result.current.showHelp).toBe(false);
+    expect(events.every((event) => !event.defaultPrevented)).toBe(true);
+  });
+
+  it("R과 G는 대소문자와 한국어 IME에 상관없이 키 위치로 동작한다", () => {
+    const { onRefresh, onToggleGraph } = setup();
+    press({ key: "r", code: "KeyR" });
+    press({ key: "R", code: "KeyR", shiftKey: true });
+    press({ key: "ㄱ", code: "KeyR" });
+    press({ key: "Process", code: "KeyR" });
+    press({ key: "g", code: "KeyG" });
+    press({ key: "ㅎ", code: "KeyG" });
+    expect(onRefresh).toHaveBeenCalledTimes(4);
+    expect(onToggleGraph).toHaveBeenCalledTimes(2);
+  });
+
   it("입력 필드에 포커스가 있으면 무시한다", () => {
     const { onPreset, onToggleAction } = setup();
     const input = document.createElement("input");

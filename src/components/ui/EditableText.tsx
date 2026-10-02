@@ -121,21 +121,18 @@ export function EditableText({
 
   return (
     <div className="group flex items-start gap-1.5">
+      {/* heading 의미를 지키려고 Tag에는 role을 주지 않는다. 클릭은 마우스 편의이고, 키보드는 옆 편집 버튼을 쓴다 */}
       <Tag
         className={cn(className, TEXT_WRAP, "cursor-pointer")}
         onClick={() => setEditing(true)}
-        role="button"
-        tabIndex={0}
-        aria-label={`${value || placeholder} — 클릭하여 편집`}
-        onKeyDown={(e: React.KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setEditing(true); } }}
       >
         {value || <span className="text-muted-foreground">{placeholder}</span>}
       </Tag>
       <button
         type="button"
         onClick={() => setEditing(true)}
-        className="mt-1 rounded p-1 text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:bg-foreground/10 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        aria-label="편집"
+        className="mt-1 rounded p-1 text-muted-foreground opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:bg-foreground/10 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label={Tag === "h1" ? "제목 편집" : "설명 편집"}
       >
         <PencilIcon className="w-3.5 h-3.5" />
       </button>

@@ -186,6 +186,7 @@ export function GoalCard({ goal, projectId, isOwner, onUpdate, compact = false }
         title="목표 취소"
         description="정말로 이 목표를 취소하시겠습니까? 취소된 목표는 다시 활성화할 수 없습니다."
         confirmLabel="취소하기"
+        cancelLabel="돌아가기"
         variant="danger"
         onConfirm={handleCancel}
         onCancel={() => setShowCancelDialog(false)}

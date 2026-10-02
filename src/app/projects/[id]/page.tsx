@@ -18,6 +18,7 @@ import { GoalCard } from "@/components/goal/GoalCard";
 import { GoalForm } from "@/components/goal/GoalForm";
 import Link from "next/link";
 import { authFetch } from "@/lib/auth-fetch";
+import { useDocumentTitle, APP_TITLE } from "@/hooks/useDocumentTitle";
 import { usePolling } from "@/hooks/usePolling";
 import { useCountdownEnded } from "@/hooks/useCountdownEnded";
 import type {
@@ -88,7 +89,7 @@ function GoalSection({
         />
       </FormDialog>
 
-      {/* 탭 — 진행 중 / 완료 */}
+      {/* 탭 — 진행 중 / 종료 */}
       <div className="flex gap-1 border-b border-border" role="tablist" aria-label="목표 상태 필터">
         <button
           role="tab"
@@ -122,7 +123,7 @@ function GoalSection({
           }}
           className={tabClass(goalTab === "completed")}
         >
-          완료 ({inactiveGoals.length})
+          종료 ({inactiveGoals.length})
         </button>
       </div>
 
@@ -172,7 +173,7 @@ function GoalSection({
           ))
         ) : (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            완료된 목표가 없습니다.
+            종료된 목표가 없습니다.
           </p>
         )}
       </div>
@@ -321,6 +322,8 @@ export default function ProjectDetailPage() {
     setProject(json.data);
     toast("프로젝트 설명이 수정되었습니다", "success");
   }
+
+  useDocumentTitle(project ? `${project.name} · ${APP_TITLE}` : null);
 
   if (loading) {
     return <ProjectDetailSkeleton />;
