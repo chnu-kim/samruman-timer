@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { cn, formatDateTime } from "@/lib/utils";
+import { cn, formatDateTime, formatDuration } from "@/lib/utils";
 import type { TimerStatus } from "@/types";
 
 interface CountdownDisplayProps {
@@ -65,8 +65,9 @@ export function CountdownDisplay({
     ? Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)
     : 0;
 
+  // 경과는 시각(HH:MM:SS)과 헷갈리지 않게 '72시간 2분'처럼 단위를 붙인다. 1분 미만이면 생략한다
   const endTimeText = isRunning
-    ? `종료 예정 · ${formatDateTime(new Date(Date.now() + displayed * 1000).toISOString())}${elapsedSeconds > 0 ? ` (${formatTime(elapsedSeconds)} 경과)` : ""}`
+    ? `종료 예정 · ${formatDateTime(new Date(Date.now() + displayed * 1000).toISOString())}${elapsedSeconds >= 60 ? ` (${formatDuration(elapsedSeconds)} 경과)` : ""}`
     : null;
 
   return (
@@ -103,7 +104,7 @@ export function CountdownDisplay({
             : "\u00A0"}
         </span>
       )}
-      {/* large: 예약/실행 시 서브텍스트 표시 */}
+      {/* large: 예약/실행/만료 시 서브텍스트 표시 */}
       {size === "large" && isScheduled && scheduledStartAt && (
         <span className="text-sm text-purple-600 dark:text-purple-400 mt-1">
           시작 대기 중 · {formatDateTime(scheduledStartAt)}
@@ -113,6 +114,9 @@ export function CountdownDisplay({
         <span className="text-sm text-muted-foreground mt-1">
           {endTimeText}
         </span>
+      )}
+      {size === "large" && isExpired && (
+        <span className="text-sm text-muted-foreground mt-1">만료됨</span>
       )}
     </div>
   );
