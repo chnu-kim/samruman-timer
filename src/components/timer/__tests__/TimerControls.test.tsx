@@ -128,6 +128,44 @@ describe("TimerControls", () => {
     expect(onActionChange).toHaveBeenCalledWith("ADD");
   });
 
+  // UX-03: 빠른 적용 모드의 프리셋 라벨 부호가 실제 방향을 따른다
+  it("shows '-' preset labels in quick mode when subtracting and sends SUBTRACT", () => {
+    mockFetch.mockReturnValueOnce(new Promise(() => {}));
+    render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={7200} initialAction="SUBTRACT" />);
+
+    // 일반 모드에서는 누적 입력이므로 '+' 유지
+    expect(screen.getByRole("button", { name: "+1시간" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "테스터" } });
+    fireEvent.click(screen.getByRole("checkbox"));
+
+    expect(screen.queryByRole("button", { name: "+1시간" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "-1시간" }));
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body).toMatchObject({ action: "SUBTRACT", deltaSeconds: 3600 });
+  });
+
+  it("keeps '+' preset labels in quick mode when adding", () => {
+    render(<Harness timerId={timerId} status="RUNNING" />);
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(screen.getByRole("button", { name: "+1시간" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "-1시간" })).not.toBeInTheDocument();
+  });
+
+  it("uses danger style for the confirm button when subtracting", () => {
+    render(<Harness timerId={timerId} status="RUNNING" />);
+    fireEvent.click(screen.getByRole("button", { name: "+1시간" }));
+    const addConfirm = screen.getByRole("button", { name: /추가 확인/ });
+    const addClass = addConfirm.className;
+
+    fireEvent.click(screen.getByRole("radio", { name: "차감" }));
+    const subtractConfirm = screen.getByRole("button", { name: /차감 확인/ });
+    expect(subtractConfirm.className).not.toBe(addClass);
+    expect(subtractConfirm.className).toMatch(/red/);
+  });
+
   // ─── Optimistic UI Tests ───
 
   describe("optimistic UI", () => {

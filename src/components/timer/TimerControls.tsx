@@ -345,7 +345,8 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
                   : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground",
               )}
             >
-              +{preset.label}
+              {/* 빠른 적용은 확인 없이 바로 반영되므로 라벨 부호가 실제 방향을 따른다 */}
+              {quickMode && selectedAction === "SUBTRACT" ? "-" : "+"}{preset.label}
             </button>
           ))}
         </div>
@@ -399,6 +400,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
       {!quickMode && (
         <Button
           size="lg"
+          variant={selectedAction === "SUBTRACT" ? "danger" : "primary"}
           disabled={totalSeconds <= 0}
           onClick={handleSubmit}
           className="w-full"
