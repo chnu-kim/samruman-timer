@@ -77,3 +77,29 @@ describe("오버레이 긴급·만료 펄스 (UX-24)", () => {
     expect(timer.style.animation).toContain("pulse-urgent-fast");
   });
 });
+
+describe("오버레이 URL 오류 (UX-56)", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("타이머가 없으면 화면에 아무것도 그리지 않고 콘솔 경고를 한 번만 남긴다", async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 404, json: async () => ({}) })));
+    render(<TimerOverlayPage />);
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain("찾을 수 없습니다");
+
+    // 5초 폴링이 반복돼도 같은 경고를 쌓지 않는다
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("timer")).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("찾을 수 없습니다");
+  });
+});

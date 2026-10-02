@@ -48,6 +48,8 @@ export default function TimerOverlayPage() {
   const [floatingText, setFloatingText] = useState<string | null>(null);
   const [floatingKey, setFloatingKey] = useState(0);
   const prevTimerRef = useRef<TimerSnapshot | null>(null);
+  // 폴링마다 같은 경고가 쌓이지 않게 마지막으로 경고한 상태 코드를 기억한다
+  const warnedStatusRef = useRef<number | null>(null);
   useDocumentTitle(timer ? `OBS 오버레이 · ${timer.title}` : null);
 
   useEffect(() => {
@@ -97,6 +99,15 @@ export default function TimerOverlayPage() {
         prevTimerRef.current = { remainingSeconds: data.remainingSeconds, updatedAt: data.updatedAt, fetchedAt: now, status: data.status };
         setTimer(data);
         setDisplayed(data.remainingSeconds);
+        warnedStatusRef.current = null;
+      } else if (warnedStatusRef.current !== res.status) {
+        // 방송 화면에 오류 문구를 띄우면 시청자에게 그대로 보이므로 화면에는 아무것도 그리지 않고 콘솔에만 남긴다
+        warnedStatusRef.current = res.status;
+        console.warn(
+          res.status === 404
+            ? `[오버레이] 타이머 ${timerId}를 찾을 수 없습니다. 삭제되었거나 URL이 잘못되었습니다.`
+            : `[오버레이] 타이머를 불러오지 못했습니다 (HTTP ${res.status}).`,
+        );
       }
     } catch {
       // ignore

@@ -97,3 +97,57 @@ describe("OverlaySettings 접근성 (UX-25)", () => {
     expect(topLeft).toHaveAttribute("aria-pressed", "true");
   });
 });
+
+describe("OverlaySettings 색 입력 검증 (UX-55)", () => {
+  function overlayCode() {
+    return screen.getByText(/\/timers\/abc\/overlay/).textContent ?? "";
+  }
+
+  it("입력 중인 불완전한 색은 URL에 넣지 않고 aria-invalid로 표시한다", async () => {
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    const input = await screen.findByRole("textbox", { name: "텍스트 색상 코드" });
+
+    fireEvent.change(input, { target: { value: "#ff" } });
+    expect(input).toHaveValue("#ff");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(overlayCode()).not.toContain("color=");
+
+    fireEvent.change(input, { target: { value: "#ff0000" } });
+    expect(input).toHaveAttribute("aria-invalid", "false");
+    expect(overlayCode()).toContain("color=%23ff0000");
+  });
+
+  it("배경색은 transparent도 허용한다", async () => {
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    const input = await screen.findByRole("textbox", { name: "배경색 코드" });
+
+    fireEvent.change(input, { target: { value: "#00000" } });
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(overlayCode()).not.toContain("bg=");
+
+    fireEvent.change(input, { target: { value: "#000000" } });
+    expect(overlayCode()).toContain("bg=%23000000");
+
+    fireEvent.change(input, { target: { value: "transparent" } });
+    expect(input).toHaveAttribute("aria-invalid", "false");
+    expect(overlayCode()).not.toContain("bg=");
+  });
+
+  it("프리셋을 고르면 미완성 입력이 프리셋 값으로 바뀐다", async () => {
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    const input = await screen.findByRole("textbox", { name: "텍스트 색상 코드" });
+
+    fireEvent.change(input, { target: { value: "#zz" } });
+    fireEvent.click(screen.getByRole("button", { name: "게이밍 네온" }));
+    expect(input).toHaveValue("#00ff88");
+    expect(input).toHaveAttribute("aria-invalid", "false");
+  });
+});
+
+describe("OverlaySettings 미리보기 배경 (UX-57)", () => {
+  it("투명 배경은 테마와 무관한 고정 어두운 색으로 미리 본다", async () => {
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    const iframe = await screen.findByTitle("오버레이 미리보기", {}, { timeout: 2000 });
+    expect(iframe.style.background).toMatch(/#3f3f46|rgb\(63, 63, 70\)/);
+  });
+});
