@@ -304,6 +304,7 @@
 - **근거**: [07-project-detail-running-owner--m-light.png](ux-review/07-project-detail-running-owner--m-light.png) · 측정 캡처 [pd-title-tap--m.png](ux-review/measure/pd-title-tap--m.png) · `src/components/ui/EditableText.tsx:79-94`, `src/app/projects/[id]/page.tsx:338-361`
 
 #### UX-34. 프로젝트 상세의 RUNNING 타이머 카드가 서버와 동기화되지 않고, 0이 되어도 '실행 중'으로 남는다
+- **상태**: 해결 — 직접 만든 `setInterval`(SCHEDULED 전용, 탭이 숨겨져도 계속 돎)을 P0-1의 `usePolling`으로 바꾸고 조건을 `SCHEDULED || RUNNING`으로 넓혔다(5초, 화면이 숨겨지면 중단). 카운트다운이 0에 닿으면 `useCountdownEnded` 훅이 다음 폴링을 기다리지 않고 배지를 '만료'로 바꾼다. 서버 기록은 목록 API의 lazy 만료 감지가 다음 폴링 때 남긴다.
 - **심각도**: minor · **영역**: 프로젝트 상세
 - **관찰**: 폴링은 SCHEDULED일 때만 돈다. RUNNING 카드는 처음 받은 값을 클라이언트에서 깎기만 하므로 다른 곳에서 추가한 시간이 반영되지 않는다. 0이 되면 숫자는 회색 00:00:00이 되지만 배지는 `timers[0].status` 그대로 '실행 중'이다. 백로그 P0-1은 같은 문제를 타이머 상세에서만 해결했다.
 - **이유**: 시청자가 끝나지 않은 타이머를 끝났다고 보거나, 끝난 타이머를 실행 중으로 본다.

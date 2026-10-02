@@ -17,6 +17,8 @@ import { GoalCard } from "@/components/goal/GoalCard";
 import { GoalForm } from "@/components/goal/GoalForm";
 import Link from "next/link";
 import { authFetch } from "@/lib/auth-fetch";
+import { usePolling } from "@/hooks/usePolling";
+import { useCountdownEnded } from "@/hooks/useCountdownEnded";
 import type {
   ApiSuccessResponse,
   ProjectDetailResponse,
@@ -255,12 +257,17 @@ export default function ProjectDetailPage() {
       .catch(() => {});
   }, [projectId, fetchProject, fetchTimers, fetchGoals]);
 
-  useEffect(() => {
-    const timer = timers[0];
-    if (!timer || timer.status !== "SCHEDULED") return;
-    const interval = setInterval(fetchTimers, 5_000);
-    return () => clearInterval(interval);
-  }, [timers, fetchTimers]);
+  // 예약·실행 중이면 5초마다 서버 값으로 맞춘다(다른 곳에서 추가한 시간, 만료 반영). 화면이 숨겨지면 멈춘다
+  const firstTimerStatus = timers[0]?.status;
+  usePolling({
+    fn: fetchTimers,
+    interval: 5_000,
+    enabled: firstTimerStatus === "SCHEDULED" || firstTimerStatus === "RUNNING",
+  });
+
+  // 카운트다운이 0에 닿으면 다음 폴링을 기다리지 않고 배지를 '만료'로 보여 준다
+  const countdownEnded = useCountdownEnded(timers[0]?.remainingSeconds, firstTimerStatus);
+  const displayStatus = countdownEnded ? "EXPIRED" : firstTimerStatus;
 
   // ACTIVE 목표가 있으면 30초 간격 폴링
   useEffect(() => {
@@ -442,8 +449,8 @@ export default function ProjectDetailPage() {
                 createdAt={timers[0].createdAt}
                 size="large"
               />
-              <Badge variant={timers[0].status === "SCHEDULED" ? "scheduled" : timers[0].status === "RUNNING" ? "running" : "expired"}>
-                {timers[0].status === "SCHEDULED" ? "예약됨" : timers[0].status === "RUNNING" ? "실행 중" : "만료"}
+              <Badge variant={displayStatus === "SCHEDULED" ? "scheduled" : displayStatus === "RUNNING" ? "running" : "expired"}>
+                {displayStatus === "SCHEDULED" ? "예약됨" : displayStatus === "RUNNING" ? "실행 중" : "만료"}
               </Badge>
             </div>
             {timers[0].title && (
