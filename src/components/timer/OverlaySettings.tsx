@@ -166,7 +166,8 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
       });
       if (res.ok) {
         setSavedConfig({ ...config });
-        toast("설정이 저장되었습니다. URL을 바꿨다면 OBS 브라우저 소스에 새로 붙여넣어야 방송에 반영됩니다", "success");
+        // 모바일 390px에서도 한 줄에 들어가게 짧게 둔다. 자세한 안내는 URL 블록에 상시 표시된다
+        toast("저장되었습니다. OBS에 URL을 다시 붙여넣으세요", "success");
       } else {
         const json = await res.json() as { error?: { message?: string } };
         toast(json.error?.message ?? "저장에 실패했습니다", "error");

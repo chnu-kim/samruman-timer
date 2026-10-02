@@ -209,7 +209,7 @@
 - **근거**: [03-projects-mine--m-dark.png](ux-review/03-projects-mine--m-dark.png), [13-timer-delete-confirm--m-light.png](ux-review/13-timer-delete-confirm--m-light.png), [07-project-detail-running-owner--m-light.png](ux-review/07-project-detail-running-owner--m-light.png) · `src/components/ui/Button.tsx:20`, `src/components/layout/Header.tsx:32-35, 65-68`, `src/components/ui/ConfirmDialog.tsx:72-81`
 
 #### UX-20. 오버레이 설정의 '저장'이 OBS 화면에 반영되지 않는데, 이를 알리는 안내가 없다
-- **상태**: 해결 — 'OBS 브라우저 소스 URL' 라벨 아래에 권고 문구 한 줄을 넣고, 저장 성공 토스트에도 같은 안내를 덧붙였다.
+- **상태**: 해결 — 'OBS 브라우저 소스 URL' 라벨 아래에 권고 문구 한 줄을 넣고, 저장 성공 토스트에도 '저장되었습니다. OBS에 URL을 다시 붙여넣으세요'로 안내를 덧붙였다. 토스트 문구는 모바일(390px)에서 한 줄에 들어가도록 줄였다(긴 문구는 토스트가 화면 왼쪽 끝까지 붙는다).
 - **심각도**: minor · **영역**: 오버레이
 - **관찰**: 오버레이 페이지는 쿼리 파라미터만 읽고 저장된 설정은 읽지 않는다. 그래서 저장 후에도 OBS 소스의 URL을 새로 붙여 넣어야 방송에 반영된다. 모달은 '설정이 저장되었습니다'라고만 알린다. 실제로 12번 화면에서 저장된 설정은 96px에 제목 표시인데, 20번(파라미터 없는 기본 URL)은 72px에 제목이 없다.
 - **이유**: 방송 중 색이나 위치를 바꾸고 '저장'을 누른 스트리머는 방송 화면이 바뀌기를 기대한다.

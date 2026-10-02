@@ -60,7 +60,7 @@ describe("OverlaySettings 반영 안내 (UX-20)", () => {
     ).toBeInTheDocument();
   });
 
-  it("저장 성공 토스트에도 같은 안내를 덧붙인다", async () => {
+  it("저장 성공 토스트에 OBS에 다시 붙여넣으라는 짧은 안내를 덧붙인다", async () => {
     render(<OverlaySettings timerId="abc" onClose={() => {}} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "게이밍 네온" }));
@@ -68,7 +68,7 @@ describe("OverlaySettings 반영 안내 (UX-20)", () => {
 
     await waitFor(() => {
       expect(mockToast).toHaveBeenCalledWith(
-        expect.stringContaining("OBS 브라우저 소스에 새로 붙여넣어야 방송에 반영됩니다"),
+        "저장되었습니다. OBS에 URL을 다시 붙여넣으세요",
         "success",
       );
     });
