@@ -491,6 +491,29 @@ describe("refresh family 절대 수명 (보안 감사 F18)", () => {
     expect(binds[6]).toBe(familyExpiresAt);
   });
 
+  it("토큰 만료가 남아 있어도 family 절대 만료가 지났으면 rotation하지 않는다", async () => {
+    const db = createMockDB();
+    const rawToken = "family-expired";
+    const tokenHash = await hashToken(rawToken);
+    db._stmt.first.mockResolvedValueOnce({
+      id: "rt-1",
+      user_id: "user-1",
+      token_hash: tokenHash,
+      family_id: "family-1",
+      status: "ACTIVE",
+      expires_at: new Date(Date.now() + 10 * 86400_000).toISOString(),
+      created_at: new Date(Date.now() - 95 * 86400_000).toISOString(),
+      used_at: null,
+      family_expires_at: new Date(Date.now() - 86400_000).toISOString(),
+    });
+
+    const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
+
+    expect(result).toBeNull();
+    // USED 처리도, 새 토큰 발급도 하지 않는다
+    expect(db._stmt.run).not.toHaveBeenCalled();
+  });
+
   it("만료된 행 정리는 해당 사용자의 만료 행만 지운다", async () => {
     const db = createMockDB();
     await deleteExpiredRefreshTokens(db as unknown as D1Database, "user-1");

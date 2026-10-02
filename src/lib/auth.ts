@@ -204,8 +204,11 @@ export async function rotateRefreshToken(
     return null;
   }
 
-  // 3. 만료 확인
+  // 3. 만료 확인. family 절대 만료가 지났으면 토큰 자체 만료가 남아 있어도 거부한다
   if (new Date(row.expires_at) <= new Date()) {
+    return null;
+  }
+  if (row.family_expires_at && new Date(row.family_expires_at) <= new Date()) {
     return null;
   }
 

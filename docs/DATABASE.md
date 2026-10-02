@@ -171,7 +171,7 @@ migrations/
   0006_goals.sql            — 목표 테이블 (goals + 인덱스 2개)
   0007_refresh_tokens.sql   — refresh token 테이블 (refresh_tokens + 인덱스 3개)
   0008_overlay_animation.sql — overlay_settings.animation 컬럼 추가
-  0009_timer_unique_and_session_lifetime.sql — 프로젝트당 비삭제 타이머 UNIQUE 부분 인덱스, refresh_tokens.family_expires_at
+  0009_timer_unique_and_session_lifetime.sql — 프로젝트당 비삭제 타이머 UNIQUE 부분 인덱스(먼저 기존 중복은 가장 먼저 만든 1개만 남기고 DELETED + DELETE 로그), refresh_tokens.family_expires_at(기존 행은 family 최초 발급 + 90일, expires_at도 그 안으로 줄임)
 ```
 
 ### 규칙

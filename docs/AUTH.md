@@ -152,7 +152,7 @@ Access token 만료 시 자동 갱신을 위한 refresh token rotation 방식을
 3. 갱신 시 이전 refresh token은 `UPDATE ... WHERE status = 'ACTIVE'`로 `USED` 처리(`used_at` 기록)하고 새 토큰 발급 (같은 `family_id`). DB에 없는 토큰이나 만료된 `ACTIVE` 토큰은 상태를 바꾸지 않고 실패한다
 4. 이미 `USED`/`REVOKED`된 토큰 제시 시 해당 family 전체 폐기 (토큰 탈취 대응). 단 아래 동시 요청 grace에 해당하는 `USED` 토큰은 예외
 5. 로그아웃 시 해당 family 전체 `REVOKED` 처리
-6. 새 토큰의 만료는 `min(지금 + 30일, family_expires_at)`. 그래서 계속 쓰는 세션도 로그인 후 90일이 지나면 다시 로그인해야 한다
+6. 새 토큰의 만료는 `min(지금 + 30일, family_expires_at)`. 그래서 계속 쓰는 세션도 로그인 후 90일이 지나면 다시 로그인해야 한다. 갱신할 때 `family_expires_at`이 이미 지났으면 토큰 자체 만료가 남아 있어도 거부한다
 7. 로그인할 때 그 사용자의 만료된 행을 지운다. rotation마다 행이 하나씩 쌓이기 때문이다
 
 #### 동시 요청 grace (`RACE_GRACE_MS` = 30초)
