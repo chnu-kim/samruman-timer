@@ -103,6 +103,7 @@
 - **근거**: [19-timer-stats--d-light.png](ux-review/19-timer-stats--d-light.png), [19-timer-stats--m-dark.png](ux-review/19-timer-stats--m-dark.png) · `src/app/api/timers/[id]/stats/route.ts:80, 104, 123-132`, `src/lib/db.ts:15`, `src/components/stats/StatsCardGrid.tsx:41`
 
 #### UX-07. 공용 포커스 링(`--ring`, 알파 40%)의 대비가 1.7:1(라이트), 1.95:1(다크)이다
+- **상태**: 해결 — `--ring`을 불투명 accent로 바꿨다(라이트 `#4f46e5`, 다크 `#818cf8`). UX-28로 라이트 accent가 `#4f46e5`가 되어 권고의 `#6366f1` 대신 새 accent 값을 따랐다. 흰 배경 대비 6.29:1, 다크 배경 대비 6.64:1이다.
 - **심각도**: major · **영역**: 접근성
 - **관찰**: `--ring`은 `rgba(99,102,241,0.4)`(다크에서는 `rgba(129,140,248,0.4)`)이다. 34곳에서 `focus-visible:outline-none`으로 브라우저 기본 outline을 지우고 이 링으로 대체한다. 프로젝트 카드에 포커스를 줘도 연보라 테두리가 hover 그림자와 잘 구분되지 않는다.
 - **이유**: WCAG 1.4.11(비텍스트 대비 3:1, AA) 미달이다. 키보드 사용자는 지금 어디에 있는지 알기 어렵다.
@@ -252,6 +253,7 @@
 - **근거**: [15-timer-scheduled--d-light.png](ux-review/15-timer-scheduled--d-light.png), [16-timer-expired--d-light.png](ux-review/16-timer-expired--d-light.png), [17-timer-nonowner-urgent--m-light.png](ux-review/17-timer-nonowner-urgent--m-light.png) · `src/components/graph/RemainingChart.tsx:42`, `src/components/graph/CumulativeChart.tsx:43`
 
 #### UX-28. 라이트 accent 위 흰 글씨(4.47:1)와 muted 위 muted 글씨(4.35:1)가 AA에 조금 못 미친다
+- **상태**: 해결 — 라이트 토큰만 `--accent` `#4f46e5`, `--accent-hover` `#4338ca`, `--muted-foreground` `#6b6b6b`로 바꿨다. 흰 글씨/accent 6.29:1, muted/muted 4.89:1이다. 다크 토큰은 그대로다.
 - **심각도**: minor · **영역**: 접근성 / 일관성
 - **관찰**: 해당하는 곳은 primary 버튼('새 프로젝트', '새 목표'), 선택된 그래프 모드, 선택되지 않은 그래프 모드와 '차감' 토글이다.
 - **이유**: 가장 많이 쓰는 버튼과 추가/차감 선택의 글자가 4.5:1에 미달한다.
