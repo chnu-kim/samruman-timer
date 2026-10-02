@@ -43,6 +43,15 @@ export const WithTimer: Story = {
   },
 };
 
+export const NoTimer: Story = {
+  args: {
+    project: {
+      ...sampleProject,
+      timerCount: 0,
+    },
+  },
+};
+
 export const Grid: Story = {
   render: () => {
     const projects: ProjectListItem[] = [

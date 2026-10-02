@@ -29,6 +29,8 @@ export function ProjectCard({ project, className }: ProjectCardProps) {
         <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
           <span>{project.ownerNickname}</span>
           <span>{formatRelativeDate(project.createdAt)}</span>
+          {/* 상태 배지는 목록 API 변경이 필요해 보류하고, 이미 내려오는 timerCount로 '타이머 없음'만 구분한다 */}
+          {project.timerCount === 0 && <span>타이머 없음</span>}
         </div>
       </article>
     </Link>
