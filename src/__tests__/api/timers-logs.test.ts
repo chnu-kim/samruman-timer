@@ -29,6 +29,14 @@ describe("GET /api/timers/[id]/logs", () => {
     expect(res.status).toBe(404);
   });
 
+  it("삭제된 타이머는 존재 확인에서 제외해 404로 처리한다", async () => {
+    db._stmt.first.mockResolvedValue(null);
+    const res = await callGet();
+    expect(res.status).toBe(404);
+    const sql = String(db.prepare.mock.calls[0][0]);
+    expect(sql).toContain("status != 'DELETED'");
+  });
+
   it("유효하지 않은 actionType → 400", async () => {
     // first: 타이머 존재 확인
     db._stmt.first
