@@ -13,6 +13,9 @@ import {
   rotateRefreshToken,
   revokeRefreshTokenFamily,
   createRefreshTokenInDB,
+  deleteExpiredRefreshTokens,
+  newFamilyExpiresAt,
+  SESSION_ABSOLUTE_MAX_AGE,
   ACCESS_TOKEN_MAX_AGE,
   REFRESH_TOKEN_MAX_AGE,
 } from "@/lib/auth";
@@ -415,5 +418,64 @@ describe("revokeRefreshTokenFamily", () => {
     );
     expect(db._stmt.bind).toHaveBeenCalledWith("family-1");
     expect(db._stmt.run).toHaveBeenCalled();
+  });
+});
+
+describe("refresh family 절대 수명 (보안 감사 F18)", () => {
+  function insertBinds(db: ReturnType<typeof createMockDB>) {
+    const i = db.prepare.mock.calls.findIndex((c) => String(c[0]).startsWith("INSERT INTO refresh_tokens"));
+    return db._stmt.bind.mock.calls[i] as unknown[];
+  }
+
+  it("새 로그인의 family는 90일 뒤 절대 만료된다", () => {
+    const expected = Date.now() + SESSION_ABSOLUTE_MAX_AGE * 1000;
+    expect(Math.abs(new Date(newFamilyExpiresAt()).getTime() - expected)).toBeLessThan(1000);
+  });
+
+  it("토큰 만료는 30일과 family 절대 만료 중 이른 쪽이다", async () => {
+    const db = createMockDB();
+    const familyExpiresAt = new Date(Date.now() + 2 * 86400_000).toISOString();
+
+    await createRefreshTokenInDB(db as unknown as D1Database, "user-1", "hash", "family-1", familyExpiresAt);
+
+    const binds = insertBinds(db);
+    expect(binds[4]).toBe(familyExpiresAt); // expires_at
+    expect(binds[6]).toBe(familyExpiresAt); // family_expires_at
+  });
+
+  it("rotation한 새 토큰은 family 절대 만료를 그대로 이어받는다", async () => {
+    const db = createMockDB();
+    const rawToken = "rotating";
+    const tokenHash = await hashToken(rawToken);
+    const familyExpiresAt = new Date(Date.now() + 3 * 86400_000).toISOString();
+    db._stmt.first
+      .mockResolvedValueOnce({
+        id: "rt-1",
+        user_id: "user-1",
+        token_hash: tokenHash,
+        family_id: "family-1",
+        status: "ACTIVE",
+        expires_at: familyExpiresAt,
+        created_at: new Date(Date.now() - 87 * 86400_000).toISOString(),
+        used_at: null,
+        family_expires_at: familyExpiresAt,
+      })
+      .mockResolvedValueOnce({ id: "user-1", chzzk_user_id: "chzzk-1", nickname: "tester" });
+    db._stmt.run.mockResolvedValue({ meta: { changes: 1 } });
+
+    const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
+
+    expect(result?.newRawToken).toBeTruthy();
+    const binds = insertBinds(db);
+    expect(binds[4]).toBe(familyExpiresAt); // 30일로 연장되지 않는다
+    expect(binds[6]).toBe(familyExpiresAt);
+  });
+
+  it("만료된 행 정리는 해당 사용자의 만료 행만 지운다", async () => {
+    const db = createMockDB();
+    await deleteExpiredRefreshTokens(db as unknown as D1Database, "user-1");
+
+    expect(db.prepare).toHaveBeenCalledWith("DELETE FROM refresh_tokens WHERE user_id = ? AND expires_at <= ?");
+    expect(db._stmt.bind.mock.calls[0][0]).toBe("user-1");
   });
 });

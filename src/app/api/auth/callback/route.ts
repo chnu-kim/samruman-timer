@@ -5,6 +5,8 @@ import {
   generateRefreshToken,
   hashToken,
   createRefreshTokenInDB,
+  deleteExpiredRefreshTokens,
+  newFamilyExpiresAt,
   ACCESS_TOKEN_MAX_AGE,
   REFRESH_TOKEN_MAX_AGE,
   REFRESH_COOKIE_NAME,
@@ -84,7 +86,9 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
     const rawRefreshToken = generateRefreshToken();
     const refreshTokenHash = await hashToken(rawRefreshToken);
     const familyId = generateId();
-    await createRefreshTokenInDB(db, user.id, refreshTokenHash, familyId);
+    await createRefreshTokenInDB(db, user.id, refreshTokenHash, familyId, newFamilyExpiresAt());
+    // rotation마다 행이 쌓이므로 로그인할 때 이 사용자의 만료된 행을 정리한다
+    await deleteExpiredRefreshTokens(db, user.id);
 
     // 리다이렉트 + 두 쿠키 설정. 세션 만료로 다시 로그인한 경우 보던 화면(next)으로 돌려보낸다
     const response = NextResponse.redirect(

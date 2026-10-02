@@ -5,6 +5,8 @@ import type { JwtPayload, RefreshTokenRow } from "@/types";
 const COOKIE_NAME = "session";
 export const ACCESS_TOKEN_MAX_AGE = 15 * 60; // 15 minutes
 export const REFRESH_TOKEN_MAX_AGE = 30 * 24 * 60 * 60; // 30 days
+// 로그인 1회로 이어지는 세션(refresh family)의 최대 수명. rotation해도 이 기간을 넘겨 연장되지 않는다
+export const SESSION_ABSOLUTE_MAX_AGE = 90 * 24 * 60 * 60; // 90 days
 export const REFRESH_COOKIE_NAME = "refresh";
 
 function getSecret() {
@@ -81,23 +83,38 @@ function nowISO(): string {
   return new Date().toISOString();
 }
 
+/** 새 로그인으로 시작하는 family의 절대 만료 시각 */
+export function newFamilyExpiresAt(): string {
+  return new Date(Date.now() + SESSION_ABSOLUTE_MAX_AGE * 1000).toISOString();
+}
+
 export async function createRefreshTokenInDB(
   db: D1Database,
   userId: string,
   tokenHash: string,
-  familyId: string
+  familyId: string,
+  familyExpiresAt: string
 ): Promise<void> {
   const id = generateId();
   const now = nowISO();
+  const slidingExpiresAt = Date.now() + REFRESH_TOKEN_MAX_AGE * 1000;
   const expiresAt = new Date(
-    Date.now() + REFRESH_TOKEN_MAX_AGE * 1000
+    Math.min(slidingExpiresAt, new Date(familyExpiresAt).getTime())
   ).toISOString();
 
   await db
     .prepare(
-      "INSERT INTO refresh_tokens (id, user_id, token_hash, family_id, status, expires_at, created_at) VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?)"
+      "INSERT INTO refresh_tokens (id, user_id, token_hash, family_id, status, expires_at, created_at, family_expires_at) VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?, ?)"
     )
-    .bind(id, userId, tokenHash, familyId, expiresAt, now)
+    .bind(id, userId, tokenHash, familyId, expiresAt, now, familyExpiresAt)
+    .run();
+}
+
+/** 만료된 refresh token 행을 지운다. 만료 토큰은 어떤 판정에도 쓰이지 않는다 */
+export async function deleteExpiredRefreshTokens(db: D1Database, userId: string): Promise<void> {
+  await db
+    .prepare("DELETE FROM refresh_tokens WHERE user_id = ? AND expires_at <= ?")
+    .bind(userId, nowISO())
     .run();
 }
 
@@ -206,7 +223,11 @@ export async function rotateRefreshToken(
   // 5. 새 토큰 생성, 같은 family_id
   const newRawToken = generateRefreshToken();
   const newTokenHash = await hashToken(newRawToken);
-  await createRefreshTokenInDB(db, row.user_id, newTokenHash, row.family_id);
+  // 절대 만료는 family를 따라간다. 0009 이전 행처럼 비어 있으면 이 토큰 생성 시각 기준으로 정한다
+  const familyExpiresAt =
+    row.family_expires_at ??
+    new Date(new Date(row.created_at).getTime() + SESSION_ABSOLUTE_MAX_AGE * 1000).toISOString();
+  await createRefreshTokenInDB(db, row.user_id, newTokenHash, row.family_id, familyExpiresAt);
 
   // 6. user 정보 조회
   const user = await db
