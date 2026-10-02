@@ -78,6 +78,8 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   // 실패 시 입력을 되돌릴 때, 요청 중에 새로 입력한 값을 덮어쓰지 않도록 최신 입력을 들고 있는다
   const inputsRef = useRef({ hours, minutes, seconds });
   inputsRef.current = { hours, minutes, seconds };
+  // 겹친 요청 중 먼저 실패한 쪽이 이미 대체된 금액을 되살리지 않도록 제출 순번을 센다
+  const submitSeqRef = useRef(0);
 
   useEffect(() => {
     setRecentActors(getRecentActors());
@@ -113,6 +115,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
 
     // 입력 즉시 초기화 (실패하면 restoreInputs로 되돌린다)
     const submitted = { hours, minutes, seconds };
+    const seq = ++submitSeqRef.current;
     saveRecentActor(actor);
     setRecentActors(getRecentActors());
     setHours(0);
@@ -120,6 +123,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
     setSeconds(0);
 
     function restoreInputs() {
+      if (seq !== submitSeqRef.current) return; // 이후 제출이 있으면 그 금액이 사용자 의도다
       const current = inputsRef.current;
       if (current.hours !== 0 || current.minutes !== 0 || current.seconds !== 0) return;
       setHours(submitted.hours);

@@ -397,6 +397,45 @@ describe("TimerControls", () => {
       expect(screen.getByRole("button", { name: /추가 확인/ })).toHaveTextContent("5시간");
     });
 
+    it("does not restore a failed amount after a newer amount was submitted", async () => {
+      let rejectFirst: (reason: unknown) => void;
+      let resolveSecond: (value: unknown) => void;
+      mockFetch
+        .mockReturnValueOnce(new Promise((_, reject) => { rejectFirst = reject; }))
+        .mockReturnValueOnce(new Promise((resolve) => { resolveSecond = resolve; }));
+
+      render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={5000} />);
+
+      fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "테스터" } });
+      fireEvent.click(screen.getByRole("button", { name: "+1시간" }));
+      fireEvent.click(screen.getByRole("button", { name: /추가 확인/ }));
+
+      // 응답 전에 다른 금액을 다시 제출
+      fireEvent.click(screen.getByRole("button", { name: "+5시간" }));
+      fireEvent.click(screen.getByRole("button", { name: /추가 확인/ }));
+
+      await act(async () => {
+        rejectFirst!(new Error("Network error"));
+      });
+      await act(async () => {
+        resolveSecond!({
+          ok: true,
+          json: async () => ({
+            data: {
+              id: timerId,
+              remainingSeconds: 23000,
+              status: "RUNNING",
+              log: { id: "log2", actionType: "ADD", actorName: "테스터", actorUserId: null, deltaSeconds: 18000, beforeSeconds: 5000, afterSeconds: 23000, createdAt: "2026-01-01T00:00:00Z" },
+            },
+          }),
+        });
+      });
+
+      // 대체된 1시간이 되살아나지 않고 입력은 비어 있어야 한다
+      expect(screen.queryByRole("button", { name: /추가 확인/ })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "시간을 입력해주세요" })).toBeDisabled();
+    });
+
     it("quick mode applies optimistically on preset tap", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
