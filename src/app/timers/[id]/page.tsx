@@ -413,8 +413,9 @@ export default function TimerDetailPage() {
     <section>
       {/* 브레드크럼 */}
       <nav className="text-sm text-muted-foreground" aria-label="경로">
+        {/* 헤더의 '프로젝트'(목록)와 헷갈리지 않게 상위 프로젝트 이름으로 표시한다 */}
         <Link href={`/projects/${timer.projectId}`} className="hover:text-foreground transition-colors">
-          프로젝트
+          {timer.projectName}
         </Link>
         <span className="mx-1.5">/</span>
         <span className="text-foreground">{timer.title}</span>

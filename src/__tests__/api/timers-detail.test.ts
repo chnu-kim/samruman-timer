@@ -24,6 +24,7 @@ const TIMER_ROW = {
   creator_id: "user-1",
   creator_nickname: "유저1",
   owner_user_id: "user-1",
+  project_name: "테스트 프로젝트",
 };
 
 function makeParams(id = "timer-1") {
@@ -51,6 +52,8 @@ describe("GET /api/timers/[id]", () => {
     expect(body.data.remainingSeconds).toBeGreaterThanOrEqual(3590);
     expect(body.data.createdBy.nickname).toBe("유저1");
     expect(body.data.projectOwnerId).toBe("user-1");
+    // UX-69: 브레드크럼에 쓸 상위 프로젝트 이름
+    expect(body.data.projectName).toBe("테스트 프로젝트");
   });
 
   it("미존재 → 404", async () => {
@@ -165,6 +168,7 @@ describe("PATCH /api/timers/[id]", () => {
         creator_id: "user-1",
         creator_nickname: "유저1",
         owner_user_id: "user-1",
+        project_name: "테스트 프로젝트",
       });
     const req = createPatchRequest("/api/timers/timer-1", { title: "새제목" }, {
       "x-user-id": "user-1",
@@ -175,5 +179,7 @@ describe("PATCH /api/timers/[id]", () => {
     expect(res.status).toBe(200);
     expect(body.data.title).toBe("새제목");
     expect(body.data.createdBy.nickname).toBe("유저1");
+    // 수정 응답으로 화면을 갈아끼우므로 브레드크럼용 프로젝트 이름도 함께 내려 준다
+    expect(body.data.projectName).toBe("테스트 프로젝트");
   });
 });

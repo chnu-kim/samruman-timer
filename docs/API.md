@@ -329,6 +329,7 @@ CHZZK OAuth 콜백을 처리한다.
   "data": {
     "id": "timer_id",
     "projectId": "project_id",
+    "projectName": "프로젝트 이름",
     "title": "타이머 제목",
     "description": "설명",
     "remainingSeconds": 3600,
@@ -338,6 +339,7 @@ CHZZK OAuth 콜백을 처리한다.
       "id": "user_id",
       "nickname": "닉네임"
     },
+    "projectOwnerId": "user_id",
     "createdAt": "2025-01-01T00:00:00Z",
     "updatedAt": "2025-01-01T00:00:00Z"
   }

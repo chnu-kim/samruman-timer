@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import TimerDetailPage from "@/app/timers/[id]/page";
 
 vi.mock("next/navigation", () => ({
@@ -79,6 +79,14 @@ describe("타이머 화면", () => {
     render(<TimerDetailPage />);
     await waitFor(() => expect(screen.getAllByText("자동").length).toBeGreaterThan(0));
     expect(screen.queryByText("system")).not.toBeInTheDocument();
+  });
+
+  // UX-69: 브레드크럼은 헤더의 '프로젝트'(목록)와 구분되게 상위 프로젝트 이름을 보여 준다
+  it("브레드크럼이 상위 프로젝트 이름으로 프로젝트 상세를 가리킨다", async () => {
+    render(<TimerDetailPage />);
+    const nav = await screen.findByRole("navigation", { name: "경로" });
+    const link = await waitFor(() => within(nav).getByRole("link", { name: "주말 서브어톤" }));
+    expect(link).toHaveAttribute("href", "/projects/p1");
   });
 
   // UX-64: 단축키 도움말은 닫기 버튼이 있는 공용 FormDialog다
