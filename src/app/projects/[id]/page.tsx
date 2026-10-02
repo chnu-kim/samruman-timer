@@ -89,7 +89,7 @@ function GoalSection({
         />
       </FormDialog>
 
-      {/* 탭 — 진행 중 / 완료 */}
+      {/* 탭 — 진행 중 / 종료 */}
       <div className="flex gap-1 border-b border-border" role="tablist" aria-label="목표 상태 필터">
         <button
           role="tab"
