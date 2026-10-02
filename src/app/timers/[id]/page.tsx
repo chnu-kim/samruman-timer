@@ -13,8 +13,10 @@ import { EditableText } from "@/components/ui/EditableText";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { TrashIcon, LinkIcon, ChartBarIcon, SettingsIcon } from "@/components/ui/Icons";
 import { TimerDetailSkeleton } from "@/components/ui/Skeleton";
+import { Spinner } from "@/components/ui/Spinner";
+import { FormDialog } from "@/components/ui/FormDialog";
 import { useToast } from "@/components/ui/Toast";
-import { cn, formatDateTime } from "@/lib/utils";
+import { cn, formatDateTime, displayActorName } from "@/lib/utils";
 import { GraphModeSelector } from "@/components/graph/GraphModeSelector";
 import { RemainingChart } from "@/components/graph/RemainingChart";
 import { CumulativeChart } from "@/components/graph/CumulativeChart";
@@ -563,7 +565,7 @@ export default function TimerDetailPage() {
         <div className={cn("mt-4 relative", logsLoading && "opacity-50")}>
           {logsLoading && (
             <div className="absolute inset-0 flex items-center justify-center z-10">
-              <div className="w-6 h-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+              <Spinner />
             </div>
           )}
 
@@ -598,7 +600,7 @@ export default function TimerDetailPage() {
                           {ACTION_TYPE_LABELS[log.actionType]}
                         </Badge>
                       </td>
-                      <td className="py-2.5 pr-4">{log.actorName}</td>
+                      <td className="py-2.5 pr-4">{displayActorName(log)}</td>
                       <td className="py-2.5 pr-4 text-right font-mono text-xs">
                         {log.deltaSeconds > 0 ? (
                           <span className={log.actionType === "ADD" ? "text-green-700 dark:text-green-400" : log.actionType === "SUBTRACT" ? "text-red-600 dark:text-red-400" : ""}>
@@ -641,7 +643,7 @@ export default function TimerDetailPage() {
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{log.actorName}</span>
+                    <span className="text-muted-foreground">{displayActorName(log)}</span>
                     {log.deltaSeconds > 0 ? (
                       <span className={cn(
                         "font-mono text-xs font-medium",
@@ -684,7 +686,7 @@ export default function TimerDetailPage() {
         <div id="graph-panel" role="tabpanel" aria-label={`${graphMode} 그래프`} className="mt-4 rounded-xl border border-border bg-muted p-4">
           {graphLoading ? (
             <div className="flex h-64 items-center justify-center">
-              <div className="w-6 h-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+              <Spinner />
             </div>
           ) : graphError ? (
             <div className="flex h-64 flex-col items-center justify-center gap-2 text-muted-foreground">
@@ -706,23 +708,11 @@ export default function TimerDetailPage() {
         </div>
       </div>
 
-      {/* 단축키 도움말 오버레이 */}
-      {showHelp && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          role="dialog"
-          aria-modal="true"
-          aria-label="키보드 단축키"
-          onClick={() => setShowHelp(false)}
-          onKeyDown={(e) => { if (e.key === "Escape") setShowHelp(false); }}
-        >
-          <div
-            className="rounded-xl border border-border bg-background p-6 shadow-lg max-w-sm w-full mx-4"
-            onClick={(e) => e.stopPropagation()}
-            ref={(el) => { el?.focus(); }}
-            tabIndex={-1}
-          >
-            <h3 className="text-lg font-bold mb-4">키보드 단축키</h3>
+      {/* 단축키 도움말. 다른 다이얼로그와 같은 FormDialog(닫기 버튼, Escape, 배경 클릭)를 쓴다.
+          본문은 localStorage를 읽으므로 열렸을 때만 렌더한다(서버 렌더와 어긋나지 않게) */}
+      <FormDialog open={showHelp} title="키보드 단축키" onClose={() => setShowHelp(false)}>
+        {showHelp && (
+          <>
             <div className="space-y-2">
               {SHORTCUT_HELP.map((item) => (
                 <div key={item.key} className="flex items-center justify-between text-sm">
@@ -739,9 +729,9 @@ export default function TimerDetailPage() {
                 try { return localStorage.getItem("defaultActorName"); } catch { return ""; }
               })() ? " 기본 닉네임이 설정되어 있으면 숫자키로 즉시 적용됩니다." : " 기본 닉네임을 설정하면 숫자키로 즉시 적용할 수 있습니다."}
             </p>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </FormDialog>
 
       {/* OBS 오버레이 설정 모달 */}
       {showOverlaySettings && (
