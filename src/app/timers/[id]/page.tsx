@@ -24,6 +24,7 @@ import { usePolling } from "@/hooks/usePolling";
 import { authFetch } from "@/lib/auth-fetch";
 import type {
   ApiSuccessResponse,
+  ApiErrorResponse,
   TimerDetailResponse,
   TimerModifyResponse,
   ModifyAction,
@@ -246,12 +247,15 @@ export default function TimerDetailPage() {
           const json = (await res.json()) as ApiSuccessResponse<TimerModifyResponse>;
           handleModified(json.data);
           toast(`${selectedAction === "ADD" ? "추가" : "차감"} 완료 (${defaultActor})`, "success");
+        } else {
+          const json = (await res.json().catch(() => null)) as ApiErrorResponse | null;
+          toast(json?.error?.message || "시간 변경에 실패했습니다.", "error");
         }
       } catch {
         toast("시간 변경에 실패했습니다.", "error");
       }
     } else {
-      toast("닉네임 입력 후 숫자키로 즉시 적용할 수 있습니다", "info");
+      toast("기본 닉네임을 설정하면 숫자키로 즉시 적용됩니다", "info");
     }
   }, [isOwner, timer, toast, timerId, selectedAction]);
 
@@ -306,15 +310,21 @@ export default function TimerDetailPage() {
         router.push(`/projects/${timer!.projectId}`);
       } else {
         setDeleting(false);
+        toast("타이머 삭제에 실패했습니다", "error");
       }
     } catch {
       setDeleting(false);
+      toast("타이머 삭제에 실패했습니다", "error");
     }
   }
 
-  function handleCopyLink() {
-    navigator.clipboard.writeText(window.location.href);
-    toast("링크가 복사되었습니다", "success");
+  async function handleCopyLink() {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      toast("링크가 복사되었습니다", "success");
+    } catch {
+      toast("링크를 복사하지 못했습니다", "error");
+    }
   }
 
   async function handleSaveTitle(title: string) {
@@ -708,7 +718,7 @@ export default function TimerDetailPage() {
       <ConfirmDialog
         open={showDeleteDialog}
         title="타이머 삭제"
-        description="정말로 이 타이머를 삭제하시겠습니까?"
+        description="삭제하면 OBS 오버레이가 즉시 표시되지 않으며 되돌릴 수 없습니다."
         confirmLabel="삭제"
         variant="danger"
         onConfirm={handleDelete}

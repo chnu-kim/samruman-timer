@@ -266,9 +266,13 @@ export default function ProjectDetailPage() {
     return () => clearInterval(interval);
   }, [goals, fetchGoals]);
 
-  function handleCopyLink() {
-    navigator.clipboard.writeText(window.location.href);
-    toast("링크가 복사되었습니다", "success");
+  async function handleCopyLink() {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      toast("링크가 복사되었습니다", "success");
+    } catch {
+      toast("링크를 복사하지 못했습니다", "error");
+    }
   }
 
   async function handleSaveName(name: string) {
@@ -326,9 +330,11 @@ export default function ProjectDetailPage() {
         router.push("/projects");
       } else {
         setDeleting(false);
+        toast("프로젝트 삭제에 실패했습니다", "error");
       }
     } catch {
       setDeleting(false);
+      toast("프로젝트 삭제에 실패했습니다", "error");
     }
   }
 
