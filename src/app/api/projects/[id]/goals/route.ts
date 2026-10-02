@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDB, generateId, nowISO, withErrorHandler } from "@/lib/db";
-import { computeProgress, type GoalRow } from "@/lib/goal";
+import { computeProgress, loadProgressSnapshot, type GoalRow } from "@/lib/goal";
 import type { CreateGoalRequest } from "@/types";
+
+// 공개 목록 GET이 목표마다 진행률을 계산하므로 진행 중인 목표 수를 묶어 둔다
+const MAX_ACTIVE_GOALS = 20;
 
 export const GET = withErrorHandler(async (
   _request: NextRequest,
@@ -35,13 +38,16 @@ export const GET = withErrorHandler(async (
 
   const now = nowISO();
   const data = [];
+  // 비인증 공개 GET이라 목표 수만큼 집계 쿼리를 반복하지 않도록 타이머 상태는 한 번만 읽는다
+  const snapshot = goals.results.length > 0 ? await loadProgressSnapshot(db, projectId) : undefined;
 
   for (const goal of goals.results) {
-    const { progress, newStatus } = await computeProgress(db, goal, projectId);
+    const { progress, newStatus } = await computeProgress(db, goal, projectId, snapshot);
 
     if (newStatus && goal.status === "ACTIVE") {
+      // 조회와 동시에 들어온 취소를 덮어쓰지 않도록 ACTIVE일 때만 전이한다
       await db
-        .prepare("UPDATE goals SET status = ?, completed_at = ?, updated_at = ? WHERE id = ?")
+        .prepare("UPDATE goals SET status = ?, completed_at = ?, updated_at = ? WHERE id = ? AND status = 'ACTIVE'")
         .bind(newStatus, now, now, goal.id)
         .run();
       goal.status = newStatus;
@@ -146,6 +152,17 @@ export const POST = withErrorHandler(async (
         { status: 400 },
       );
     }
+  }
+
+  const active = await db
+    .prepare("SELECT COUNT(*) AS cnt FROM goals WHERE project_id = ? AND status = 'ACTIVE'")
+    .bind(projectId)
+    .first<{ cnt: number }>();
+  if ((active?.cnt ?? 0) >= MAX_ACTIVE_GOALS) {
+    return NextResponse.json(
+      { error: { code: "BAD_REQUEST", message: `진행 중인 목표는 최대 ${MAX_ACTIVE_GOALS}개까지 만들 수 있습니다` } },
+      { status: 400 },
+    );
   }
 
   const id = generateId();
