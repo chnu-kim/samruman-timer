@@ -53,6 +53,7 @@
 ### Critical
 
 #### UX-01. 소유자 타이머 화면에서 Tab 키가 단축키로 가로채여 키보드 포커스가 움직이지 않는다(모달 안 포함)
+- **상태**: 해결 — Tab 단축키를 없애고 추가/차감 전환을 `X`로 옮겼다. 한국어 IME에서도 동작하도록 `e.code`(`KeyX`)로 판별하고 Cmd/Ctrl/Alt 조합은 무시한다. 도움말과 `docs/UI.md`에 단축키 목록을 맞췄다.
 - **심각도**: critical · **영역**: 접근성 / 타이머 조작
 - **관찰**: `SHORTCUTS`에 `"Tab": { toggleAction: true }`가 있다. window keydown 핸들러는 대상이 INPUT, TEXTAREA, SELECT가 아니면 `preventDefault()`를 호출한다. 이 동작은 소유자이면서 상태가 RUNNING이나 EXPIRED일 때 항상 켜져 있다. 실측 결과 body에서 Tab을 10번 눌러도 포커스가 BODY에 머물렀다. 삭제 확인 창에서는 '취소'에서, 오버레이 설정 모달에서는 '닫기'에서 포커스가 움직이지 않았다. Tab을 누를 때마다 추가와 차감 방향만 뒤집힌다(UX-02로 이어진다).
 - **이유**: 키보드 사용자는 닉네임 입력란 밖으로 나갈 수 없다. 삭제 확인 창의 '삭제'와 오버레이 '저장'에도 닿을 수 없다. WCAG 2.1.1(A) 위반이다.
@@ -62,6 +63,7 @@
 ### Major
 
 #### UX-02. 단축키가 화면에 보이지 않는 추가/차감 상태를 따로 가지고 있어, UI가 '추가'인데 숫자키를 누르면 차감된다
+- **상태**: 해결 — `selectedAction`을 page가 소유하고 `TimerControls`에 `selectedAction`·`onActionChange`로 내려, 세그먼트·프리셋 라벨·단축키가 상태 하나를 공유한다. 도움말 문구도 '+1시간'에서 '1시간 추가/차감'으로 바꿨다.
 - **심각도**: major · **영역**: 타이머 조작 / 접근성
 - **관찰**: `page.tsx:136`의 `selectedAction`과 `TimerControls.tsx:71`의 `selectedAction`은 별개의 state다. 단축키 토글은 page 쪽만 바꾼다. 실측(기본 닉네임 설정 후 Tab, 1)에서 세그먼트는 '추가'(aria-checked)로 남아 있었는데 `{action:"SUBTRACT", deltaSeconds:3600}`이 전송됐다. 이 상태 변화를 알 수 있는 단서는 전송 뒤에 뜨는 '차감 완료' 토스트뿐이다. 도움말에도 '1 = +1시간'으로 적혀 있다.
 - **이유**: 후원을 읽어 주며 1을 누른 스트리머의 타이머에서 1시간이 빠진다. 잘못된 차감은 로그, 그래프, 통계에 그대로 남는다. 되돌릴 수는 있지만 방송 화면에 먼저 노출된다.
@@ -69,6 +71,7 @@
 - **근거**: [11-timer-running-owner--d-light.png](ux-review/11-timer-running-owner--d-light.png), [14-timer-shortcut-help--d-light.png](ux-review/14-timer-shortcut-help--d-light.png) · 측정 캡처 [D2-after-1.png](ux-review/measure/D2-after-1.png), [D3-after-1-done.png](ux-review/measure/D3-after-1-done.png) · `src/app/timers/[id]/page.tsx:136, 231-259`, `src/components/timer/TimerControls.tsx:71`
 
 #### UX-03. 데스크톱 빠른 적용 모드에서 '+1시간' 버튼이 차감 모드일 때 시간을 즉시 뺀다
+- **상태**: 해결 — 빠른 적용 모드에서 차감이면 프리셋 라벨을 `-`로 바꾸고, 차감 확인 버튼에 `variant="danger"`를 준다.
 - **심각도**: major · **영역**: 일관성 / 타이머 조작
 - **관찰**: 데스크톱 프리셋 라벨은 항상 `+{preset.label}`이다(`:346`). 빠른 적용 모드에서는 클릭 즉시 `submitModify(selectedAction, …)`를 호출하므로(`:338, :166`), 차감을 선택한 상태에서 '+1시간'을 누르면 확인 없이 1시간이 빠진다. 모바일 하단 바는 부호를 '-'로 바꾸고 빨간색을 쓴다(`:426`). 데스크톱 확인 버튼은 차감 모드에서도 accent 보라색 그대로다.
 - **이유**: 급하게 클릭하는 스트리머는 토글이 아니라 버튼 라벨을 읽는다. '+'라고 적힌 버튼이 시간을 빼면 그 결과가 즉시 방송 화면과 로그에 반영된다.
@@ -76,6 +79,7 @@
 - **근거**: [11-timer-running-owner--d-light.png](ux-review/11-timer-running-owner--d-light.png), [11-timer-running-owner--m-light.png](ux-review/11-timer-running-owner--m-light.png) · `src/components/timer/TimerControls.tsx:166, 338, 346, 398-407, 426`
 
 #### UX-04. 삭제 확인 창이나 오버레이 설정 모달이 열려 있어도 숫자 단축키가 타이머 시간을 바꾼다
+- **상태**: 해결 — 삭제 확인 창·오버레이 설정 모달이 열려 있으면 단축키를 끄고, 도움말이 열려 있으면 훅이 숫자키와 전환만 무시한다(`?`, R, G, ESC는 유지).
 - **심각도**: major · **영역**: 접근성 / 타이머 조작
 - **관찰**: 키 핸들러는 모달이 열려 있는지 확인하지 않는다. 실측 결과 삭제 확인 창에서 '취소'에 포커스를 둔 채 '5'를 누르자 ADD 18000초가, 오버레이 모달에서 '닫기'에 포커스를 둔 채 '0'을 누르자 36000초 요청이 나갔다. 입력 필드 안의 숫자 입력은 기존 INPUT 가드로 걸러진다.
 - **이유**: 모달은 뒤쪽 화면을 막는다는 약속이다. 그런데 그 뒤에서 시간 단위의 변경이 조용히 실행된다.
@@ -83,6 +87,7 @@
 - **근거**: [13-timer-delete-confirm--d-light.png](ux-review/13-timer-delete-confirm--d-light.png), [12-timer-overlay-settings--d-light.png](ux-review/12-timer-overlay-settings--d-light.png) · `src/hooks/useKeyboardShortcuts.ts:36-64`, `src/app/timers/[id]/page.tsx:277-283, 689-712`
 
 #### UX-05. 모바일에서 즉시 적용 직후 3초 동안 토스트가 하단 바의 +10h 탭을 가로챈다
+- **상태**: 해결 — 토스트의 `pointer-events-auto`를 빼서 탭이 하단 바로 통과하게 했고, md 미만에서는 컨테이너를 `bottom-24`로 올려 라벨도 가리지 않게 했다.
 - **심각도**: major · **영역**: 모바일 / 타이머 조작
 - **관찰**: 토스트 컨테이너는 `fixed bottom-4 right-4 z-50`이고, 항목에는 `pointer-events-auto`가 붙어 있다. 이 토스트가 하단 바(`fixed bottom-0 z-40`)의 +10h 위에 3초 동안 겹친다. 실측 결과 +10h 중앙의 `elementFromPoint`는 토스트였고, 그 지점을 탭해도 modify 요청 수는 늘지 않았다. 버튼 영역 9개 지점 중 6개가 가려졌다. 실패할 때는 토스트 두 개가 쌓여 +5h까지 덮는다.
 - **이유**: 후원이 몰려 연속으로 탭할 때 입력이 아무 표시 없이 누락된다. 하단 바의 존재 이유인 빠른 연속 입력이 깨진다.
@@ -90,6 +95,7 @@
 - **근거**: [24-timer-add-flow--m-light.png](ux-review/24-timer-add-flow--m-light.png) · 측정 캡처 [C2-m-quick-300ms.png](ux-review/measure/C2-m-quick-300ms.png), [E1-m-500.png](ux-review/measure/E1-m-500.png), [mob/toast-over-bar.png](ux-review/measure/mob/toast-over-bar.png) · `src/components/ui/Toast.tsx:55, 61, 66`, `src/components/timer/TimerControls.tsx:411`
 
 #### UX-06. 통계의 시간대 차트, 피크 시간대, 일별 차트가 UTC로 집계되어 한국 시간과 9시간 어긋난다
+- **상태**: 해결 — 시간대·일별 집계 SQL에 `'+9 hours'` modifier를 적용해 KST로 묶는다(피크 시간대는 시간대 결과에서 따라온다). `docs/API.md`에 KST 기준을 적었다.
 - **심각도**: major · **영역**: 통계
 - **관찰**: `created_at`은 UTC ISO 문자열인데(`db.ts:15`), 통계 API가 이를 `strftime('%H', created_at)`와 `DATE(created_at)`로 그대로 묶는다. 화면의 '피크 시간대 1시'는 실제로 KST 10시다. KST 00~09시 이벤트는 전날 막대에 들어간다. 반면 변경 기록 화면은 ko-KR 로컬 시각으로 표시하므로, 같은 이벤트가 두 화면에서 다른 시각으로 보인다. 화면 어디에도 'UTC'라는 표기는 없다.
 - **이유**: 이 페이지의 존재 이유가 '몇 시에 후원이 몰리는가'다. 틀린 값을 믿고 방송 시간을 정하게 된다.
