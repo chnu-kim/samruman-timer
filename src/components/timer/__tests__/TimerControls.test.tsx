@@ -55,6 +55,8 @@ describe("TimerControls", () => {
   it("shows message for SCHEDULED timers", () => {
     render(<Harness timerId={timerId} status="SCHEDULED" />);
     expect(screen.getByText(/예약된 타이머/)).toBeInTheDocument();
+    // UX-43: 일정을 바꿀 유일한 방법(삭제 후 재생성)을 안내한다
+    expect(screen.getByText(/삭제한 뒤 다시 만드세요/)).toBeInTheDocument();
     expect(screen.queryByLabelText("시청자 닉네임")).not.toBeInTheDocument();
   });
 
