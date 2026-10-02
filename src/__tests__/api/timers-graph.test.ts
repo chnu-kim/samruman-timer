@@ -109,6 +109,17 @@ describe("GET /api/timers/[id]/graph", () => {
       const sql = String(db.prepare.mock.calls.at(-1)?.[0]);
       expect(sql).toContain("(rn - 1) % ((total + 1000 - 1) / 1000) = 0 OR rn = total");
     });
+
+    it("mode=frequency는 최근 1000개 시간 구간만 반환한다", async () => {
+      db._stmt.first.mockResolvedValueOnce({ id: "timer-1" });
+      db._stmt.all.mockResolvedValue({ results: [] });
+
+      await callGet("?mode=frequency");
+
+      const sql = String(db.prepare.mock.calls.at(-1)?.[0]);
+      expect(sql).toMatch(/ORDER BY hour DESC\s+LIMIT 1000/);
+      expect(sql).toMatch(/\)\s+ORDER BY hour ASC/);
+    });
   });
 
   describe("mode=frequency", () => {

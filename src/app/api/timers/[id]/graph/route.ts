@@ -96,17 +96,21 @@ export const GET = withErrorHandler(async (
     return NextResponse.json({ data: { mode: "cumulative", points } });
   }
 
-  // frequency
+  // frequency — 시간 단위 구간을 유지하고 최근 MAX_POINTS개 구간만 반환한다
   const rows = await db
     .prepare(
-      `SELECT
-         strftime('%Y-%m-%dT%H:00:00Z', created_at) AS hour,
-         COUNT(*) AS count,
-         SUM(CASE WHEN action_type = 'ADD' THEN 1 ELSE 0 END) AS adds,
-         SUM(CASE WHEN action_type = 'SUBTRACT' THEN 1 ELSE 0 END) AS subtracts
-       FROM timer_logs
-       WHERE timer_id = ? AND action_type IN ('ADD', 'SUBTRACT')
-       GROUP BY hour
+      `SELECT hour, count, adds, subtracts FROM (
+         SELECT
+           strftime('%Y-%m-%dT%H:00:00Z', created_at) AS hour,
+           COUNT(*) AS count,
+           SUM(CASE WHEN action_type = 'ADD' THEN 1 ELSE 0 END) AS adds,
+           SUM(CASE WHEN action_type = 'SUBTRACT' THEN 1 ELSE 0 END) AS subtracts
+         FROM timer_logs
+         WHERE timer_id = ? AND action_type IN ('ADD', 'SUBTRACT')
+         GROUP BY hour
+         ORDER BY hour DESC
+         LIMIT ${MAX_POINTS}
+       )
        ORDER BY hour ASC`
     )
     .bind(timerId)

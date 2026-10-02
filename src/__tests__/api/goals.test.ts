@@ -124,6 +124,24 @@ describe("GET /api/projects/[id]/goals", () => {
     const update = db.prepare.mock.calls.map((c) => String(c[0])).find((q) => q.startsWith("UPDATE goals"));
     expect(update).toContain("AND status = 'ACTIVE'");
   });
+
+  it("진행 중인 목표를 우선해 최대 50개만 읽고 응답은 생성일 역순으로 정렬한다", async () => {
+    db._stmt.first.mockResolvedValueOnce({ id: "proj-1" });
+    db._stmt.all.mockResolvedValueOnce({
+      results: [
+        { ...GOAL_ROW, id: "active-old", created_at: "2026-01-01T00:00:00.000Z" },
+        { ...GOAL_ROW, id: "done-new", status: "COMPLETED", created_at: "2026-02-01T00:00:00.000Z" },
+      ],
+    });
+
+    const res = await GET(createGetRequest("/api/projects/proj-1/goals") as never, makeParams() as never);
+    const json = await parseJson(res);
+
+    const listSql = db.prepare.mock.calls.map((c) => String(c[0])).find((q) => q.includes("FROM goals"));
+    expect(listSql).toContain("ORDER BY (status = 'ACTIVE') DESC, created_at DESC");
+    expect(listSql).toContain("LIMIT 50");
+    expect(json.data.map((g: { id: string }) => g.id)).toEqual(["done-new", "active-old"]);
+  });
 });
 
 describe("POST /api/projects/[id]/goals", () => {
@@ -187,6 +205,9 @@ describe("POST /api/projects/[id]/goals", () => {
     db._stmt.first
       .mockResolvedValueOnce(PROJECT_ROW)
       .mockResolvedValueOnce({ cnt: 20 });
+    db._stmt.all.mockResolvedValueOnce({
+      results: Array.from({ length: 20 }, (_, i) => ({ ...GOAL_ROW, id: `goal-${i}` })),
+    });
 
     const req = createPostRequest(
       "/api/projects/proj-1/goals",
@@ -197,6 +218,31 @@ describe("POST /api/projects/[id]/goals", () => {
 
     expect(res.status).toBe(400);
     expect(db._stmt.run).not.toHaveBeenCalled();
+  });
+
+  it("상한에 걸려도 이미 달성한 목표를 먼저 전이하고 자리가 나면 생성한다", async () => {
+    db._stmt.first
+      .mockResolvedValueOnce(PROJECT_ROW)
+      .mockResolvedValueOnce({ cnt: 20 });
+    db._stmt.all.mockResolvedValueOnce({
+      results: Array.from({ length: 20 }, (_, i) => ({ ...GOAL_ROW, id: `goal-${i}` })),
+    });
+    vi.mocked(computeProgress).mockResolvedValueOnce({
+      progress: { percentage: 100, currentSeconds: 36000, remainingToTarget: 0 },
+      newStatus: "COMPLETED",
+    });
+
+    const req = createPostRequest(
+      "/api/projects/proj-1/goals",
+      { type: "DURATION", title: "목표", targetSeconds: 3600 },
+      { "x-user-id": "user-1" },
+    );
+    const res = await POST(req as never, makeParams() as never);
+
+    expect(res.status).toBe(201);
+    const sqls = db.prepare.mock.calls.map((c) => String(c[0]));
+    expect(sqls.some((q) => q.startsWith("UPDATE goals") && q.includes("AND status = 'ACTIVE'"))).toBe(true);
+    expect(sqls.some((q) => q.includes("INSERT INTO goals"))).toBe(true);
   });
 
   it("404 프로젝트 없으면 에러", async () => {
