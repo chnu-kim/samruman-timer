@@ -126,8 +126,9 @@ export default function TimerDetailPage() {
     }
   }, [timerId]);
 
-  const fetchLogs = useCallback(async (page: number, filters: Set<ActionType>) => {
-    setLogsLoading(true);
+  // silent: 폴링이 부르는 백그라운드 갱신. 로딩 표시 없이 기존 목록을 둔 채 새 데이터로 바꾼다
+  const fetchLogs = useCallback(async (page: number, filters: Set<ActionType>, { silent = false } = {}) => {
+    if (!silent) setLogsLoading(true);
     try {
       const params = new URLSearchParams({ page: String(page), limit: "20" });
       if (filters.size > 0) {
@@ -142,7 +143,7 @@ export default function TimerDetailPage() {
     } catch {
       // ignore
     } finally {
-      setLogsLoading(false);
+      if (!silent) setLogsLoading(false);
     }
   }, [timerId]);
 
@@ -166,21 +167,25 @@ export default function TimerDetailPage() {
     fetchLogs(logPage, activeFilters);
   }, [logPage, activeFilters, fetchLogs]);
 
-  const fetchGraph = useCallback(async (mode: GraphMode) => {
-    setGraphLoading(true);
-    setGraphError(false);
+  // silent: 폴링이 부르는 백그라운드 갱신. 스피너를 띄우지 않고, 실패해도 보이던 그래프를 오류 문구로 바꾸지 않는다
+  const fetchGraph = useCallback(async (mode: GraphMode, { silent = false } = {}) => {
+    if (!silent) {
+      setGraphLoading(true);
+      setGraphError(false);
+    }
     try {
       const res = await fetch(`/api/timers/${timerId}/graph?mode=${mode}`);
       if (res.ok) {
         const json = (await res.json()) as ApiSuccessResponse<GraphResponse>;
         setGraphData(json.data);
-      } else {
+        setGraphError(false);
+      } else if (!silent) {
         setGraphError(true);
       }
     } catch {
-      setGraphError(true);
+      if (!silent) setGraphError(true);
     } finally {
-      setGraphLoading(false);
+      if (!silent) setGraphLoading(false);
     }
   }, [timerId]);
 
@@ -225,8 +230,8 @@ export default function TimerDetailPage() {
       // 상태 전이(만료 등)나 다른 기기의 조작이 있을 때만 기록과 그래프를 다시 불러온다.
       // 2페이지 이후를 보고 있으면 목록이 밀리지 않게 로그는 건너뛴다
       if (externalChange) {
-        if (logPage === 1) fetchLogs(1, activeFilters);
-        fetchGraph(graphMode);
+        if (logPage === 1) fetchLogs(1, activeFilters, { silent: true });
+        fetchGraph(graphMode, { silent: true });
       }
     } catch {
       // 폴링 실패는 무시
