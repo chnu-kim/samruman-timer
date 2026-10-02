@@ -201,9 +201,14 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
     return () => clearTimeout(timeout);
   }, [overlayUrl]);
 
-  const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(overlayUrl);
-    toast("OBS 오버레이 URL이 복사되었습니다", "success");
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(overlayUrl);
+      toast("OBS 오버레이 URL이 복사되었습니다", "success");
+    } catch {
+      // 실패를 성공으로 알리면 클립보드에 남아 있던 이전 URL을 OBS에 붙여 넣게 된다
+      toast("URL을 복사하지 못했습니다. 주소를 직접 선택해 복사해 주세요", "error");
+    }
   }, [overlayUrl, toast]);
 
   const applyPreset = useCallback((preset: (typeof PRESETS)[number]) => {

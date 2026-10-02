@@ -245,19 +245,29 @@ describe("modifyTimer", () => {
     expect(expireLog.actorUserId).toBeNull();
   });
 
-  it("이미 EXPIRED 상태에서 SUBTRACT → SUBTRACT 로그만 기록, 중복 EXPIRE 없음", async () => {
+  // UX-14: 만료 상태의 차감은 효과가 없으므로 0→0 로그를 남기지 않고 거절한다
+  it("이미 EXPIRED 상태에서 SUBTRACT → 예외, DB 쓰기 없음", async () => {
     const db = createMockDB();
     const timer = makeTimer({ status: "EXPIRED", baseRemainingSeconds: 0 });
-    const result = await modifyTimer(db, timer, "SUBTRACT", 100, "tester", "user-1");
+    await expect(modifyTimer(db, timer, "SUBTRACT", 100, "tester", "user-1")).rejects.toThrow(
+      "만료된 타이머는 차감할 수 없습니다",
+    );
+    expect(db.batch).not.toHaveBeenCalled();
+  });
 
+  it("RUNNING이지만 잔여가 정확히 0초일 때 SUBTRACT → 예외", async () => {
+    const db = createMockDB();
+    const timer = makeTimer({ baseRemainingSeconds: 0 });
+    await expect(modifyTimer(db, timer, "SUBTRACT", 1, "tester", "user-1")).rejects.toThrow();
+    expect(db.batch).not.toHaveBeenCalled();
+  });
+
+  it("잔여 1초에서 SUBTRACT → EXPIRED + EXPIRE 로그 (경계)", async () => {
+    const db = createMockDB();
+    const timer = makeTimer({ baseRemainingSeconds: 1 });
+    const result = await modifyTimer(db, timer, "SUBTRACT", 1, "tester", "user-1");
     expect(result.timer.status).toBe("EXPIRED");
-    expect(result.timer.baseRemainingSeconds).toBe(0);
-    const subtractLogs = result.logs.filter((l) => l.actionType === "SUBTRACT");
-    const expireLogs = result.logs.filter((l) => l.actionType === "EXPIRE");
-    expect(subtractLogs).toHaveLength(1);
-    expect(subtractLogs[0].beforeSeconds).toBe(0);
-    expect(subtractLogs[0].afterSeconds).toBe(0);
-    expect(expireLogs).toHaveLength(0); // 이미 EXPIRED이므로 중복 EXPIRE 로그 없음
+    expect(result.logs.map((l) => l.actionType)).toEqual(["SUBTRACT", "EXPIRE"]);
   });
 
   it("EXPIRED 상태에서 ADD → REOPEN + ADD 로그 생성, RUNNING 전환", async () => {

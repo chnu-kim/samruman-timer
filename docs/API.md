@@ -408,7 +408,9 @@ CHZZK OAuth 콜백을 처리한다.
   - `action`: 필수, "ADD" 또는 "SUBTRACT"
   - `deltaSeconds`: 필수, 양의 정수
   - `actorName`: 필수, 1~50자 (시간 변경을 요청한 시청자 닉네임)
-- **제한**: `SCHEDULED` 상태의 타이머는 시간 변경 불가 (`400 BAD_REQUEST`)
+- **제한**:
+  - `SCHEDULED` 상태의 타이머는 시간 변경 불가 (`400 BAD_REQUEST`)
+  - 만료된 타이머(`EXPIRED`, 또는 아직 `RUNNING`으로 남아 있지만 잔여가 0초인 타이머)에 대한 `SUBTRACT`는 거절 (`400 BAD_REQUEST`, "만료된 타이머는 차감할 수 없습니다"). 아무것도 바꾸지 않으므로 로그도 남기지 않는다. `ADD`는 허용되며 타이머를 재시작한다(`REOPEN` + `ADD`)
 - **동작**: 요청 시 먼저 예약 활성화 감지를 실행한 후 시간 변경 수행
 - **응답**: `200 OK`
 ```json

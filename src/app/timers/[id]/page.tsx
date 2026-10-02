@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { CountdownDisplay } from "@/components/timer/CountdownDisplay";
@@ -22,8 +22,10 @@ import { FrequencyChart } from "@/components/graph/FrequencyChart";
 import { useKeyboardShortcuts, SHORTCUT_HELP } from "@/hooks/useKeyboardShortcuts";
 import { usePolling } from "@/hooks/usePolling";
 import { authFetch } from "@/lib/auth-fetch";
+import { hasExternalChange, type SyncedTimerSnapshot } from "@/lib/timer-sync";
 import type {
   ApiSuccessResponse,
+  ApiErrorResponse,
   TimerDetailResponse,
   TimerModifyResponse,
   ModifyAction,
@@ -85,6 +87,8 @@ export default function TimerDetailPage() {
   const [user, setUser] = useState<MeResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // 404는 다시 시도해도 같으므로 일시적 오류와 구분한다
+  const [notFound, setNotFound] = useState(false);
 
   // 로그
   const [logs, setLogs] = useState<TimerLogResponse[]>([]);
@@ -99,40 +103,6 @@ export default function TimerDetailPage() {
   const [graphLoading, setGraphLoading] = useState(false);
   const [graphError, setGraphError] = useState(false);
 
-  // 폴링: 서버 동기화
-  const pollInterval = timer?.status === "RUNNING" ? 5000 : 15000;
-
-  const pollTimer = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/timers/${timerId}`);
-      if (!res.ok) return;
-      const json = (await res.json()) as ApiSuccessResponse<TimerDetailResponse>;
-      const serverData = json.data;
-
-      setTimer((prev) => {
-        if (!prev) return prev;
-        if (prev.status !== serverData.status) {
-          return serverData;
-        }
-        if (prev.status === "RUNNING") {
-          const diff = Math.abs(prev.remainingSeconds - serverData.remainingSeconds);
-          if (diff >= 2) {
-            return { ...prev, remainingSeconds: serverData.remainingSeconds };
-          }
-        }
-        return prev;
-      });
-    } catch {
-      // 폴링 실패는 무시
-    }
-  }, [timerId]);
-
-  usePolling({
-    fn: pollTimer,
-    interval: pollInterval,
-    enabled: !loading && !error && !!timer,
-  });
-
   // 추가/차감 방향. 세그먼트, 프리셋 라벨, 단축키가 이 상태 하나를 공유한다
   const [selectedAction, setSelectedAction] = useState<ModifyAction>("ADD");
 
@@ -142,18 +112,23 @@ export default function TimerDetailPage() {
     try {
       const res = await fetch(`/api/timers/${timerId}`);
       if (!res.ok) {
-        setError("타이머를 찾을 수 없습니다.");
+        if (res.status === 404) {
+          setNotFound(true);
+        } else {
+          setError("타이머 정보를 불러오지 못했습니다.");
+        }
         return;
       }
       const json = (await res.json()) as ApiSuccessResponse<TimerDetailResponse>;
       setTimer(json.data);
     } catch {
-      setError("타이머 정보를 불러오는데 실패했습니다.");
+      setError("타이머 정보를 불러오지 못했습니다.");
     }
   }, [timerId]);
 
-  const fetchLogs = useCallback(async (page: number, filters: Set<ActionType>) => {
-    setLogsLoading(true);
+  // silent: 폴링이 부르는 백그라운드 갱신. 로딩 표시 없이 기존 목록을 둔 채 새 데이터로 바꾼다
+  const fetchLogs = useCallback(async (page: number, filters: Set<ActionType>, { silent = false } = {}) => {
+    if (!silent) setLogsLoading(true);
     try {
       const params = new URLSearchParams({ page: String(page), limit: "20" });
       if (filters.size > 0) {
@@ -168,7 +143,7 @@ export default function TimerDetailPage() {
     } catch {
       // ignore
     } finally {
-      setLogsLoading(false);
+      if (!silent) setLogsLoading(false);
     }
   }, [timerId]);
 
@@ -192,27 +167,82 @@ export default function TimerDetailPage() {
     fetchLogs(logPage, activeFilters);
   }, [logPage, activeFilters, fetchLogs]);
 
-  const fetchGraph = useCallback(async (mode: GraphMode) => {
-    setGraphLoading(true);
-    setGraphError(false);
+  // silent: 폴링이 부르는 백그라운드 갱신. 스피너를 띄우지 않고, 실패해도 보이던 그래프를 오류 문구로 바꾸지 않는다
+  const fetchGraph = useCallback(async (mode: GraphMode, { silent = false } = {}) => {
+    if (!silent) {
+      setGraphLoading(true);
+      setGraphError(false);
+    }
     try {
       const res = await fetch(`/api/timers/${timerId}/graph?mode=${mode}`);
       if (res.ok) {
         const json = (await res.json()) as ApiSuccessResponse<GraphResponse>;
         setGraphData(json.data);
-      } else {
+        setGraphError(false);
+      } else if (!silent) {
         setGraphError(true);
       }
     } catch {
-      setGraphError(true);
+      if (!silent) setGraphError(true);
     } finally {
-      setGraphLoading(false);
+      if (!silent) setGraphLoading(false);
     }
   }, [timerId]);
 
   useEffect(() => {
     fetchGraph(graphMode);
   }, [graphMode, fetchGraph]);
+
+  // 폴링: 서버 동기화
+  const pollInterval = timer?.status === "RUNNING" ? 5000 : 15000;
+
+  // 화면에 마지막으로 반영한 값과 그 시각. 폴링 값이 다른 기기의 변경인지 판단하는 기준이다
+  const syncedRef = useRef<SyncedTimerSnapshot | null>(null);
+  useEffect(() => {
+    syncedRef.current = timer
+      ? { status: timer.status, remainingSeconds: timer.remainingSeconds, syncedAtMs: Date.now() }
+      : null;
+  }, [timer]);
+
+  const pollTimer = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/timers/${timerId}`);
+      if (!res.ok) return;
+      const json = (await res.json()) as ApiSuccessResponse<TimerDetailResponse>;
+      const serverData = json.data;
+      const synced = syncedRef.current;
+      const externalChange = !!synced && hasExternalChange(synced, serverData, Date.now());
+
+      setTimer((prev) => {
+        if (!prev) return prev;
+        if (prev.status !== serverData.status) {
+          return serverData;
+        }
+        if (prev.status === "RUNNING") {
+          const diff = Math.abs(prev.remainingSeconds - serverData.remainingSeconds);
+          if (diff >= 2) {
+            return { ...prev, remainingSeconds: serverData.remainingSeconds };
+          }
+        }
+        return prev;
+      });
+
+      // 상태 전이(만료 등)나 다른 기기의 조작이 있을 때만 기록과 그래프를 다시 불러온다.
+      // 2페이지 이후를 보고 있으면 목록이 밀리지 않게 로그는 건너뛴다
+      if (externalChange) {
+        if (logPage === 1) fetchLogs(1, activeFilters, { silent: true });
+        fetchGraph(graphMode, { silent: true });
+      }
+    } catch {
+      // 폴링 실패는 무시
+    }
+  }, [timerId, logPage, activeFilters, graphMode, fetchLogs, fetchGraph]);
+
+  usePolling({
+    fn: pollTimer,
+    interval: pollInterval,
+    enabled: !loading && !error && !notFound && !!timer,
+  });
 
   function handleModified(data: TimerModifyResponse) {
     setTimer((prev) =>
@@ -246,12 +276,15 @@ export default function TimerDetailPage() {
           const json = (await res.json()) as ApiSuccessResponse<TimerModifyResponse>;
           handleModified(json.data);
           toast(`${selectedAction === "ADD" ? "추가" : "차감"} 완료 (${defaultActor})`, "success");
+        } else {
+          const json = (await res.json().catch(() => null)) as ApiErrorResponse | null;
+          toast(json?.error?.message || "시간 변경에 실패했습니다.", "error");
         }
       } catch {
         toast("시간 변경에 실패했습니다.", "error");
       }
     } else {
-      toast("닉네임 입력 후 숫자키로 즉시 적용할 수 있습니다", "info");
+      toast("기본 닉네임을 설정하면 숫자키로 즉시 적용됩니다", "info");
     }
   }, [isOwner, timer, toast, timerId, selectedAction]);
 
@@ -306,15 +339,21 @@ export default function TimerDetailPage() {
         router.push(`/projects/${timer!.projectId}`);
       } else {
         setDeleting(false);
+        toast("타이머 삭제에 실패했습니다", "error");
       }
     } catch {
       setDeleting(false);
+      toast("타이머 삭제에 실패했습니다", "error");
     }
   }
 
-  function handleCopyLink() {
-    navigator.clipboard.writeText(window.location.href);
-    toast("링크가 복사되었습니다", "success");
+  async function handleCopyLink() {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      toast("링크가 복사되었습니다", "success");
+    } catch {
+      toast("링크를 복사하지 못했습니다", "error");
+    }
   }
 
   async function handleSaveTitle(title: string) {
@@ -349,10 +388,14 @@ export default function TimerDetailPage() {
     );
   }
 
+  if (notFound) {
+    return <ErrorState message="타이머를 찾을 수 없습니다. 삭제되었거나 주소가 잘못되었습니다." />;
+  }
+
   if (error || !timer) {
     return (
       <ErrorState
-        message={error || "타이머를 찾을 수 없습니다."}
+        message={error || "타이머 정보를 불러오지 못했습니다."}
         onRetry={async () => { setError(""); setLoading(true); await fetchTimer(); setLoading(false); }}
       />
     );
@@ -708,7 +751,7 @@ export default function TimerDetailPage() {
       <ConfirmDialog
         open={showDeleteDialog}
         title="타이머 삭제"
-        description="정말로 이 타이머를 삭제하시겠습니까?"
+        description="삭제하면 OBS 오버레이가 즉시 표시되지 않으며 되돌릴 수 없습니다."
         confirmLabel="삭제"
         variant="danger"
         onConfirm={handleDelete}

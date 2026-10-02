@@ -81,6 +81,7 @@ lastCalculatedAt = now
   - 로그: `ADD`
 
 ### 시간 차감 (SUBTRACT)
+- 현재 status가 `EXPIRED`이거나 currentRemaining이 0이면 거절한다 (API `400`, 로그 없음). 아래 "이미 만료된 타이머에 차감 시도" 참고
 ```
 currentRemaining = max(0, baseRemainingSeconds - (now - lastCalculatedAt))
 baseRemainingSeconds = max(0, currentRemaining - deltaSeconds)
@@ -149,5 +150,7 @@ lastCalculatedAt = now
 - baseRemainingSeconds 저장 시에도 0 미만 불허
 
 ### 이미 만료된 타이머에 차감 시도
-- currentRemaining이 이미 0이므로 변화 없음
-- 로그는 기록 (before=0, after=0, delta=요청값)
+- currentRemaining이 이미 0이라 차감해도 변화가 없으므로 `400 BAD_REQUEST`("만료된 타이머는 차감할 수 없습니다")로 거절한다
+- 상태와 로그를 바꾸지 않는다. 예전에는 before=0, after=0인 `SUBTRACT` 로그가 시청자 닉네임과 함께 공개 변경 기록에 남았다
+- DB status가 아직 `RUNNING`이어도(만료는 조회 시 lazy 감지) currentRemaining이 0이면 같은 상황으로 보고 거절한다
+- `modifyTimer()`도 같은 조건에서 예외를 던진다. 라우트가 먼저 400을 반환하므로 정상 경로에서는 도달하지 않는다

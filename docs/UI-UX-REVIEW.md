@@ -129,6 +129,7 @@
 ### Minor
 
 #### UX-10. 성공 토스트가 서버 응답 전에 뜨고, 실패하면 입력값이 사라진다
+- **상태**: 해결 — 낙관적 카운트다운 갱신과 입력 즉시 초기화는 유지하고, 성공 토스트를 `res.ok` 확인 뒤로 옮겼다. 실패(`!res.ok`, 예외)하면 제출한 시·분·초를 복원한다. 요청 중에 다음 금액을 새로 입력했으면 그 값을 덮어쓰지 않는다.
 - **심각도**: minor · **영역**: 타이머 조작
 - **관찰**: `submitModify`는 요청을 보내기 전에 '추가 완료' 토스트를 띄우고 시, 분, 초를 0으로 초기화한다. 400 응답을 모의로 주면 초록 '추가 완료'와 빨간 '만료된 타이머입니다.'가 동시에 뜨고 입력칸은 0/0/0이 된다.
 - **이유**: 서로 모순되는 토스트가 함께 뜨고, 다시 시도하려면 금액을 처음부터 다시 쳐야 한다. 카운트다운 롤백과 인라인 오류가 있어 실패 자체가 묻히지는 않는다.
@@ -136,6 +137,7 @@
 - **근거**: 측정 캡처 [B2-fail-after.png](ux-review/measure/B2-fail-after.png), [E1-m-500.png](ux-review/measure/E1-m-500.png) · `src/components/timer/TimerControls.tsx:109-115, 125-136`
 
 #### UX-11. 삭제 실패에 아무 피드백이 없고, 링크와 URL 복사는 실패해도 성공 토스트가 뜬다
+- **상태**: 해결 — 타이머·프로젝트 삭제 실패(`!res.ok`, 예외)에 오류 토스트를 띄운다. 타이머 삭제 설명을 '삭제하면 OBS 오버레이가 즉시 표시되지 않으며 되돌릴 수 없습니다.'로 바꿨다. 링크 복사(프로젝트, 타이머)와 오버레이 URL 복사는 `writeText`를 await한 뒤 성공 토스트를, 실패하면 오류 토스트를 띄운다.
 - **심각도**: minor · **영역**: 프로젝트 상세 / 타이머 조작 / 오버레이
 - **관찰**: 타이머와 프로젝트의 `handleDelete`는 `!res.ok`나 예외에서 `setDeleting(false)`만 호출한다. 타이머 삭제는 다이얼로그를 먼저 닫기 때문에 결과를 알 수 없다. 삭제 확인 문구는 '정말로 이 타이머를 삭제하시겠습니까?'뿐이고, OBS 오버레이가 즉시 404가 된다는 결과를 알리지 않는다. 링크 복사(프로젝트, 타이머)와 오버레이 URL 복사는 `navigator.clipboard.writeText`를 await하지 않고 바로 성공 토스트를 띄운다.
 - **이유**: 실패를 성공으로 믿게 된다. 특히 오버레이 URL 복사가 실패하면 클립보드에 있던 이전 URL을 OBS에 붙여 넣게 된다.
@@ -143,6 +145,7 @@
 - **근거**: [13-timer-delete-confirm--d-light.png](ux-review/13-timer-delete-confirm--d-light.png) · `src/app/timers/[id]/page.tsx:298-311, 314, 704-712`, `src/app/projects/[id]/page.tsx:269-272, 320-333`, `src/components/timer/OverlaySettings.tsx:204-207`
 
 #### UX-12. 키보드 프리셋이 서버 오류에 아무 반응이 없고, 안내 문구가 실제 조건과 다르다
+- **상태**: 해결 — 기본 닉네임이 없을 때 안내를 '기본 닉네임을 설정하면 숫자키로 즉시 적용됩니다'로 바꾸고, `!res.ok`이면 서버 메시지(없으면 '시간 변경에 실패했습니다.')로 오류 토스트를 띄운다.
 - **심각도**: minor · **영역**: 타이머 조작
 - **관찰**: 단축키 프리셋은 localStorage의 기본 닉네임만 읽고, 입력란에 친 닉네임은 무시한다. 기본 닉네임이 없을 때 뜨는 안내는 '닉네임 입력 후 숫자키로 즉시 적용할 수 있습니다'인데, 실제로는 입력만으로는 동작하지 않는다. `!res.ok`일 때 else 분기가 없어 토스트가 뜨지 않는다.
 - **이유**: 안내대로 했는데 같은 안내가 반복된다. 서버가 거절해도 적용되지 않았다는 신호가 없다.
@@ -150,6 +153,7 @@
 - **근거**: 측정 캡처 [D2-after-1.png](ux-review/measure/D2-after-1.png) · `src/app/timers/[id]/page.tsx:231-255`, `src/components/timer/TimerControls.tsx:62, 186`
 
 #### UX-13. 만료 타이머에서 '추가'가 곧 재시작이라는 예고가 없다
+- **상태**: 해결 — `status === "EXPIRED"`일 때 조작 패널 맨 위에 '만료된 타이머입니다. 시간을 추가하면 타이머가 다시 시작됩니다.' 한 줄을 넣었다. 하단 바와 단축키는 그대로 둔다. `TimerControls` 스토리에 `Expired`를 추가했다.
 - **심각도**: minor · **영역**: 타이머 상태
 - **관찰**: 만료 타이머의 조작 패널은 실행 중일 때와 똑같이 생겼다. 서버는 EXPIRED 상태에 ADD가 들어오면 REOPEN 로그를 남기고 RUNNING으로 되돌린다. `TimerControls`는 SCHEDULED만 분기한다.
 - **이유**: 서브어톤이 끝난 뒤 화면을 정리하다 잘못 누르면 방송 화면의 오버레이가 다시 돈다. 재시작 자체는 의도된 기능이므로 문제는 예고가 없다는 점이다.
@@ -157,6 +161,7 @@
 - **근거**: [16-timer-expired--d-light.png](ux-review/16-timer-expired--d-light.png), [16-timer-expired--m-light.png](ux-review/16-timer-expired--m-light.png) · `src/components/timer/TimerControls.tsx:196-206`, `src/lib/timer.ts:116-121`
 
 #### UX-14. 만료 타이머에서 '차감'이 아무 효과 없이 '차감 완료'와 0→0 로그를 남긴다
+- **상태**: 해결 — modify 라우트가 EXPIRED(또는 DB는 RUNNING이지만 잔여 0초) 상태의 SUBTRACT를 400 '만료된 타이머는 차감할 수 없습니다'로 거절하고 로그를 남기지 않는다. `modifyTimer`도 같은 조건에서 예외를 던진다. 클라이언트는 기존 롤백과 오류 토스트로 처리되고 '차감 완료' 토스트는 UX-10으로 응답 뒤로 옮겼다. 차감 세그먼트 비활성화(선택 사항)는 하지 않았다. `docs/API.md`, `docs/TIMER-LOGIC.md` 갱신.
 - **심각도**: minor · **영역**: 타이머 상태
 - **관찰**: EXPIRED 상태에서 SUBTRACT 요청을 보내면 상태 변화 없이 `before=0, after=0`인 SUBTRACT 로그가 INSERT된다. 클라이언트는 응답 전에 성공 토스트를 띄운다.
 - **이유**: 공개 변경 기록에 실제로는 아무것도 바꾸지 않은 '-1시간' 항목이 시청자 닉네임과 함께 남는다.
@@ -299,6 +304,7 @@
 - **근거**: [07-project-detail-running-owner--m-light.png](ux-review/07-project-detail-running-owner--m-light.png) · 측정 캡처 [pd-title-tap--m.png](ux-review/measure/pd-title-tap--m.png) · `src/components/ui/EditableText.tsx:79-94`, `src/app/projects/[id]/page.tsx:338-361`
 
 #### UX-34. 프로젝트 상세의 RUNNING 타이머 카드가 서버와 동기화되지 않고, 0이 되어도 '실행 중'으로 남는다
+- **상태**: 해결 — 직접 만든 `setInterval`(SCHEDULED 전용, 탭이 숨겨져도 계속 돎)을 P0-1의 `usePolling`으로 바꾸고 조건을 `SCHEDULED || RUNNING`으로 넓혔다(5초, 화면이 숨겨지면 중단). 카운트다운이 0에 닿으면 `useCountdownEnded` 훅이 다음 폴링을 기다리지 않고 배지를 '만료'로 바꾼다. 서버 기록은 목록 API의 lazy 만료 감지가 다음 폴링 때 남긴다.
 - **심각도**: minor · **영역**: 프로젝트 상세
 - **관찰**: 폴링은 SCHEDULED일 때만 돈다. RUNNING 카드는 처음 받은 값을 클라이언트에서 깎기만 하므로 다른 곳에서 추가한 시간이 반영되지 않는다. 0이 되면 숫자는 회색 00:00:00이 되지만 배지는 `timers[0].status` 그대로 '실행 중'이다. 백로그 P0-1은 같은 문제를 타이머 상세에서만 해결했다.
 - **이유**: 시청자가 끝나지 않은 타이머를 끝났다고 보거나, 끝난 타이머를 실행 중으로 본다.
@@ -306,6 +312,7 @@
 - **근거**: [10-project-detail-nonowner--d-light.png](ux-review/10-project-detail-nonowner--d-light.png) · `src/app/projects/[id]/page.tsx:254-259, 431-433`, `src/components/timer/CountdownDisplay.tsx:39-59`
 
 #### UX-35. 타이머 상세의 폴링이 잔여 시간과 상태만 갱신해서, 다른 기기의 변경 기록과 만료 로그가 나타나지 않는다
+- **상태**: 해결 — 폴링 결과가 상태 전이이거나, 마지막 반영 값에서 흐른 시간을 뺀 기대값과 3초 이상 다를 때만(`hasExternalChange`, `src/lib/timer-sync.ts`) 현재 필터 그대로 로그(1페이지를 보고 있을 때만)와 그래프를 다시 불러온다. 폴링 주기(RUNNING 5초, 그 외 15초)와 탭 비활성 시 중단은 그대로다.
 - **심각도**: minor · **영역**: 타이머 상태
 - **관찰**: `pollTimer`는 `setTimer`만 호출한다. 로그와 그래프는 초기 로드, 필터 변경, 이 탭에서 직접 수정했을 때만 다시 불러온다. 휴대폰 하단 바로 추가하면 데스크톱의 카운트다운은 바뀌지만 기록은 그대로다.
 - **이유**: 숫자가 왜 바뀌었는지 화면에서 확인할 수 없다.
@@ -313,6 +320,7 @@
 - **근거**: [17-timer-nonowner-urgent--d-light.png](ux-review/17-timer-nonowner-urgent--d-light.png), [18-timer-loggedout-viewer--d-light.png](ux-review/18-timer-loggedout-viewer--d-light.png) · `src/app/timers/[id]/page.tsx:104-127, 216-228`
 
 #### UX-36. 일시적인 서버 오류도 '찾을 수 없습니다'로 표시되고, 404에는 쓸모없는 '다시 시도'만 있다
+- **상태**: 해결 — 프로젝트·타이머 상세가 `res.status`로 분기한다. 404이면 '…를 찾을 수 없습니다. 삭제되었거나 주소가 잘못되었습니다.'만 보여 주고 `onRetry`를 넘기지 않는다. 그 밖의 상태와 네트워크 오류는 '…를 불러오지 못했습니다'와 '다시 시도'를 보여 준다. ErrorState는 바꾸지 않았고, 통계 페이지는 권고 범위 밖이라 그대로 두었다.
 - **심각도**: minor · **영역**: 일관성 / 오류 처리
 - **관찰**: 프로젝트와 타이머 상세는 404, 403, 5xx, 네트워크 오류를 모두 '…를 찾을 수 없습니다'와 '다시 시도'로 표시한다. 통계 페이지는 구체적인 메시지가 있을 때 재시도를 숨겨서, 세 화면의 오류 처리가 다르다. 헤더 로고가 `/`를 거쳐 `/projects`로 이어지므로 막다른 길은 아니다.
 - **이유**: 일시적인 장애 때 스트리머가 타이머가 삭제됐다고 오해할 수 있다.

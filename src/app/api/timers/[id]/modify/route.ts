@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDB, withErrorHandler } from "@/lib/db";
-import { calculateRemaining, modifyTimer, detectScheduledActivation } from "@/lib/timer";
+import { calculateRemaining, modifyTimer, detectScheduledActivation, EXPIRED_SUBTRACT_MESSAGE } from "@/lib/timer";
 import type { Timer, ModifyTimerRequest } from "@/types";
 
 export const POST = withErrorHandler(async (
@@ -109,6 +109,19 @@ export const POST = withErrorHandler(async (
   if (activated.status === "SCHEDULED") {
     return NextResponse.json(
       { error: { code: "BAD_REQUEST", message: "예약된 타이머는 시간을 변경할 수 없습니다" } },
+      { status: 400 }
+    );
+  }
+
+  // 만료된 타이머의 차감은 효과가 없으므로 로그를 남기지 않고 거절한다.
+  // DB가 아직 RUNNING이어도(만료는 조회 시 lazy 감지) 잔여가 0이면 같은 상황으로 본다
+  if (
+    body.action === "SUBTRACT" &&
+    (activated.status === "EXPIRED" ||
+      calculateRemaining(activated.baseRemainingSeconds, activated.lastCalculatedAt) <= 0)
+  ) {
+    return NextResponse.json(
+      { error: { code: "BAD_REQUEST", message: EXPIRED_SUBTRACT_MESSAGE } },
       { status: 400 }
     );
   }

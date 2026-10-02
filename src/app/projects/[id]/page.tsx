@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { CountdownDisplay } from "@/components/timer/CountdownDisplay";
 import { CreateTimerForm } from "@/components/timer/CreateTimerForm";
@@ -13,10 +13,13 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { PlusIcon, TimerIcon, TrashIcon, LinkIcon, ChartBarIcon } from "@/components/ui/Icons";
 import { ProjectDetailSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
+import { reconcilePolledTimer, type SyncedTimerSnapshot } from "@/lib/timer-sync";
 import { GoalCard } from "@/components/goal/GoalCard";
 import { GoalForm } from "@/components/goal/GoalForm";
 import Link from "next/link";
 import { authFetch } from "@/lib/auth-fetch";
+import { usePolling } from "@/hooks/usePolling";
+import { useCountdownEnded } from "@/hooks/useCountdownEnded";
 import type {
   ApiSuccessResponse,
   ProjectDetailResponse,
@@ -187,6 +190,8 @@ export default function ProjectDetailPage() {
   const [timers, setTimers] = useState<TimerListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  // 404는 다시 시도해도 같으므로 일시적 오류와 구분한다
+  const [notFound, setNotFound] = useState(false);
   const [user, setUser] = useState<MeResponse | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [formKey, setFormKey] = useState(0);
@@ -201,6 +206,8 @@ export default function ProjectDetailPage() {
       if (res.ok) {
         const json = (await res.json()) as ApiSuccessResponse<ProjectDetailResponse>;
         setProject(json.data);
+      } else if (res.status === 404) {
+        setNotFound(true);
       } else {
         setError(true);
       }
@@ -221,12 +228,23 @@ export default function ProjectDetailPage() {
     }
   }, [projectId]);
 
+  // 타이머별로 화면에 반영한 값과 그 시각. 폴링마다 카운트다운이 다시 시작되지 않도록 비교 기준으로 쓴다
+  const syncedRef = useRef(new Map<string, SyncedTimerSnapshot>());
+
   const fetchTimers = useCallback(async () => {
     try {
       const res = await fetch(`/api/projects/${projectId}/timers`);
       if (res.ok) {
         const json = (await res.json()) as ApiSuccessResponse<TimerListItem[]>;
-        setTimers(json.data);
+        const now = Date.now();
+        const nextSynced = new Map<string, SyncedTimerSnapshot>();
+        const items = json.data.map((server) => {
+          const { item, snapshot } = reconcilePolledTimer(syncedRef.current.get(server.id), server, now);
+          nextSynced.set(server.id, snapshot);
+          return item;
+        });
+        syncedRef.current = nextSynced;
+        setTimers(items);
       }
     } catch {
       // ignore
@@ -251,12 +269,17 @@ export default function ProjectDetailPage() {
       .catch(() => {});
   }, [projectId, fetchProject, fetchTimers, fetchGoals]);
 
-  useEffect(() => {
-    const timer = timers[0];
-    if (!timer || timer.status !== "SCHEDULED") return;
-    const interval = setInterval(fetchTimers, 5_000);
-    return () => clearInterval(interval);
-  }, [timers, fetchTimers]);
+  // 예약·실행 중이면 5초마다 서버 값으로 맞춘다(다른 곳에서 추가한 시간, 만료 반영). 화면이 숨겨지면 멈춘다
+  const firstTimerStatus = timers[0]?.status;
+  usePolling({
+    fn: fetchTimers,
+    interval: 5_000,
+    enabled: firstTimerStatus === "SCHEDULED" || firstTimerStatus === "RUNNING",
+  });
+
+  // 카운트다운이 0에 닿으면 다음 폴링을 기다리지 않고 배지를 '만료'로 보여 준다
+  const countdownEnded = useCountdownEnded(timers[0]?.remainingSeconds, firstTimerStatus);
+  const displayStatus = countdownEnded ? "EXPIRED" : firstTimerStatus;
 
   // ACTIVE 목표가 있으면 30초 간격 폴링
   useEffect(() => {
@@ -266,9 +289,13 @@ export default function ProjectDetailPage() {
     return () => clearInterval(interval);
   }, [goals, fetchGoals]);
 
-  function handleCopyLink() {
-    navigator.clipboard.writeText(window.location.href);
-    toast("링크가 복사되었습니다", "success");
+  async function handleCopyLink() {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      toast("링크가 복사되었습니다", "success");
+    } catch {
+      toast("링크를 복사하지 못했습니다", "error");
+    }
   }
 
   async function handleSaveName(name: string) {
@@ -299,10 +326,14 @@ export default function ProjectDetailPage() {
     return <ProjectDetailSkeleton />;
   }
 
+  if (notFound) {
+    return <ErrorState message="프로젝트를 찾을 수 없습니다. 삭제되었거나 주소가 잘못되었습니다." />;
+  }
+
   if (error || !project) {
     return (
       <ErrorState
-        message="프로젝트를 찾을 수 없습니다."
+        message="프로젝트를 불러오지 못했습니다."
         onRetry={async () => { setError(false); setLoading(true); await fetchProject(); setLoading(false); }}
       />
     );
@@ -326,9 +357,11 @@ export default function ProjectDetailPage() {
         router.push("/projects");
       } else {
         setDeleting(false);
+        toast("프로젝트 삭제에 실패했습니다", "error");
       }
     } catch {
       setDeleting(false);
+      toast("프로젝트 삭제에 실패했습니다", "error");
     }
   }
 
@@ -428,8 +461,8 @@ export default function ProjectDetailPage() {
                 createdAt={timers[0].createdAt}
                 size="large"
               />
-              <Badge variant={timers[0].status === "SCHEDULED" ? "scheduled" : timers[0].status === "RUNNING" ? "running" : "expired"}>
-                {timers[0].status === "SCHEDULED" ? "예약됨" : timers[0].status === "RUNNING" ? "실행 중" : "만료"}
+              <Badge variant={displayStatus === "SCHEDULED" ? "scheduled" : displayStatus === "RUNNING" ? "running" : "expired"}>
+                {displayStatus === "SCHEDULED" ? "예약됨" : displayStatus === "RUNNING" ? "실행 중" : "만료"}
               </Badge>
             </div>
             {timers[0].title && (

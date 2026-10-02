@@ -99,6 +99,18 @@ describe("TimerControls", () => {
     expect(submit).toBeDisabled();
   });
 
+  // UX-13: 만료 상태에서 추가가 곧 재시작임을 미리 알린다
+  it("shows restart notice for EXPIRED timers", () => {
+    render(<Harness timerId={timerId} status="EXPIRED" remainingSeconds={0} />);
+    expect(screen.getByText("만료된 타이머입니다. 시간을 추가하면 타이머가 다시 시작됩니다.")).toBeInTheDocument();
+    expect(screen.getByLabelText("시청자 닉네임")).toBeInTheDocument();
+  });
+
+  it("does not show restart notice for RUNNING timers", () => {
+    render(<Harness timerId={timerId} status="RUNNING" />);
+    expect(screen.queryByText(/만료된 타이머입니다/)).not.toBeInTheDocument();
+  });
+
   it("switches to SUBTRACT action", () => {
     render(<Harness timerId={timerId} status="RUNNING" />);
 
@@ -199,8 +211,8 @@ describe("TimerControls", () => {
         }),
       );
 
-      // 토스트도 즉시 표시
-      expect(mockToast).toHaveBeenCalledWith("추가 완료", "success");
+      // UX-10: 성공 토스트는 서버 응답 전에는 뜨지 않는다
+      expect(mockToast).not.toHaveBeenCalledWith("추가 완료", "success");
 
       // fetch 완료
       await act(async () => {
@@ -217,7 +229,8 @@ describe("TimerControls", () => {
         } as Response);
       });
 
-      // 서버 값으로 확정
+      // 서버 값으로 확정된 뒤 성공 토스트
+      expect(mockToast).toHaveBeenCalledWith("추가 완료", "success");
       expect(onModified).toHaveBeenCalledTimes(2);
       expect(onModified).toHaveBeenLastCalledWith(
         expect.objectContaining({
@@ -323,6 +336,9 @@ describe("TimerControls", () => {
       // 에러 메시지 표시
       expect(screen.getByRole("alert")).toHaveTextContent("잘못된 요청입니다");
       expect(mockToast).toHaveBeenCalledWith("잘못된 요청입니다", "error");
+      // UX-10: 모순되는 성공 토스트가 없고, 입력값이 복원된다
+      expect(mockToast).not.toHaveBeenCalledWith("추가 완료", "success");
+      expect(screen.getByRole("button", { name: /추가 확인/ })).toHaveTextContent("1시간");
     });
 
     it("rolls back on network error", async () => {
@@ -357,6 +373,67 @@ describe("TimerControls", () => {
       });
 
       expect(screen.getByRole("alert")).toHaveTextContent("시간 변경에 실패했습니다");
+      expect(mockToast).not.toHaveBeenCalledWith("추가 완료", "success");
+      expect(screen.getByRole("button", { name: /추가 확인/ })).toHaveTextContent("1시간");
+    });
+
+    it("does not overwrite a new amount typed while the failed request was in flight", async () => {
+      let rejectFirst: (reason: unknown) => void;
+      mockFetch.mockReturnValueOnce(new Promise((_, reject) => { rejectFirst = reject; }));
+
+      render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={5000} />);
+
+      fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "테스터" } });
+      fireEvent.click(screen.getByRole("button", { name: "+1시간" }));
+      fireEvent.click(screen.getByRole("button", { name: /추가 확인/ }));
+
+      // 응답 전에 다음 금액을 입력
+      fireEvent.click(screen.getByRole("button", { name: "+5시간" }));
+
+      await act(async () => {
+        rejectFirst!(new Error("Network error"));
+      });
+
+      expect(screen.getByRole("button", { name: /추가 확인/ })).toHaveTextContent("5시간");
+    });
+
+    it("does not restore a failed amount after a newer amount was submitted", async () => {
+      let rejectFirst: (reason: unknown) => void;
+      let resolveSecond: (value: unknown) => void;
+      mockFetch
+        .mockReturnValueOnce(new Promise((_, reject) => { rejectFirst = reject; }))
+        .mockReturnValueOnce(new Promise((resolve) => { resolveSecond = resolve; }));
+
+      render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={5000} />);
+
+      fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "테스터" } });
+      fireEvent.click(screen.getByRole("button", { name: "+1시간" }));
+      fireEvent.click(screen.getByRole("button", { name: /추가 확인/ }));
+
+      // 응답 전에 다른 금액을 다시 제출
+      fireEvent.click(screen.getByRole("button", { name: "+5시간" }));
+      fireEvent.click(screen.getByRole("button", { name: /추가 확인/ }));
+
+      await act(async () => {
+        rejectFirst!(new Error("Network error"));
+      });
+      await act(async () => {
+        resolveSecond!({
+          ok: true,
+          json: async () => ({
+            data: {
+              id: timerId,
+              remainingSeconds: 23000,
+              status: "RUNNING",
+              log: { id: "log2", actionType: "ADD", actorName: "테스터", actorUserId: null, deltaSeconds: 18000, beforeSeconds: 5000, afterSeconds: 23000, createdAt: "2026-01-01T00:00:00Z" },
+            },
+          }),
+        });
+      });
+
+      // 대체된 1시간이 되살아나지 않고 입력은 비어 있어야 한다
+      expect(screen.queryByRole("button", { name: /추가 확인/ })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "시간을 입력해주세요" })).toBeDisabled();
     });
 
     it("quick mode applies optimistically on preset tap", async () => {

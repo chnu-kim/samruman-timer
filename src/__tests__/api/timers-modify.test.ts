@@ -107,19 +107,43 @@ describe("POST /api/timers/[id]/modify", () => {
     expect(res.status).toBe(400);
   });
 
-  it("만료된 타이머에 SUBTRACT → 200 허용, SUBTRACT 로그 기록 (before=0, after=0)", async () => {
+  // UX-14: 만료 상태의 차감은 효과가 없으므로 0→0 로그를 남기지 않고 거절한다
+  it("만료된 타이머에 SUBTRACT → 400, 로그를 기록하지 않음", async () => {
     db._stmt.first.mockResolvedValue({
       ...TIMER_ROW,
       status: "EXPIRED",
       base_remaining_seconds: 0,
     });
     const res = await callPost({ action: "SUBTRACT", deltaSeconds: 100, actorName: "test" });
+    expect(res.status).toBe(400);
+    const body = await parseJson(res);
+    expect(body.error.code).toBe("BAD_REQUEST");
+    expect(body.error.message).toBe("만료된 타이머는 차감할 수 없습니다");
+    expect(db.batch).not.toHaveBeenCalled();
+  });
+
+  it("DB는 RUNNING이지만 잔여가 0초인 타이머에 SUBTRACT → 400 (lazy 만료 감지 전)", async () => {
+    db._stmt.first.mockResolvedValue({
+      ...TIMER_ROW,
+      status: "RUNNING",
+      base_remaining_seconds: 60,
+      last_calculated_at: new Date(Date.now() - 120_000).toISOString(),
+    });
+    const res = await callPost({ action: "SUBTRACT", deltaSeconds: 100, actorName: "test" });
+    expect(res.status).toBe(400);
+    expect(db.batch).not.toHaveBeenCalled();
+  });
+
+  it("만료된 타이머에 ADD → 200 재시작 (차감 거절과 무관)", async () => {
+    db._stmt.first.mockResolvedValue({
+      ...TIMER_ROW,
+      status: "EXPIRED",
+      base_remaining_seconds: 0,
+    });
+    const res = await callPost({ action: "ADD", deltaSeconds: 100, actorName: "test" });
     expect(res.status).toBe(200);
     const body = await parseJson(res);
-    expect(body.data.status).toBe("EXPIRED");
-    expect(body.data.log.actionType).toBe("SUBTRACT");
-    expect(body.data.log.beforeSeconds).toBe(0);
-    expect(body.data.log.afterSeconds).toBe(0);
+    expect(body.data.status).toBe("RUNNING");
   });
 
   it("유효한 ADD 요청 → 200 + log 포함", async () => {
