@@ -122,7 +122,7 @@ function GoalSection({
           }}
           className={tabClass(goalTab === "completed")}
         >
-          완료 ({inactiveGoals.length})
+          종료 ({inactiveGoals.length})
         </button>
       </div>
 
@@ -172,7 +172,7 @@ function GoalSection({
           ))
         ) : (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            완료된 목표가 없습니다.
+            종료된 목표가 없습니다.
           </p>
         )}
       </div>
