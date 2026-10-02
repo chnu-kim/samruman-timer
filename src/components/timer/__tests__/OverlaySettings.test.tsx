@@ -46,3 +46,54 @@ describe("OverlaySettings URL 복사 (UX-11)", () => {
     expect(mockToast).not.toHaveBeenCalledWith(expect.anything(), "success");
   });
 });
+
+describe("OverlaySettings 반영 안내 (UX-20)", () => {
+  beforeEach(() => {
+    mockToast.mockReset();
+  });
+
+  it("URL 블록에 OBS에 새로 붙여넣어야 반영된다는 안내를 보여 준다", async () => {
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+
+    expect(
+      await screen.findByText("URL을 바꿨다면 OBS 브라우저 소스에 새로 붙여넣어야 방송에 반영됩니다."),
+    ).toBeInTheDocument();
+  });
+
+  it("저장 성공 토스트에 OBS에 다시 붙여넣으라는 짧은 안내를 덧붙인다", async () => {
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "게이밍 네온" }));
+    fireEvent.click(screen.getByRole("button", { name: "저장" }));
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        "저장되었습니다. OBS에 URL을 다시 붙여넣으세요",
+        "success",
+      );
+    });
+  });
+});
+
+describe("OverlaySettings 접근성 (UX-25)", () => {
+  it("hex 입력에 접근 가능한 이름이 있다", async () => {
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+
+    expect(await screen.findByRole("textbox", { name: "텍스트 색상 코드" })).toHaveValue("#ffffff");
+    expect(screen.getByRole("textbox", { name: "배경색 코드" })).toHaveValue("transparent");
+  });
+
+  it("위치 버튼이 선택 상태를 aria-pressed로 알린다", async () => {
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+
+    const center = await screen.findByRole("button", { name: "중앙" });
+    const topLeft = screen.getByRole("button", { name: "좌상단" });
+    expect(center).toHaveAttribute("aria-pressed", "true");
+    expect(topLeft).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(topLeft);
+
+    expect(center).toHaveAttribute("aria-pressed", "false");
+    expect(topLeft).toHaveAttribute("aria-pressed", "true");
+  });
+});

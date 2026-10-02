@@ -166,7 +166,8 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
       });
       if (res.ok) {
         setSavedConfig({ ...config });
-        toast("설정이 저장되었습니다", "success");
+        // 모바일 390px에서도 한 줄에 들어가게 짧게 둔다. 자세한 안내는 URL 블록에 상시 표시된다
+        toast("저장되었습니다. OBS에 URL을 다시 붙여넣으세요", "success");
       } else {
         const json = await res.json() as { error?: { message?: string } };
         toast(json.error?.message ?? "저장에 실패했습니다", "error");
@@ -253,6 +254,24 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
         ) : <>
         {/* 스크롤 가능 콘텐츠 */}
         <div className="flex-1 overflow-y-auto p-6 pt-5">
+        {/* URL 복사 — 모달의 최종 목적이므로 맨 위에 둔다 */}
+        <div className="mb-5">
+          <label className="text-sm font-medium text-foreground">OBS 브라우저 소스 URL</label>
+          {/* 오버레이 페이지는 URL 파라미터만 읽으므로 저장만으로는 방송 화면이 바뀌지 않는다 */}
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            URL을 바꿨다면 OBS 브라우저 소스에 새로 붙여넣어야 방송에 반영됩니다.
+          </p>
+          <div className="mt-1.5 flex items-center gap-2">
+            <code className="flex-1 rounded-lg border border-border bg-muted px-3 py-2 text-xs font-mono break-all select-all">
+              {overlayUrl}
+            </code>
+            <Button onClick={handleCopy} size="sm" className="shrink-0">
+              <CopyIcon className="w-4 h-4 mr-1" />
+              복사
+            </Button>
+          </div>
+        </div>
+
         {/* 프리셋 테마 */}
         <div className="mb-5">
           <label className="text-sm font-medium text-foreground">프리셋 테마</label>
@@ -343,6 +362,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                 onChange={(e) => setConfig((prev) => ({ ...prev, color: e.target.value }))}
                 className="flex-1 font-mono text-sm"
                 maxLength={7}
+                aria-label="텍스트 색상 코드"
               />
             </div>
           </div>
@@ -363,6 +383,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                   onChange={(e) => setConfig((prev) => ({ ...prev, bg: e.target.value }))}
                   className="flex-1 font-mono text-sm"
                   placeholder="transparent"
+                  aria-label="배경색 코드"
                 />
               </div>
             </div>
@@ -390,6 +411,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                 config.position === "top-left" ? "bg-accent text-accent-foreground" : "hover:bg-foreground/10",
               )}
               aria-label="좌상단"
+              aria-pressed={config.position === "top-left"}
             />
             <div className="min-h-[40px]" />
             <button
@@ -400,6 +422,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                 config.position === "top-right" ? "bg-accent text-accent-foreground" : "hover:bg-foreground/10",
               )}
               aria-label="우상단"
+              aria-pressed={config.position === "top-right"}
             />
             {/* Row 2 */}
             <div className="min-h-[40px]" />
@@ -411,6 +434,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                 config.position === "center" ? "bg-accent text-accent-foreground" : "hover:bg-foreground/10",
               )}
               aria-label="중앙"
+              aria-pressed={config.position === "center"}
             />
             <div className="min-h-[40px]" />
             {/* Row 3 */}
@@ -422,6 +446,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                 config.position === "bottom-left" ? "bg-accent text-accent-foreground" : "hover:bg-foreground/10",
               )}
               aria-label="좌하단"
+              aria-pressed={config.position === "bottom-left"}
             />
             <div className="min-h-[40px]" />
             <button
@@ -432,6 +457,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                 config.position === "bottom-right" ? "bg-accent text-accent-foreground" : "hover:bg-foreground/10",
               )}
               aria-label="우하단"
+              aria-pressed={config.position === "bottom-right"}
             />
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -466,7 +492,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
               onChange={(e) => setConfig((prev) => ({ ...prev, animation: e.target.checked }))}
               className="w-4 h-4 accent-accent rounded"
             />
-            <span className="text-sm">시간 변경 애니메이션</span>
+            <span className="text-sm">애니메이션</span>
           </label>
         </div>
 
@@ -488,20 +514,6 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                 }}
               />
             )}
-          </div>
-        </div>
-
-        {/* URL 복사 */}
-        <div className="mb-4">
-          <label className="text-sm font-medium text-foreground">OBS 브라우저 소스 URL</label>
-          <div className="mt-1.5 flex items-center gap-2">
-            <code className="flex-1 rounded-lg border border-border bg-muted px-3 py-2 text-xs font-mono break-all select-all">
-              {overlayUrl}
-            </code>
-            <Button onClick={handleCopy} size="sm" className="shrink-0">
-              <CopyIcon className="w-4 h-4 mr-1" />
-              복사
-            </Button>
           </div>
         </div>
 
