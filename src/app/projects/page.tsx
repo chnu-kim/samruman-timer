@@ -38,6 +38,8 @@ export default function ProjectsPage() {
   // Track total per tab for tab counts
   const [mineTotal, setMineTotal] = useState(0);
   const [othersTotal, setOthersTotal] = useState(0);
+  // 검색어와 무관한 내 프로젝트 수. mineTotal은 검색 결과 수로 덮어써지므로 따로 둔다
+  const [mineUnfilteredTotal, setMineUnfilteredTotal] = useState<number | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -102,6 +104,7 @@ export default function ProjectsPage() {
       if (mineRes.ok) {
         const json = (await mineRes.json()) as ApiSuccessResponse<ProjectListResponse>;
         setMineTotal(json.data.pagination.total);
+        setMineUnfilteredTotal(json.data.pagination.total);
       }
       if (othersRes.ok) {
         const json = (await othersRes.json()) as ApiSuccessResponse<ProjectListResponse>;
@@ -137,6 +140,10 @@ export default function ProjectsPage() {
     setActiveTab(next);
     document.getElementById(`project-tab-${next}`)?.focus();
   }
+
+  // 프로젝트가 하나도 없는 신규 유저에게는 검색할 대상이 없으므로 검색·정렬을 숨긴다
+  const hideSearchControls =
+    !!user && activeTab === "mine" && mineUnfilteredTotal === 0 && !searchQuery;
 
   function handleCreateSuccess(id: string) {
     router.push(`/projects/${id}`);
@@ -222,73 +229,82 @@ export default function ProjectsPage() {
       )}
 
       {/* 검색 + 정렬 */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <div className="flex-1 relative">
-          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="프로젝트 검색..."
-            aria-label="프로젝트 검색"
-            className="w-full rounded-lg border border-border bg-background pl-9 pr-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
-          />
-        </div>
-        <select
-          value={sortBy}
-          onChange={(e) => setSortBy(e.target.value as SortBy)}
-          aria-label="정렬 기준"
-          className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <option value="latest">최신순</option>
-          <option value="name">이름순</option>
-        </select>
-      </div>
-
-      {/* 목록 */}
-      {loading ? (
-        <ProjectCardGridSkeleton count={6} />
-      ) : error ? (
-        <ErrorState message="프로젝트를 불러오는데 실패했습니다." onRetry={fetchProjects} />
-      ) : projects.length === 0 ? (
-        searchQuery.trim() ? (
-          <div className="py-12 text-center">
-            <p className="text-muted-foreground">검색 결과가 없습니다.</p>
-          </div>
-        ) : (
-          <div className="py-16 text-center">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-              <FolderIcon className="w-8 h-8 text-muted-foreground" />
-            </div>
-            <p className="mt-4 text-muted-foreground">아직 프로젝트가 없습니다.</p>
-            {user && !showForm && activeTab === "mine" && (
-              <Button
-                size="sm"
-                className="mt-4"
-                onClick={() => setShowForm(true)}
-              >
-                <PlusIcon className="w-4 h-4 mr-1" />
-                첫 프로젝트 만들기
-              </Button>
-            )}
-          </div>
-        )
-      ) : (
-        <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {projects.map((project) => (
-              <ProjectCard key={project.id} project={project} />
-            ))}
-          </div>
-          {pagination.totalPages > 1 && (
-            <Pagination
-              page={pagination.page}
-              totalPages={pagination.totalPages}
-              onPageChange={setPage}
+      {!hideSearchControls && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex-1 relative">
+            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="프로젝트 검색..."
+              aria-label="프로젝트 검색"
+              className="w-full rounded-lg border border-border bg-background pl-9 pr-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
             />
-          )}
-        </>
+          </div>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortBy)}
+            aria-label="정렬 기준"
+            className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="latest">최신순</option>
+            <option value="name">이름순</option>
+          </select>
+        </div>
       )}
+
+      {/* 목록. 로그인 시에는 위 탭이 가리키는 tabpanel이다 */}
+      <div
+        className="space-y-6"
+        role={user ? "tabpanel" : undefined}
+        id={user ? "project-tabpanel" : undefined}
+        aria-labelledby={user ? `project-tab-${activeTab}` : undefined}
+      >
+        {loading ? (
+          <ProjectCardGridSkeleton count={6} />
+        ) : error ? (
+          <ErrorState message="프로젝트를 불러오는데 실패했습니다." onRetry={fetchProjects} />
+        ) : projects.length === 0 ? (
+          searchQuery.trim() ? (
+            <div className="py-12 text-center">
+              <p className="text-muted-foreground">검색 결과가 없습니다.</p>
+            </div>
+          ) : (
+            <div className="py-16 text-center">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+                <FolderIcon className="w-8 h-8 text-muted-foreground" />
+              </div>
+              <p className="mt-4 text-muted-foreground">아직 프로젝트가 없습니다.</p>
+              {user && !showForm && activeTab === "mine" && (
+                <Button
+                  size="sm"
+                  className="mt-4"
+                  onClick={() => setShowForm(true)}
+                >
+                  <PlusIcon className="w-4 h-4 mr-1" />
+                  첫 프로젝트 만들기
+                </Button>
+              )}
+            </div>
+          )
+        ) : (
+          <>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {projects.map((project) => (
+                <ProjectCard key={project.id} project={project} />
+              ))}
+            </div>
+            {pagination.totalPages > 1 && (
+              <Pagination
+                page={pagination.page}
+                totalPages={pagination.totalPages}
+                onPageChange={setPage}
+              />
+            )}
+          </>
+        )}
+      </div>
     </section>
   );
 }
