@@ -10,7 +10,7 @@ import {
   CartesianGrid,
   Legend,
 } from "recharts";
-import { cn, formatHoursFromSeconds, formatTimestampShort } from "@/lib/utils";
+import { cn, formatAxisSeconds, formatHoursFromSeconds, formatTimestampShort } from "@/lib/utils";
 import type { CumulativeGraphPoint } from "@/types";
 
 interface CumulativeChartProps {
@@ -27,6 +27,8 @@ export function CumulativeChart({ points, className }: CumulativeChartProps) {
     );
   }
 
+  const maxSeconds = Math.max(...points.map((p) => Math.max(p.totalAdded, p.totalSubtracted)));
+
   return (
     <div className={cn("h-64 w-full", className)} role="img" aria-label="누적 변경량 그래프">
       <ResponsiveContainer width="100%" height="100%">
@@ -39,10 +41,10 @@ export function CumulativeChart({ points, className }: CumulativeChartProps) {
             stroke="var(--color-border)"
           />
           <YAxis
-            tickFormatter={(v: number) => `${(v / 3600).toFixed(0)}h`}
+            tickFormatter={(v: number) => formatAxisSeconds(v, maxSeconds)}
             tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
             stroke="var(--color-border)"
-            width={40}
+            width={44}
           />
           <Tooltip
             labelFormatter={(label) => formatTimestampShort(String(label))}
