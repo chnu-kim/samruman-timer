@@ -209,6 +209,7 @@
 - **근거**: [03-projects-mine--m-dark.png](ux-review/03-projects-mine--m-dark.png), [13-timer-delete-confirm--m-light.png](ux-review/13-timer-delete-confirm--m-light.png), [07-project-detail-running-owner--m-light.png](ux-review/07-project-detail-running-owner--m-light.png) · `src/components/ui/Button.tsx:20`, `src/components/layout/Header.tsx:32-35, 65-68`, `src/components/ui/ConfirmDialog.tsx:72-81`
 
 #### UX-20. 오버레이 설정의 '저장'이 OBS 화면에 반영되지 않는데, 이를 알리는 안내가 없다
+- **상태**: 해결 — 'OBS 브라우저 소스 URL' 라벨 아래에 권고 문구 한 줄을 넣고, 저장 성공 토스트에도 같은 안내를 덧붙였다.
 - **심각도**: minor · **영역**: 오버레이
 - **관찰**: 오버레이 페이지는 쿼리 파라미터만 읽고 저장된 설정은 읽지 않는다. 그래서 저장 후에도 OBS 소스의 URL을 새로 붙여 넣어야 방송에 반영된다. 모달은 '설정이 저장되었습니다'라고만 알린다. 실제로 12번 화면에서 저장된 설정은 96px에 제목 표시인데, 20번(파라미터 없는 기본 URL)은 72px에 제목이 없다.
 - **이유**: 방송 중 색이나 위치를 바꾸고 '저장'을 누른 스트리머는 방송 화면이 바뀌기를 기대한다.
@@ -216,6 +217,7 @@
 - **근거**: [12-timer-overlay-settings--d-light.png](ux-review/12-timer-overlay-settings--d-light.png), [20-overlay--d-dark.png](ux-review/20-overlay--d-dark.png) · `src/app/timers/[id]/overlay/page.tsx:30-41, 77`, `src/components/timer/OverlaySettings.tsx:159-194`
 
 #### UX-21. 오버레이 모달의 최종 목적인 URL 복사가 스크롤 아래에 있다
+- **상태**: 해결 — URL·복사 블록을 스크롤 영역 맨 위(프리셋 위)로 옮겼다. 푸터는 그대로다.
 - **심각도**: minor · **영역**: 오버레이
 - **관찰**: 1440x900에서 복사 버튼이 보이는 영역보다 약 314px 아래에 있다(clientHeight 663, scrollHeight 1058). 고정 푸터에는 '저장'과 '변경 취소'만 있다.
 - **이유**: 처음 쓰는 사람은 '저장'만 누르고 닫기 쉽다. UX-20과 겹쳐 URL이 OBS에 들어가지 않는다.
@@ -230,6 +232,7 @@
 - **근거**: 측정 캡처 [modal-bottom-d-light.png](ux-review/measure/modal-bottom-d-light.png), [modal-font200.png](ux-review/measure/modal-font200.png) · `src/components/timer/OverlaySettings.tsx:469-487`
 
 #### UX-23. 오버레이의 변화량 텍스트('+1:00:00')가 숫자 중심에서 반폭만큼 오른쪽으로 치우친다
+- **상태**: 해결 — `overlay-float-up` 키프레임의 transform을 `translateY` 대신 `translate(-50%, 0)`에서 `translate(-50%, -60px)`로 움직이게 바꿔 가로 중앙 정렬을 유지한다. jsdom은 레이아웃을 계산하지 않아 자동 테스트는 두지 않았다.
 - **심각도**: minor · **영역**: 오버레이
 - **관찰**: 인라인 `translateX(-50%)`를 `overlay-float-up` 키프레임의 `transform: translateY(...)`가 덮어쓴다. 실측 결과 중심이 69.6px(폭 139px의 절반) 어긋났다.
 - **이유**: 시간이 추가될 때마다 시청자에게 보이는 텍스트가 어긋난 위치에 뜬다.
@@ -237,6 +240,7 @@
 - **근거**: `src/app/timers/[id]/overlay/page.tsx:244-256`, `src/app/globals.css:124-128`
 
 #### UX-24. '시간 변경 애니메이션'을 꺼도 긴급과 만료 펄스는 계속 깜빡인다
+- **상태**: 해결 — `animation=false`면 숫자의 긴급·만료 펄스와 '만료됨' 라벨 펄스를 끈다. 토글이 펄스까지 제어하므로 라벨에서 '시간 변경'을 빼 '애니메이션'으로 줄이고 `docs/API.md`의 `animation` 설명을 고쳤다. UX-08이 넘긴 펄스 깊이(최저 opacity) 조정은 §6에서 '기능 약화'로 기각된 제안이라 하지 않았고, 이 토글로 끌 수 있게 한 것으로 대신한다.
 - **심각도**: minor · **영역**: 오버레이
 - **관찰**: `animation` 옵션은 변경 감지에만 쓰인다. 만료 후 '00:00:00 만료됨'은 opacity 0.5로 끝없이 깜빡이고, 1분 미만에서는 0.8초 주기로 깜빡인다.
 - **이유**: 방송 화면을 차분하게 두려고 애니메이션을 끈 스트리머가 깜빡임은 끌 수 없다. 긴급함은 색 변화로 이미 전달된다.
@@ -244,6 +248,7 @@
 - **근거**: [21-overlay-urgent--d-dark.png](ux-review/21-overlay-urgent--d-dark.png) · `src/app/timers/[id]/overlay/page.tsx:85, 223-233`, `src/app/globals.css:94-107`, `src/components/timer/OverlaySettings.tsx:457-465`
 
 #### UX-25. 오버레이 모달의 hex 입력에 접근 가능한 이름이 없고, 위치 버튼에 선택 상태 속성이 없다
+- **상태**: 해결 — hex 입력에 `aria-label`('텍스트 색상 코드', '배경색 코드'), 위치 버튼 5개에 `aria-pressed`를 추가했다.
 - **심각도**: minor · **영역**: 접근성 / 오버레이
 - **관찰**: 텍스트 색상과 배경색의 hex `<Input>`에 label과 aria-label이 없다. 위치 버튼 5개에는 aria-label은 있지만 `aria-pressed`가 없다('현재: …' 텍스트는 있다).
 - **이유**: 스크린리더 사용자는 이름 없는 편집 필드 두 개를 구분할 수 없다(WCAG 4.1.2).
