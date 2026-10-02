@@ -131,6 +131,22 @@ body {
   animation: fade-in 0.2s ease-out;
 }
 
+/* 만료 임박 카운트다운 펄스. 동작 줄이기 설정에서는 끈다(WCAG 2.2.2). */
+.animate-pulse-urgent-slow {
+  animation: pulse-urgent-slow 2s ease-in-out infinite;
+}
+
+.animate-pulse-urgent-fast {
+  animation: pulse-urgent-fast 0.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-urgent-slow,
+  .animate-pulse-urgent-fast {
+    animation: none;
+  }
+}
+
 .safe-area-bottom {
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }

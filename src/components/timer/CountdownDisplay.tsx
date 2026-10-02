@@ -79,17 +79,10 @@ export function CountdownDisplay({
             : "text-lg font-mono font-semibold",
           isExpired && "text-muted-foreground",
           isScheduled && "text-purple-600 dark:text-purple-400",
-          isCritical && "text-red-500 dark:text-red-400",
-          isUrgent && !isCritical && "text-amber-500 dark:text-amber-400",
+          isCritical && "text-red-600 dark:text-red-400 animate-pulse-urgent-fast",
+          isUrgent && !isCritical && "text-amber-700 dark:text-amber-400 animate-pulse-urgent-slow",
           className,
         )}
-        style={
-          isCritical
-            ? { animation: "pulse-urgent-fast 0.8s ease-in-out infinite" }
-            : isUrgent
-              ? { animation: "pulse-urgent-slow 2s ease-in-out infinite" }
-              : undefined
-        }
         aria-label={
           isCritical
             ? `긴급: 남은 시간 ${formatTime(displayed)}, 1분 미만`
