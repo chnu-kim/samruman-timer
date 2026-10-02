@@ -77,8 +77,8 @@ App
 ├── ProjectDetailPage
 │   ├── ProjectHeader
 │   ├── CreateTimerForm (모달 또는 인라인)
-│   └── TimerCard[]
-│       ├── CountdownDisplay (소형)
+│   └── 타이머 카드 (타이머 화면 링크, 프로젝트당 1개)
+│       ├── CountdownDisplay (대형)
 │       └── StatusBadge
 │
 ├── TimerDetailPage

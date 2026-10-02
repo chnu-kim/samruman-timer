@@ -60,7 +60,6 @@ src/
     timer/                              — 타이머 관련 컴포넌트
       CountdownDisplay.tsx              — 큰 카운트다운 숫자 표시
       TimerControls.tsx                 — 시간 증감 버튼, 입력 필드
-      TimerCard.tsx                     — 타이머 목록용 카드
       CreateTimerForm.tsx               — 타이머 생성 폼
     project/                            — 프로젝트 관련 컴포넌트
       ProjectCard.tsx                   — 프로젝트 목록용 카드
