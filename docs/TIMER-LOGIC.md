@@ -166,8 +166,11 @@ status = DELETED
 ## 엣지 케이스
 
 ### 동시 수정
-- D1은 단일 writer이므로 동시 쓰기 충돌은 D1 레벨에서 직렬화됨
-- 각 연산은 `now` 시점 기준으로 currentRemaining을 재계산하므로, 순차 실행 시 정확한 결과 보장
+- D1은 문장 단위로 쓰기를 직렬화하지만, 조회(SELECT)와 쓰기(batch)가 별도 왕복이라 읽기-수정-쓰기 사이에 다른 요청이 끼어들 수 있다. 조건 없이 쓰면 그 사이 커밋된 ADD를 덮어쓰거나 삭제된 타이머를 되살린다
+- 그래서 상태 UPDATE는 읽은 `status`·`base_remaining_seconds`·`last_calculated_at`이 그대로일 때만 적용한다(CAS, `src/lib/timer.ts`의 `STATE_GUARD`). 같은 batch의 로그 INSERT는 `WHERE changes() = 1`로 UPDATE가 적용됐을 때만 들어간다
+- CAS가 실패하면:
+  - 조회 시 lazy 전이(`detectScheduledActivation`, `detectExpiry`): 아무것도 쓰지 않고 다시 읽은 상태를 돌려준다(먼저 쓴 쪽이 맞다)
+  - `modifyTimer`: 다시 읽은 상태로 최대 3번 다시 계산한다. 그 사이 삭제됐으면 `404`, 모두 겹치면 `409 CONFLICT`
 
 ### 매우 큰 시간 추가
 - 요청 1회당 `deltaSeconds`(와 생성 시 `initialSeconds`)는 최대 31,536,000초(1년)로 제한한다 (API `400`)

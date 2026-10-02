@@ -192,6 +192,6 @@ migrations/
 ## D1 특이사항
 
 - D1은 `PRAGMA foreign_keys = OFF`를 유지하지 않는다(`0003` 주석). 그래서 테이블 재생성은 FK 의존성 순서로 한다
-- 단일 writer: 동시 쓰기는 D1이 직렬화
+- 단일 writer: 문장 단위로는 직렬화되지만 읽기-수정-쓰기 사이의 경합은 막지 못한다. 타이머 상태 쓰기는 CAS 조건을 건다(`docs/TIMER-LOGIC.md` 동시 수정)
 - 트랜잭션: `db.batch()` 로 여러 쿼리를 하나의 트랜잭션으로 실행
 - datetime 함수: 컬럼 `DEFAULT`의 `datetime('now')`는 UTC다. 앱 쿼리는 이를 쓰지 않고 `nowISO()` 값을 바인딩한다

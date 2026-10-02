@@ -146,6 +146,15 @@ describe("POST /api/timers/[id]/modify", () => {
     expect(body.data.status).toBe("RUNNING");
   });
 
+  it("동시 변경이 계속 겹치면 409 CONFLICT", async () => {
+    db.batch.mockResolvedValue([{ meta: { changes: 0 } }]);
+    const res = await callPost({ action: "ADD", deltaSeconds: 600, actorName: "테스터" });
+    expect(res.status).toBe(409);
+    const body = await parseJson(res);
+    expect(body.error.code).toBe("CONFLICT");
+    expect(db.batch).toHaveBeenCalledTimes(3);
+  });
+
   it("유효한 ADD 요청 → 200 + log 포함", async () => {
     const res = await callPost({ action: "ADD", deltaSeconds: 600, actorName: "테스터" });
     expect(res.status).toBe(200);

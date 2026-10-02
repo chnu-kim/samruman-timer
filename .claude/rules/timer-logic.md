@@ -24,7 +24,7 @@ paths:
   - 삭제 → `DELETED` + `DELETE` 로그 (before = 삭제 시점 잔여, after = 0)
   - `SCHEDULED`에서는 시간 변경 불가
 - 로그 `action_type`: `CREATE`, `ADD`, `SUBTRACT`, `EXPIRE`, `REOPEN`, `ACTIVATE`, `DELETE`. `before_seconds`/`after_seconds`를 반드시 기록한다. 단순 조회와 카운트다운 틱은 로그를 남기지 않는다.
-- 상태 변경과 로그 INSERT는 하나의 `db.batch()`로 묶는다.
+- 상태 변경과 로그 INSERT는 하나의 `db.batch()`로 묶는다. 상태 UPDATE에는 `STATE_GUARD`(읽은 status·잔여·기준 시각) 조건을 걸고, 로그 INSERT는 `INSERT_LOG_IF_CHANGED`(`WHERE changes() = 1`)로 넣는다. 조건 없는 `WHERE id = ?` 쓰기는 동시 요청의 변경을 덮어쓴다.
 - 목표(`goal.ts`) 상태는 `GET /api/projects/[id]/goals` 조회 시에만 판정·저장한다.
 
 로직을 바꾸면 `src/lib/__tests__/timer.test.ts`와 `src/__tests__/integration/timer-lifecycle.test.ts`에 경계값(정확히 0초, 예약 시각 직전·직후)을 넣는다.

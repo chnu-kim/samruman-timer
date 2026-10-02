@@ -11,6 +11,50 @@ export function calculateRemaining(
   return Math.max(0, baseRemainingSeconds - elapsed);
 }
 
+/**
+ * 타이머 상태 쓰기는 읽은 상태가 그대로일 때만 적용한다(CAS).
+ * 조회와 쓰기가 별도 왕복이라, 조건 없이 쓰면 그 사이 커밋된 다른 변경(후원 ADD, 삭제 등)을 덮어쓴다.
+ * 로그 INSERT는 바로 앞 문장이 행을 바꿨을 때만 실행한다(`changes()`는 직전 문장의 변경 행 수).
+ */
+const STATE_GUARD = "id = ? AND status = ? AND base_remaining_seconds = ? AND last_calculated_at = ?";
+
+function stateGuardBinds(timer: Timer): [string, string, number, string] {
+  return [timer.id, timer.status, timer.baseRemainingSeconds, timer.lastCalculatedAt];
+}
+
+const INSERT_LOG_IF_CHANGED = `INSERT INTO timer_logs (id, timer_id, action_type, actor_name, actor_user_id, delta_seconds, before_seconds, after_seconds, created_at)
+   SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE changes() = 1`;
+
+function applied(results: D1Result[]): boolean {
+  return results[0]?.meta?.changes === 1;
+}
+
+/** 다른 요청이 먼저 상태를 바꿨을 때 현재 상태를 다시 읽는다 */
+export async function reloadTimerState(db: D1Database, timer: Timer): Promise<Timer> {
+  const row = await db
+    .prepare("SELECT status, base_remaining_seconds, last_calculated_at, updated_at FROM timers WHERE id = ?")
+    .bind(timer.id)
+    .first<{ status: string; base_remaining_seconds: number; last_calculated_at: string; updated_at: string }>();
+  if (!row) return { ...timer, status: "DELETED" };
+  return {
+    ...timer,
+    status: row.status as Timer["status"],
+    baseRemainingSeconds: row.base_remaining_seconds,
+    lastCalculatedAt: row.last_calculated_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export class TimerStateError extends Error {
+  constructor(
+    message: string,
+    readonly status: 400 | 404 | 409,
+    readonly code: "BAD_REQUEST" | "NOT_FOUND" | "CONFLICT",
+  ) {
+    super(message);
+  }
+}
+
 export async function detectScheduledActivation(
   db: D1Database,
   timer: Timer
@@ -25,18 +69,17 @@ export async function detectScheduledActivation(
   const nowStr = nowISO();
   const logId = generateId();
 
-  await db.batch([
+  const results = await db.batch([
     db
       .prepare(
-        `UPDATE timers SET status = 'RUNNING', last_calculated_at = ?, updated_at = ? WHERE id = ?`
+        `UPDATE timers SET status = 'RUNNING', last_calculated_at = ?, updated_at = ? WHERE ${STATE_GUARD}`
       )
-      .bind(timer.scheduledStartAt, nowStr, timer.id),
+      .bind(timer.scheduledStartAt, nowStr, ...stateGuardBinds(timer)),
     db
-      .prepare(
-        `INSERT INTO timer_logs (id, timer_id, action_type, actor_name, actor_user_id, delta_seconds, before_seconds, after_seconds, created_at) VALUES (?, ?, 'ACTIVATE', 'system', NULL, 0, ?, ?, ?)`
-      )
-      .bind(logId, timer.id, timer.baseRemainingSeconds, timer.baseRemainingSeconds, timer.scheduledStartAt),
+      .prepare(INSERT_LOG_IF_CHANGED)
+      .bind(logId, timer.id, "ACTIVATE", "system", null, 0, timer.baseRemainingSeconds, timer.baseRemainingSeconds, timer.scheduledStartAt),
   ]);
+  if (!applied(results)) return reloadTimerState(db, timer);
 
   return {
     ...timer,
@@ -66,18 +109,18 @@ export async function detectExpiry(
   const now = nowISO();
   const logId = generateId();
 
-  await db.batch([
+  const results = await db.batch([
     db
       .prepare(
-        `UPDATE timers SET status = 'EXPIRED', base_remaining_seconds = 0, last_calculated_at = ?, updated_at = ? WHERE id = ?`
+        `UPDATE timers SET status = 'EXPIRED', base_remaining_seconds = 0, last_calculated_at = ?, updated_at = ? WHERE ${STATE_GUARD}`
       )
-      .bind(actualExpiryISO, now, timer.id),
+      .bind(actualExpiryISO, now, ...stateGuardBinds(timer)),
     db
-      .prepare(
-        `INSERT INTO timer_logs (id, timer_id, action_type, actor_name, actor_user_id, delta_seconds, before_seconds, after_seconds, created_at) VALUES (?, ?, 'EXPIRE', 'system', NULL, 0, ?, 0, ?)`
-      )
-      .bind(logId, timer.id, remaining, actualExpiryISO),
+      .prepare(INSERT_LOG_IF_CHANGED)
+      .bind(logId, timer.id, "EXPIRE", "system", null, 0, remaining, 0, actualExpiryISO),
   ]);
+  // 그 사이 시간이 추가됐다면 그 상태가 맞다. 다시 읽은 상태로 응답한다
+  if (!applied(results)) return reloadTimerState(db, timer);
 
   return {
     ...timer,
@@ -90,6 +133,12 @@ export async function detectExpiry(
 
 export const EXPIRED_SUBTRACT_MESSAGE = "만료된 타이머는 차감할 수 없습니다";
 
+const MODIFY_ATTEMPTS = 3;
+
+/**
+ * 시간을 추가·차감한다. 읽은 뒤 다른 요청이 먼저 상태를 바꿨으면(동시 후원 등)
+ * 현재 상태를 다시 읽어 최대 MODIFY_ATTEMPTS번 다시 계산한다. 변경을 잃지 않기 위해서다.
+ */
 export async function modifyTimer(
   db: D1Database,
   timer: Timer,
@@ -98,8 +147,28 @@ export async function modifyTimer(
   actorName: string,
   actorUserId: string | null
 ): Promise<{ timer: Timer; logs: TimerLog[] }> {
+  let current = timer;
+  for (let attempt = 0; attempt < MODIFY_ATTEMPTS; attempt++) {
+    const result = await tryModifyTimer(db, current, action, deltaSeconds, actorName, actorUserId);
+    if (result) return result;
+    current = await reloadTimerState(db, current);
+  }
+  throw new TimerStateError("다른 변경과 겹쳤습니다. 다시 시도해 주세요", 409, "CONFLICT");
+}
+
+async function tryModifyTimer(
+  db: D1Database,
+  timer: Timer,
+  action: ModifyAction,
+  deltaSeconds: number,
+  actorName: string,
+  actorUserId: string | null
+): Promise<{ timer: Timer; logs: TimerLog[] } | null> {
+  if (timer.status === "DELETED") {
+    throw new TimerStateError("타이머를 찾을 수 없습니다", 404, "NOT_FOUND");
+  }
   if (timer.status === "SCHEDULED") {
-    throw new Error("예약된 타이머는 시간을 변경할 수 없습니다");
+    throw new TimerStateError("예약된 타이머는 시간을 변경할 수 없습니다", 400, "BAD_REQUEST");
   }
 
   const now = nowISO();
@@ -110,7 +179,7 @@ export async function modifyTimer(
 
   // 만료 상태(또는 아직 EXPIRED로 기록되지 않았지만 0초가 된 타이머)에서는 차감이 아무것도 바꾸지 않으므로 0→0 로그를 남기지 않는다
   if (action === "SUBTRACT" && (timer.status === "EXPIRED" || currentRemaining <= 0)) {
-    throw new Error(EXPIRED_SUBTRACT_MESSAGE);
+    throw new TimerStateError(EXPIRED_SUBTRACT_MESSAGE, 400, "BAD_REQUEST");
   }
 
   let newRemaining: number;
@@ -149,14 +218,12 @@ export async function modifyTimer(
   const statements: D1PreparedStatement[] = [
     db
       .prepare(
-        `UPDATE timers SET base_remaining_seconds = ?, last_calculated_at = ?, status = ?, updated_at = ? WHERE id = ?`
+        `UPDATE timers SET base_remaining_seconds = ?, last_calculated_at = ?, status = ?, updated_at = ? WHERE ${STATE_GUARD}`
       )
-      .bind(newRemaining, now, newStatus, now, timer.id),
+      .bind(newRemaining, now, newStatus, now, ...stateGuardBinds(timer)),
     ...logs.map((log) =>
       db
-        .prepare(
-          `INSERT INTO timer_logs (id, timer_id, action_type, actor_name, actor_user_id, delta_seconds, before_seconds, after_seconds, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        )
+        .prepare(INSERT_LOG_IF_CHANGED)
         .bind(
           log.id,
           log.timerId,
@@ -171,7 +238,8 @@ export async function modifyTimer(
     ),
   ];
 
-  await db.batch(statements);
+  const results = await db.batch(statements);
+  if (!applied(results)) return null;
 
   const updatedTimer: Timer = {
     ...timer,
