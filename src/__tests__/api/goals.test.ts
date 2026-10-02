@@ -105,6 +105,17 @@ describe("POST /api/projects/[id]/goals", () => {
     });
   });
 
+  it("401 인증 없으면 에러", async () => {
+    const req = createPostRequest(
+      "/api/projects/proj-1/goals",
+      { type: "DURATION", title: "목표", targetSeconds: 3600 },
+    );
+    const res = await POST(req as never, makeParams() as never);
+
+    expect(res.status).toBe(401);
+    expect(db.prepare).not.toHaveBeenCalled();
+  });
+
   it("201 DURATION 목표 생성 성공", async () => {
     db._stmt.first.mockResolvedValueOnce(PROJECT_ROW);
 
