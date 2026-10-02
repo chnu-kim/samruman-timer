@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDB, withErrorHandler } from "@/lib/db";
 import type { GraphMode } from "@/types";
 
+// SQL에 그대로 보간하므로 반드시 정수 상수로 둔다
+const MAX_POINTS = 1000;
+
 export const GET = withErrorHandler(async (
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -31,13 +34,22 @@ export const GET = withErrorHandler(async (
     );
   }
 
+  // 로그가 많은 타이머도 응답 크기가 일정하도록 MAX_POINTS개 안팎으로 균등 추출한다.
+  // step = ceil(전체 / MAX_POINTS), 마지막 점은 항상 포함한다.
   if (mode === "remaining") {
     const rows = await db
       .prepare(
-        `SELECT created_at, after_seconds
-         FROM timer_logs
-         WHERE timer_id = ?
-         ORDER BY created_at ASC`
+        `WITH ordered AS (
+           SELECT created_at, after_seconds,
+                  ROW_NUMBER() OVER (ORDER BY created_at, id) AS rn,
+                  COUNT(*) OVER () AS total
+           FROM timer_logs
+           WHERE timer_id = ?
+         )
+         SELECT created_at, after_seconds
+         FROM ordered
+         WHERE (rn - 1) % ((total + ${MAX_POINTS} - 1) / ${MAX_POINTS}) = 0 OR rn = total
+         ORDER BY rn`
       )
       .bind(timerId)
       .all<{ created_at: string; after_seconds: number }>();
@@ -54,27 +66,32 @@ export const GET = withErrorHandler(async (
   }
 
   if (mode === "cumulative") {
+    // 누적합은 추출 전에 전체 로그로 계산해야 하므로 창 함수로 SQL에서 구한다
     const rows = await db
       .prepare(
-        `SELECT created_at, action_type, delta_seconds
-         FROM timer_logs
-         WHERE timer_id = ? AND action_type IN ('ADD', 'SUBTRACT')
-         ORDER BY created_at ASC`
+        `WITH ordered AS (
+           SELECT created_at,
+                  SUM(CASE WHEN action_type = 'ADD' THEN delta_seconds ELSE 0 END) OVER w AS total_added,
+                  SUM(CASE WHEN action_type = 'SUBTRACT' THEN delta_seconds ELSE 0 END) OVER w AS total_subtracted,
+                  ROW_NUMBER() OVER w AS rn,
+                  COUNT(*) OVER () AS total
+           FROM timer_logs
+           WHERE timer_id = ? AND action_type IN ('ADD', 'SUBTRACT')
+           WINDOW w AS (ORDER BY created_at, id ROWS UNBOUNDED PRECEDING)
+         )
+         SELECT created_at, total_added, total_subtracted
+         FROM ordered
+         WHERE (rn - 1) % ((total + ${MAX_POINTS} - 1) / ${MAX_POINTS}) = 0 OR rn = total
+         ORDER BY rn`
       )
       .bind(timerId)
-      .all<{ created_at: string; action_type: string; delta_seconds: number }>();
+      .all<{ created_at: string; total_added: number; total_subtracted: number }>();
 
-    let totalAdded = 0;
-    let totalSubtracted = 0;
-    const points = rows.results.map((r) => {
-      if (r.action_type === "ADD") totalAdded += r.delta_seconds;
-      else totalSubtracted += r.delta_seconds;
-      return {
-        timestamp: r.created_at,
-        totalAdded,
-        totalSubtracted,
-      };
-    });
+    const points = rows.results.map((r) => ({
+      timestamp: r.created_at,
+      totalAdded: r.total_added,
+      totalSubtracted: r.total_subtracted,
+    }));
 
     return NextResponse.json({ data: { mode: "cumulative", points } });
   }
