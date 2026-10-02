@@ -29,7 +29,7 @@
 - `src/lib/` — 서버 로직 (`timer.ts` 잔여시간·상태전이, `auth.ts`, `chzzk.ts`, `db.ts`, `goal.ts`). `auth-fetch.ts`, `session-expired.ts`는 클라이언트용
 - `src/components/{timer,project,goal,graph,stats,layout,providers,ui}/`
 - `migrations/NNNN_*.sql` — D1 스키마 변경 이력
-- `docs/` — 설계 문서. 해당 영역을 작업할 때 먼저 읽는다: `PRD`, `TIMER-LOGIC`, `DATABASE`, `AUTH`, `API`, `ARCHITECTURE`, `UI`, `UX-IMPROVEMENTS`(개선 백로그 체크리스트)
+- `docs/` — 설계 문서. 해당 영역을 작업할 때 먼저 읽는다: `PRD`, `TIMER-LOGIC`, `DATABASE`, `AUTH`, `API`, `ARCHITECTURE`, `UI`, `UX-IMPROVEMENTS`(개선 백로그 체크리스트), `UI-UX-REVIEW`(스크린샷 근거의 UI/UX 리뷰 지적 목록)
 
 docs와 코드가 다르면 코드가 현재 동작이다. 불일치를 발견하면 사용자에게 알리고, 작업 범위 안이면 문서도 함께 고친다.
 
