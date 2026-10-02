@@ -11,6 +11,8 @@ const REQUIRED_ENV_VARS = [
   "BASE_URL",
 ] as const;
 
+const MIN_JWT_SECRET_BYTES = 32;
+
 type RequiredEnvVar = (typeof REQUIRED_ENV_VARS)[number];
 
 let validated = false;
@@ -37,6 +39,17 @@ export function validateEnv(): void {
       `필수 환경변수가 설정되지 않았습니다: ${missing.join(", ")}\n` +
         `wrangler.toml 또는 .dev.vars 파일을 확인하세요.`
     );
+  }
+
+  try {
+    new URL(process.env.BASE_URL!);
+  } catch {
+    throw new Error(`BASE_URL이 올바른 URL이 아닙니다. 예: https://example.com`);
+  }
+
+  // HS256 키는 32바이트 이상이어야 무차별 대입에 안전하다. 기존 배포를 멈추지 않도록 경고만 남긴다
+  if (new TextEncoder().encode(process.env.JWT_SECRET!).length < MIN_JWT_SECRET_BYTES) {
+    console.warn(`[env] JWT_SECRET이 ${MIN_JWT_SECRET_BYTES}바이트보다 짧습니다. 더 긴 무작위 값으로 교체하세요.`);
   }
 
   validated = true;

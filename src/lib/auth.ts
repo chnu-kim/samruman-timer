@@ -7,6 +7,15 @@ export const ACCESS_TOKEN_MAX_AGE = 15 * 60; // 15 minutes
 export const REFRESH_TOKEN_MAX_AGE = 30 * 24 * 60 * 60; // 30 days
 export const REFRESH_COOKIE_NAME = "refresh";
 
+/**
+ * OAuth state 쿠키 이름. HTTPS에서는 `__Host-` 접두사를 붙여 Secure·Path=/·Domain 없음을 강제한다.
+ * 그래야 평문 HTTP 응답이 공격자의 state 쿠키를 심어 로그인 CSRF를 일으킬 수 없다.
+ * 개발(http://localhost)에서는 Secure를 쓸 수 없으므로 접두사 없는 이름을 쓴다.
+ */
+export function oauthStateCookieName(): string {
+  return process.env.NODE_ENV !== "development" ? "__Host-oauth_state" : "oauth_state";
+}
+
 function getSecret() {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error("JWT_SECRET is not set");
@@ -25,7 +34,11 @@ export async function signJwt(
 
 export async function verifyJwt(token: string): Promise<JwtPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, getSecret());
+    // 서명 알고리즘을 고정하고 만료가 없는 토큰은 받지 않는다
+    const { payload } = await jwtVerify(token, getSecret(), {
+      algorithms: ["HS256"],
+      requiredClaims: ["exp", "iat"],
+    });
     return payload as unknown as JwtPayload;
   } catch {
     return null;

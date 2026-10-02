@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { oauthStateCookieName } from "@/lib/auth";
 import { buildAuthorizationUrl } from "@/lib/chzzk";
 import { withErrorHandler } from "@/lib/db";
 import { NEXT_COOKIE_NAME, sanitizeNextPath } from "@/lib/safe-redirect";
@@ -9,8 +10,9 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
   const next = sanitizeNextPath(request.nextUrl.searchParams.get("next"));
 
   const response = NextResponse.redirect(buildAuthorizationUrl(state));
-  response.cookies.set("oauth_state", state, {
+  response.cookies.set(oauthStateCookieName(), state, {
     httpOnly: true,
+    secure: process.env.NODE_ENV !== "development",
     sameSite: "lax",
     path: "/",
     maxAge: 600, // 10 minutes

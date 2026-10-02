@@ -185,6 +185,77 @@ describe("PUT /api/timers/[id]/overlay-settings", () => {
     expect(res.status).toBe(400);
   });
 
+  it("bg에 CSS 규칙 탈출 문자열 → 400", async () => {
+    db._stmt.first.mockResolvedValueOnce(TIMER_ROW);
+    const req = createPutRequest(
+      "/api/timers/timer-1/overlay-settings",
+      { bg: "transparent} body::after{background:url(https://x/)} x{" },
+      { "x-user-id": "user-1" }
+    );
+    const res = await PUT(req as never, makeParams() as never);
+    expect(res.status).toBe(400);
+    expect(db._stmt.run).not.toHaveBeenCalled();
+  });
+
+  it("bg에 url() → 400", async () => {
+    db._stmt.first.mockResolvedValueOnce(TIMER_ROW);
+    const req = createPutRequest(
+      "/api/timers/timer-1/overlay-settings",
+      { bg: "url(https://x/a.png)" },
+      { "x-user-id": "user-1" }
+    );
+    const res = await PUT(req as never, makeParams() as never);
+    expect(res.status).toBe(400);
+    expect(db._stmt.run).not.toHaveBeenCalled();
+  });
+
+  it("color가 #rrggbb가 아님 → 400", async () => {
+    db._stmt.first.mockResolvedValueOnce(TIMER_ROW);
+    const req = createPutRequest(
+      "/api/timers/timer-1/overlay-settings",
+      { color: "red" },
+      { "x-user-id": "user-1" }
+    );
+    const res = await PUT(req as never, makeParams() as never);
+    expect(res.status).toBe(400);
+    expect(db._stmt.run).not.toHaveBeenCalled();
+  });
+
+  it("boolean 필드에 문자열 → 400", async () => {
+    db._stmt.first.mockResolvedValueOnce(TIMER_ROW);
+    const req = createPutRequest(
+      "/api/timers/timer-1/overlay-settings",
+      { showTitle: "false" },
+      { "x-user-id": "user-1" }
+    );
+    const res = await PUT(req as never, makeParams() as never);
+    expect(res.status).toBe(400);
+    expect(db._stmt.run).not.toHaveBeenCalled();
+  });
+
+  it("본문이 객체가 아님 → 400", async () => {
+    db._stmt.first.mockResolvedValueOnce(TIMER_ROW);
+    const req = createPutRequest(
+      "/api/timers/timer-1/overlay-settings",
+      null,
+      { "x-user-id": "user-1" }
+    );
+    const res = await PUT(req as never, makeParams() as never);
+    expect(res.status).toBe(400);
+    expect(db._stmt.run).not.toHaveBeenCalled();
+  });
+
+  it("bg=transparent와 #rrggbb는 저장된다", async () => {
+    db._stmt.first.mockResolvedValueOnce(TIMER_ROW);
+    const req = createPutRequest(
+      "/api/timers/timer-1/overlay-settings",
+      { bg: "#112233", color: "#AABBCC" },
+      { "x-user-id": "user-1" }
+    );
+    const res = await PUT(req as never, makeParams() as never);
+    expect(res.status).toBe(200);
+  });
+
   it("유효하지 않은 JSON → 400", async () => {
     db._stmt.first.mockResolvedValueOnce(TIMER_ROW);
     const req = createPutRequestRaw(

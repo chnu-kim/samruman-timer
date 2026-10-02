@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDB, nowISO, withErrorHandler } from "@/lib/db";
 import type { OverlayPosition, OverlaySettingsResponse } from "@/types";
+import { isOverlayBackground, isOverlayColor } from "@/lib/overlay-style";
 
 const DEFAULT_SETTINGS: OverlaySettingsResponse = {
   fontSize: 72,
@@ -144,6 +145,12 @@ export const PUT = withErrorHandler(
         { status: 400 }
       );
     }
+    if (typeof body !== "object" || body === null || Array.isArray(body)) {
+      return NextResponse.json(
+        { error: { code: "BAD_REQUEST", message: "요청 본문은 JSON 객체여야 합니다" } },
+        { status: 400 }
+      );
+    }
 
     // Validate fields
     const fontSize =
@@ -160,23 +167,32 @@ export const PUT = withErrorHandler(
       );
     }
 
-    const color =
-      body.color !== undefined ? String(body.color) : DEFAULT_SETTINGS.color;
-    const bg = body.bg !== undefined ? String(body.bg) : DEFAULT_SETTINGS.bg;
+    const color = body.color !== undefined ? body.color : DEFAULT_SETTINGS.color;
+    if (typeof color !== "string" || !isOverlayColor(color)) {
+      return NextResponse.json(
+        { error: { code: "BAD_REQUEST", message: "color는 #rrggbb 형식이어야 합니다" } },
+        { status: 400 }
+      );
+    }
+    const bg = body.bg !== undefined ? body.bg : DEFAULT_SETTINGS.bg;
+    if (typeof bg !== "string" || !isOverlayBackground(bg)) {
+      return NextResponse.json(
+        { error: { code: "BAD_REQUEST", message: "bg는 transparent 또는 #rrggbb 형식이어야 합니다" } },
+        { status: 400 }
+      );
+    }
 
-    const showTitle =
-      body.showTitle !== undefined
-        ? Boolean(body.showTitle)
-        : DEFAULT_SETTINGS.showTitle;
-    const shadow =
-      body.shadow !== undefined
-        ? Boolean(body.shadow)
-        : DEFAULT_SETTINGS.shadow;
-
-    const animation =
-      body.animation !== undefined
-        ? Boolean(body.animation)
-        : DEFAULT_SETTINGS.animation;
+    for (const key of ["showTitle", "shadow", "animation"] as const) {
+      if (body[key] !== undefined && typeof body[key] !== "boolean") {
+        return NextResponse.json(
+          { error: { code: "BAD_REQUEST", message: `${key}는 boolean이어야 합니다` } },
+          { status: 400 }
+        );
+      }
+    }
+    const showTitle = (body.showTitle as boolean | undefined) ?? DEFAULT_SETTINGS.showTitle;
+    const shadow = (body.shadow as boolean | undefined) ?? DEFAULT_SETTINGS.shadow;
+    const animation = (body.animation as boolean | undefined) ?? DEFAULT_SETTINGS.animation;
 
     const position =
       body.position !== undefined

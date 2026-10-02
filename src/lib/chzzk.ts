@@ -44,7 +44,8 @@ export async function exchangeCode(
   });
 
   if (!res.ok) {
-    const text = await res.text();
+    // 외부 응답 본문은 로그로 그대로 흘러가므로 길이를 묶는다
+    const text = (await res.text()).slice(0, 200);
     throw new Error(`CHZZK token exchange failed: ${res.status} ${text}`);
   }
 
@@ -75,7 +76,8 @@ export async function getUserInfo(
   });
 
   if (!res.ok) {
-    const text = await res.text();
+    // 외부 응답 본문은 로그로 그대로 흘러가므로 길이를 묶는다
+    const text = (await res.text()).slice(0, 200);
     throw new Error(`CHZZK user info failed: ${res.status} ${text}`);
   }
 

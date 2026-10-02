@@ -50,13 +50,14 @@ CHZZK OAuth 콜백을 처리한다.
   - `code` (string, 필수): Authorization code
   - `state` (string, 필수): CSRF state
 - **응답**: `302 Redirect` → `oauth_next` 쿠키의 경로(다시 검증), 없으면 `/` (세션 쿠키 설정, `oauth_next` 삭제)
-- **에러**: `code`·`state` 누락, state 불일치(`oauth_state` 쿠키 대조), 토큰 교환·사용자 조회 실패 시 `/login?error=auth_failed`로 리다이렉트(`oauth_next` 삭제)
+- **에러**: `code`·`state` 누락, state 불일치(state 쿠키 대조), 토큰 교환·사용자 조회 실패 시 `/login?error=auth_failed`로 리다이렉트(`oauth_next` 삭제)
 
 ### POST /api/auth/logout
 
 로그아웃한다.
 
-- **인증**: 필요 (`PROTECTED_ROUTES`에 등록되어 미들웨어 검증을 거친다)
+- **인증**: `session` 또는 `refresh` 쿠키 중 하나가 있어야 한다. 둘 다 없으면 `401`
+  - `PROTECTED_ROUTES`에 넣지 않는다. 넣으면 access token이 만료된 상태의 로그아웃에서 미들웨어가 rotation한 새 `session` 쿠키가 라우트의 삭제 쿠키를 덮어써 로그인이 유지된다. 라우트가 쿠키를 직접 확인한다
 - **동작**: `refresh` 쿠키가 있으면 해당 refresh token family 전체를 폐기한다 (폐기 실패해도 로그아웃은 진행)
 - **응답**: `200 OK`, `{ "data": null }` (`session`·`refresh` 쿠키 삭제)
 
@@ -88,7 +89,7 @@ CHZZK OAuth 콜백을 처리한다.
 
 - **인증**: 불필요
 - **쿼리 파라미터** (`/api/projects`, `/mine`, `/others` 공통):
-  - `q` (string, 선택): 이름·설명·소유자 닉네임 부분 일치 검색
+  - `q` (string, 선택): 이름·설명·소유자 닉네임 부분 일치 검색. 앞 100자만 사용
   - `page` (number, 기본값 1)
   - `limit` (number, 기본값 12, 1~50으로 보정)
   - `sort` (string, 선택): `name`이면 이름순, 그 외에는 최신순(`created_at DESC`)
@@ -242,11 +243,11 @@ CHZZK OAuth 콜백을 처리한다.
 }
 ```
 - **유효성 검사**:
-  - 최소 1개 필드 필수
-  - `name`: 공백 제거 후 비어있으면 안 됨 (앞뒤 공백을 제거해 저장, 길이 상한 검사 없음)
-  - `description`: 앞뒤 공백 제거 후 빈 문자열이면 null로 저장 (길이 상한 검사 없음)
+  - 본문은 JSON 객체여야 하고 최소 1개 필드 필수
+  - `name`: 문자열, 공백 제거 후 1~100자 (앞뒤 공백을 제거해 저장)
+  - `description`: 최대 500자 문자열 또는 `null`. 앞뒤 공백 제거 후 빈 문자열이면 null로 저장
 - **에러**:
-  - `400`: 변경할 필드 없음, 이름 비어있음, JSON 파싱 실패
+  - `400`: 본문이 객체가 아님, 변경할 필드 없음, 이름 형식·길이, 설명 길이, JSON 파싱 실패
   - `401`: 인증 없음
   - `403`: 소유자 아님
   - `404`: 프로젝트 없음
@@ -407,11 +408,11 @@ CHZZK OAuth 콜백을 처리한다.
 }
 ```
 - **유효성 검사**:
-  - 최소 1개 필드 필수
-  - `title`: 공백 제거 후 비어있으면 안 됨 (앞뒤 공백을 제거해 저장, 길이 상한 검사 없음)
-  - `description`: 앞뒤 공백 제거 후 빈 문자열이면 null로 저장 (길이 상한 검사 없음)
+  - 본문은 JSON 객체여야 하고 최소 1개 필드 필수
+  - `title`: 문자열, 공백 제거 후 1~100자 (앞뒤 공백을 제거해 저장)
+  - `description`: 최대 500자 문자열 또는 `null`. 앞뒤 공백 제거 후 빈 문자열이면 null로 저장
 - **에러**:
-  - `400`: 변경할 필드 없음, 제목 비어있음, JSON 파싱 실패
+  - `400`: 본문이 객체가 아님, 변경할 필드 없음, 제목 형식·길이, 설명 길이, JSON 파싱 실패
   - `401`: 인증 없음
   - `403`: 소유자 아님
   - `404`: 타이머 없음
@@ -559,7 +560,7 @@ CHZZK OAuth 콜백을 처리한다.
 - 정렬: `created_at DESC`. `limit`은 1~250으로 보정, `totalPages`는 `ceil(total / limit)`
 - **에러**:
   - `400`: 허용되지 않은 `actionType`
-  - `404`: 타이머 없음
+  - `404`: 타이머 없음 또는 삭제됨
 - **응답**:
 ```json
 {
@@ -595,8 +596,11 @@ CHZZK OAuth 콜백을 처리한다.
   - `mode` (string, 필수): `remaining` | `cumulative` | `frequency`
 - **에러**:
   - `400`: `mode` 누락 또는 유효하지 않음
-  - `404`: 타이머 없음
+  - `404`: 타이머 없음 또는 삭제됨
 - `remaining`은 모든 로그의 `afterSeconds`, `cumulative`·`frequency`는 `ADD`·`SUBTRACT` 로그만 사용한다. `frequency`의 `hour`는 UTC 시간 단위 버킷
+- 응답 크기 상한(비인증 공개 엔드포인트라 로그 수에 비례해 커지지 않게 한다):
+  - `remaining`·`cumulative`: 로그가 1000건을 넘으면 `ceil(전체/1000)`건마다 하나씩 균등 추출한다. 마지막 점은 항상 포함한다. `cumulative`의 누적합은 추출 전 전체 로그로 SQL 창 함수에서 계산한다
+  - `frequency`: 최근 1000개 시간 버킷만 반환한다 (오름차순)
 - **응답 (mode=remaining)**:
 ```json
 {
@@ -681,11 +685,13 @@ OBS 오버레이 설정을 저장한다.
 - **유효성 검사**:
   - `fontSize`: 24~200 정수
   - `position`: 유효한 값만 허용
-  - `color`·`bg`: 문자열로 변환해 그대로 저장 (형식 검사 없음)
-  - `showTitle`·`shadow`·`animation`: `Boolean()`으로 변환
+  - 본문은 JSON 객체여야 한다
+  - `color`: `#rrggbb`
+  - `bg`: `transparent` 또는 `#rrggbb` (자유 문자열은 오버레이의 CSS로 흘러가 인젝션 경로가 되므로 받지 않는다)
+  - `showTitle`·`shadow`·`animation`: boolean
 - 생략한 필드는 기존 저장값이 아니라 기본값으로 저장된다 (전체 덮어쓰기 upsert)
 - **에러**:
-  - `400`: JSON 파싱 실패, fontSize 범위 초과, 유효하지 않은 position
+  - `400`: JSON 파싱 실패, 본문이 객체가 아님, fontSize 범위 초과, 유효하지 않은 position, 색 형식, boolean이 아닌 플래그
   - `401`: 인증 없음
   - `403`: 소유자 아님
   - `404`: 타이머 없음
@@ -700,7 +706,7 @@ OBS 오버레이 설정을 저장한다.
 프로젝트의 목표 목록을 조회한다.
 
 - **인증**: 불필요
-- **동작**: 조회 시 ACTIVE 목표의 달성·실패 여부를 자동 감지하여 COMPLETED 또는 FAILED로 전이 (`src/lib/goal.ts`의 `computeProgress`)
+- **동작**: 조회 시 ACTIVE 목표의 달성·실패 여부를 자동 감지하여 COMPLETED 또는 FAILED로 전이 (`src/lib/goal.ts`의 `computeProgress`). 전이 UPDATE는 `status = 'ACTIVE'`일 때만 적용해 동시에 들어온 취소를 덮어쓰지 않는다. 타이머 상태·소비 시간은 요청당 한 번만 읽어 모든 목표에 쓴다 (`loadProgressSnapshot`)
 - **응답**: `200 OK`
 ```json
 {
@@ -728,6 +734,7 @@ OBS 오버레이 설정을 저장한다.
 - `status`: `ACTIVE` | `COMPLETED` | `FAILED` | `CANCELLED`
 - 정렬: `created_at DESC`
 - CANCELLED 상태의 목표도 포함해 반환한다
+- 최대 50개. ACTIVE 목표를 먼저 뽑고 나머지를 최신순으로 채운 뒤 생성일 역순으로 정렬한다 (ACTIVE는 최대 20개라 항상 포함된다)
 - **에러**:
   - `404`: 프로젝트 없음
 
@@ -748,10 +755,11 @@ OBS 오버레이 설정을 저장한다.
 - **유효성 검사**:
   - `type`: 필수, `"DURATION"` 또는 `"DEADLINE"`
   - `title`: 필수, 공백 제거 후 1자 이상, 최대 100자 (앞뒤 공백을 제거해 저장)
-  - `targetSeconds`: DURATION일 때 필수, 0 초과 8,760,000 이하 숫자 (약 100일)
-  - `targetDatetime`: DEADLINE일 때 필수, ISO 8601 미래 시각
+  - `targetSeconds`: DURATION일 때 필수, 1~8,760,000 정수 (약 100일)
+  - `targetDatetime`: DEADLINE일 때 필수, 64자 이하의 미래 시각. ISO 8601 UTC(`toISOString()`)로 정규화해 저장·응답한다
+  - 진행 중(ACTIVE) 목표는 프로젝트당 20개까지. 상한에 걸리면 기존 ACTIVE 목표의 달성·실패 전이를 먼저 반영하고 다시 센다
 - **에러**:
-  - `400`: 파싱 실패, 제목 길이, 유효하지 않은 타입, 범위 초과, 과거 날짜
+  - `400`: 파싱 실패, 제목 길이, 유효하지 않은 타입, 범위 초과, 과거 날짜, 진행 중 목표 상한 초과
   - `401`: 인증 없음
   - `403`: 소유자 아님
   - `404`: 프로젝트 없음 또는 삭제됨
@@ -778,6 +786,7 @@ OBS 오버레이 설정을 저장한다.
 - **요청 본문**: 없음
 - **에러**:
   - `400`: 이미 CANCELLED인 목표
+  - `401`: 인증 없음
   - `403`: 소유자 아님
   - `404`: 프로젝트 없음, 목표 없음
 - **응답**: `200 OK`
@@ -788,4 +797,3 @@ OBS 오버레이 설정을 저장한다.
   }
 }
 ```
-- **주의**: 이 엔드포인트는 현재 `src/middleware.ts`의 `PROTECTED_ROUTES`에 등록되어 있지 않다. 미들웨어가 `x-user-id`를 주입하지 않으므로 핸들러의 소유자 비교가 항상 실패해, 로그인한 소유자도 `403`을 받는다

@@ -39,7 +39,7 @@ describe("인증 흐름 통합 테스트", () => {
     expect(res.headers.get("Location")).toContain("chzzk.naver.com");
 
     const setCookies = res.headers.getSetCookie();
-    const stateCookie = setCookies.find((c) => c.startsWith("oauth_state="));
+    const stateCookie = setCookies.find((c) => c.startsWith("__Host-oauth_state="));
     expect(stateCookie).toBeDefined();
     expect(stateCookie).toContain("HttpOnly");
   });
@@ -59,7 +59,7 @@ describe("인증 흐름 통합 테스트", () => {
 
     const url = new URL("http://localhost:3000/api/auth/callback?code=valid-code&state=state-1");
     const req = new NextRequest(url, {
-      headers: { cookie: "oauth_state=state-1" },
+      headers: { cookie: "__Host-oauth_state=state-1" },
     });
     const res = await callback(req as never);
 
@@ -92,10 +92,10 @@ describe("인증 흐름 통합 테스트", () => {
     // Set-Cookie의 name=value 부분을 다음 요청의 Cookie 헤더로 그대로 옮긴다
     const cookieHeader = loginRes.headers
       .getSetCookie()
-      .filter((c) => c.startsWith("oauth_state=") || c.startsWith("oauth_next="))
+      .filter((c) => c.startsWith("__Host-oauth_state=") || c.startsWith("oauth_next="))
       .map((c) => c.split(";")[0])
       .join("; ");
-    const state = /oauth_state=([^;]+)/.exec(cookieHeader)![1];
+    const state = /__Host-oauth_state=([^;]+)/.exec(cookieHeader)![1];
 
     const req = new NextRequest(
       new URL(`http://localhost:3000/api/auth/callback?code=valid-code&state=${state}`),

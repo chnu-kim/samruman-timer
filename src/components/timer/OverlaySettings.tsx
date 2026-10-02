@@ -8,6 +8,7 @@ import { CopyIcon, XIcon, CheckIcon } from "@/components/ui/Icons";
 import { useToast } from "@/components/ui/Toast";
 import { authFetch } from "@/lib/auth-fetch";
 import { cn } from "@/lib/utils";
+import { HEX_COLOR } from "@/lib/overlay-style";
 
 interface OverlaySettingsProps {
   timerId: string;
@@ -50,7 +51,6 @@ const POSITION_LABELS: Record<Position, string> = {
 };
 
 // 입력 중간 상태(#ff 등)가 URL에 들어가면 오버레이 글자가 body 색을 물려받으므로 완성된 값만 반영한다
-const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
 const POSITIONS: Position[] = ["top-left", "top-right", "center", "bottom-left", "bottom-right"];
 

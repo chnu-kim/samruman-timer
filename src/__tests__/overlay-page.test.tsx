@@ -103,3 +103,39 @@ describe("오버레이 URL 오류 (UX-56)", () => {
     expect(document.body.textContent).not.toContain("찾을 수 없습니다");
   });
 });
+
+describe("오버레이 색상 쿼리 검증 (보안 감사 F03)", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    search = "";
+  });
+
+  it("bg에 CSS를 끼워 넣으면 무시하고 transparent를 쓴다", async () => {
+    search = `bg=${encodeURIComponent("transparent} body::after{background:url(https://x/)} x{")}`;
+    stubTimer("RUNNING", 600);
+    render(<TimerOverlayPage />);
+    await screen.findByRole("timer");
+
+    expect(document.body.style.getPropertyValue("background")).toBe("transparent");
+    expect(document.getElementById("overlay-style")?.textContent).not.toContain("url(");
+  });
+
+  it("유효한 #rrggbb bg는 적용한다", async () => {
+    search = `bg=${encodeURIComponent("#112233")}`;
+    stubTimer("RUNNING", 600);
+    render(<TimerOverlayPage />);
+    await screen.findByRole("timer");
+
+    expect(document.body.style.getPropertyValue("background")).toMatch(/#112233|rgb\(17, 34, 51\)/);
+  });
+
+  it("color가 형식에 맞지 않으면 기본 흰색을 쓴다", async () => {
+    search = "color=red";
+    stubTimer("RUNNING", 600);
+    render(<TimerOverlayPage />);
+
+    const timer = await screen.findByRole("timer");
+    expect(timer.style.color).toMatch(/#ffffff|rgb\(255, 255, 255\)/);
+  });
+});

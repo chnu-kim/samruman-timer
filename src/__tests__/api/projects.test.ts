@@ -38,6 +38,18 @@ describe("GET /api/projects", () => {
     expect(body.data.projects[0].timerCount).toBe(2);
     expect(body.data.pagination).toEqual({ page: 1, limit: 12, total: 1, totalPages: 1 });
   });
+
+  it("검색어는 100자까지만 LIKE 패턴에 쓴다", async () => {
+    const db = createMockDB();
+    db._stmt.first.mockResolvedValue({ cnt: 0 });
+    vi.mocked(getDB).mockResolvedValue(db as unknown as D1Database);
+
+    const res = await GET(createGetRequest(`/api/projects?q=${"가".repeat(5000)}`) as never);
+
+    expect(res.status).toBe(200);
+    const like = db._stmt.bind.mock.calls[0][0] as string;
+    expect(like).toBe(`%${"가".repeat(100)}%`);
+  });
 });
 
 describe("POST /api/projects", () => {

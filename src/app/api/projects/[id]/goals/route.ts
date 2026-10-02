@@ -181,7 +181,7 @@ export const POST = withErrorHandler(async (
   }
 
   if (type === "DURATION") {
-    if (typeof targetSeconds !== "number" || targetSeconds <= 0 || targetSeconds > 8_760_000) {
+    if (typeof targetSeconds !== "number" || !Number.isInteger(targetSeconds) || targetSeconds <= 0 || targetSeconds > 8_760_000) {
       return NextResponse.json(
         { error: { code: "BAD_REQUEST", message: "목표 시간은 1초~8,760,000초(약 100일)여야 합니다" } },
         { status: 400 },
@@ -190,7 +190,8 @@ export const POST = withErrorHandler(async (
   }
 
   if (type === "DEADLINE") {
-    if (!targetDatetime || typeof targetDatetime !== "string") {
+    // Date 파서는 괄호 안을 주석으로 무시해 아주 긴 문자열도 통과시키므로 길이를 먼저 묶는다
+    if (!targetDatetime || typeof targetDatetime !== "string" || targetDatetime.length > 64) {
       return NextResponse.json(
         { error: { code: "BAD_REQUEST", message: "목표 날짜/시간이 필요합니다" } },
         { status: 400 },
@@ -212,6 +213,8 @@ export const POST = withErrorHandler(async (
     );
   }
 
+  // 저장·응답은 ISO 8601 UTC로 정규화한다(입력 원문을 그대로 저장하지 않는다)
+  const deadline = type === "DEADLINE" ? new Date(targetDatetime!).toISOString() : null;
   const id = generateId();
   const now = nowISO();
 
@@ -226,7 +229,7 @@ export const POST = withErrorHandler(async (
       type,
       title.trim(),
       type === "DURATION" ? targetSeconds! : null,
-      type === "DEADLINE" ? targetDatetime! : null,
+      deadline,
       now,
       now,
     )
@@ -238,7 +241,7 @@ export const POST = withErrorHandler(async (
     type,
     title: title.trim(),
     target_seconds: type === "DURATION" ? targetSeconds! : null,
-    target_datetime: type === "DEADLINE" ? targetDatetime! : null,
+    target_datetime: deadline,
     status: "ACTIVE",
     created_at: now,
     completed_at: null,

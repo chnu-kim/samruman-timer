@@ -9,6 +9,7 @@ import {
 } from "@/lib/auth";
 import { getDB } from "@/lib/db";
 import { validateEnv } from "@/lib/env";
+import { logger } from "@/lib/logger";
 
 // 내부 전용 헤더 — 외부 요청에서 위조 방지를 위해 항상 삭제 후 재설정
 const INTERNAL_HEADERS = ["x-user-id", "x-user-chzzk-id", "x-user-nickname"];
@@ -27,7 +28,6 @@ const PROTECTED_ROUTES: { method: string; pattern: RegExp }[] = [
   { method: "PATCH", pattern: /^\/api\/timers\/[^/]+$/ },
   { method: "GET", pattern: /^\/api\/projects\/mine$/ },
   { method: "GET", pattern: /^\/api\/projects\/others$/ },
-  { method: "GET", pattern: /^\/api\/projects\/[^/]+\/stats$/ },
   { method: "PUT", pattern: /^\/api\/timers\/[^/]+\/overlay-settings$/ },
   { method: "GET", pattern: /^\/api\/timers\/[^/]+\/stats$/ },
   { method: "POST", pattern: /^\/api\/projects\/[^/]+\/goals$/ },
@@ -127,7 +127,10 @@ export async function middleware(request: NextRequest) {
 
     return response;
   } catch (err) {
-    console.error("[middleware] refresh token rotation failed:", err);
+    logger.error("refresh token rotation failed", {
+      requestId,
+      error: err instanceof Error ? err.message : String(err),
+    });
     return NextResponse.json(
       { error: { code: "UNAUTHORIZED", message: "유효하지 않은 세션입니다" } },
       { status: 401 }

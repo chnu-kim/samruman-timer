@@ -33,6 +33,8 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
+# wrangler 로컬 시크릿
+.dev.vars*
 
 # vercel
 .vercel

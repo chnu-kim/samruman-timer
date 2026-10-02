@@ -8,6 +8,7 @@ import {
   ACCESS_TOKEN_MAX_AGE,
   REFRESH_TOKEN_MAX_AGE,
   REFRESH_COOKIE_NAME,
+  oauthStateCookieName,
 } from "@/lib/auth";
 import { getDB, generateId, nowISO, withErrorHandler } from "@/lib/db";
 import { logger } from "@/lib/logger";
@@ -32,7 +33,7 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
   const { searchParams } = request.nextUrl;
   const code = searchParams.get("code");
   const state = searchParams.get("state");
-  const savedState = request.cookies.get("oauth_state")?.value;
+  const savedState = request.cookies.get(oauthStateCookieName())?.value;
 
   // state 검증
   if (!code || !state || state !== savedState) {
@@ -104,7 +105,13 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
       path: "/",
       maxAge: REFRESH_TOKEN_MAX_AGE,
     });
-    response.cookies.delete("oauth_state");
+    response.cookies.set(oauthStateCookieName(), "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV !== "development",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 0,
+    });
     response.cookies.delete(NEXT_COOKIE_NAME);
 
     return response;
