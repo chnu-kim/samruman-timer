@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { LogOutIcon, TimerIcon } from "@/components/ui/Icons";
+import { LogoIcon, LogOutIcon } from "@/components/ui/Icons";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { cn } from "@/lib/utils";
 import type { MeResponse } from "@/types";
@@ -39,7 +39,7 @@ export function Header({ initialUser }: HeaderProps = {}) {
       <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
         <div className="flex items-center gap-3 sm:gap-6">
           <Link href="/" className="flex items-center gap-2 text-base sm:text-lg font-bold text-accent whitespace-nowrap">
-            <TimerIcon className="w-5 h-5" />
+            <LogoIcon className="w-5 h-5" />
             삼루먼타이머
           </Link>
           <nav aria-label="메인 네비게이션" className="hidden sm:block">
