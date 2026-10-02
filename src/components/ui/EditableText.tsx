@@ -4,6 +4,9 @@ import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { PencilIcon, CheckIcon, XIcon } from "@/components/ui/Icons";
 
+// 좁은 화면에서 한국어가 음절 단위로 끊기지 않게 어절 단위로 줄바꿈하고, 공백 없는 긴 문자열만 강제로 끊는다
+const TEXT_WRAP = "break-keep [overflow-wrap:anywhere]";
+
 interface EditableTextProps {
   value: string;
   onSave: (newValue: string) => Promise<void>;
@@ -71,12 +74,12 @@ export function EditableText({
   }
 
   if (!editable) {
-    return <Tag className={className}>{value}</Tag>;
+    return <Tag className={cn(className, TEXT_WRAP)}>{value}</Tag>;
   }
 
   if (editing) {
     return (
-      <div className="flex items-center gap-1.5">
+      <div className="flex min-w-0 items-center gap-1.5">
         <input
           ref={inputRef}
           value={draft}
@@ -86,7 +89,7 @@ export function EditableText({
           disabled={saving}
           placeholder={placeholder}
           className={cn(
-            "flex-1 rounded-md border border-border bg-background px-2 py-1 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "min-w-0 w-full flex-1 rounded-md border border-border bg-background px-2 py-1 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring",
             Tag === "h1" && "text-2xl font-bold",
             Tag === "p" && "text-base",
             className,
@@ -119,7 +122,7 @@ export function EditableText({
   return (
     <div className="group flex items-start gap-1.5">
       <Tag
-        className={cn(className, "cursor-pointer")}
+        className={cn(className, TEXT_WRAP, "cursor-pointer")}
         onClick={() => setEditing(true)}
         role="button"
         tabIndex={0}
