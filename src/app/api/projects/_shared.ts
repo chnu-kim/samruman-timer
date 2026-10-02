@@ -1,5 +1,7 @@
 import type { ProjectListItem, Pagination } from "@/types";
 
+const MAX_QUERY_LENGTH = 100;
+
 interface ProjectListParams {
   searchQuery?: string;
   page: number;
@@ -13,7 +15,8 @@ interface OwnerFilter {
 }
 
 export function parseProjectListParams(searchParams: URLSearchParams): ProjectListParams {
-  const q = searchParams.get("q")?.trim() || undefined;
+  // 이름 최대 길이(100자)보다 긴 검색어는 의미가 없고 LIKE 비용만 키우므로 자른다
+  const q = searchParams.get("q")?.trim().slice(0, MAX_QUERY_LENGTH) || undefined;
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
   const rawLimit = parseInt(searchParams.get("limit") ?? "12", 10) || 12;
   const limit = Math.min(50, Math.max(1, rawLimit));
