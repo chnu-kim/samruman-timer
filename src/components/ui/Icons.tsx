@@ -34,7 +34,7 @@ export function TimerIcon({ className }: IconProps) {
   );
 }
 
-// 서비스 로고. src/app/icon.svg(파비콘)와 같은 도형이므로 함께 수정한다
+// 서비스 로고. src/app/icon.svg(파비콘)·apple-icon.png(iOS 홈 화면)와 같은 도형이므로 함께 수정한다
 export function LogoIcon({ className }: IconProps) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" aria-hidden="true" className={cn(iconBase, className)}>
