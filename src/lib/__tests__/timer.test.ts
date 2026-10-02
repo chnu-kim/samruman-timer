@@ -357,7 +357,7 @@ describe("타이머 상태 쓰기 CAS (보안 감사 F02)", () => {
   it("재시도가 모두 겹치면 409 TimerStateError", async () => {
     const now = new Date().toISOString();
     const row = { status: "RUNNING", base_remaining_seconds: 1000, last_calculated_at: now, updated_at: now };
-    const { db } = createCasDB([0, 0, 0], [row, row, row]);
+    const { db } = createCasDB([0, 0, 0, 0, 0], [row, row, row, row, row]);
 
     await expect(modifyTimer(db, makeTimer(), "ADD", 60, "tester", "user-1")).rejects.toMatchObject({
       status: 409,

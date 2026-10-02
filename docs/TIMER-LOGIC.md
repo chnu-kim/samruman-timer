@@ -170,7 +170,7 @@ status = DELETED
 - 그래서 상태 UPDATE는 읽은 `status`·`base_remaining_seconds`·`last_calculated_at`이 그대로일 때만 적용한다(CAS, `src/lib/timer.ts`의 `STATE_GUARD`). 같은 batch의 로그 INSERT는 `WHERE changes() = 1`로 UPDATE가 적용됐을 때만 들어간다
 - CAS가 실패하면:
   - 조회 시 lazy 전이(`detectScheduledActivation`, `detectExpiry`): 아무것도 쓰지 않고 다시 읽은 상태를 돌려준다(먼저 쓴 쪽이 맞다)
-  - `modifyTimer`: 다시 읽은 상태로 최대 3번 다시 계산한다. 그 사이 삭제됐으면 `404`, 모두 겹치면 `409 CONFLICT`
+  - `modifyTimer`: 다시 읽은 상태로 최대 5번 다시 계산한다. 그 사이 삭제됐으면 `404`, 모두 겹치면 `409 CONFLICT`
 
 ### 매우 큰 시간 추가
 - 요청 1회당 `deltaSeconds`(와 생성 시 `initialSeconds`)는 최대 31,536,000초(1년)로 제한한다 (API `400`)

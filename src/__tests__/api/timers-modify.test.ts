@@ -152,7 +152,7 @@ describe("POST /api/timers/[id]/modify", () => {
     expect(res.status).toBe(409);
     const body = await parseJson(res);
     expect(body.error.code).toBe("CONFLICT");
-    expect(db.batch).toHaveBeenCalledTimes(3);
+    expect(db.batch).toHaveBeenCalledTimes(5);
   });
 
   it("유효한 ADD 요청 → 200 + log 포함", async () => {

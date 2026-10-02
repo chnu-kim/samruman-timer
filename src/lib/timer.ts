@@ -133,7 +133,7 @@ export async function detectExpiry(
 
 export const EXPIRED_SUBTRACT_MESSAGE = "만료된 타이머는 차감할 수 없습니다";
 
-const MODIFY_ATTEMPTS = 3;
+const MODIFY_ATTEMPTS = 5;
 
 /**
  * 시간을 추가·차감한다. 읽은 뒤 다른 요청이 먼저 상태를 바꿨으면(동시 후원 등)
