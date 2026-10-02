@@ -73,11 +73,14 @@ export const GET = withErrorHandler(async (
       event_count: number;
     }>();
 
-  // 3. Hourly Distribution
+  // created_at은 UTC로 저장되므로 시간대·일별 집계는 KST(UTC+9)로 옮겨서 묶는다.
+  // 한국 전용 서비스라 시간대 파라미터 없이 고정한다.
+
+  // 3. Hourly Distribution (KST)
   const hourlyResult = await db
     .prepare(`
       SELECT
-        CAST(strftime('%H', created_at) AS INTEGER) AS hour_of_day,
+        CAST(strftime('%H', created_at, '+9 hours') AS INTEGER) AS hour_of_day,
         COUNT(*) AS event_count,
         SUM(CASE WHEN action_type = 'ADD' THEN 1 ELSE 0 END) AS adds,
         SUM(CASE WHEN action_type = 'SUBTRACT' THEN 1 ELSE 0 END) AS subtracts,
@@ -97,11 +100,11 @@ export const GET = withErrorHandler(async (
       added_seconds: number;
     }>();
 
-  // 4. Daily Activity
+  // 4. Daily Activity (KST)
   const dailyResult = await db
     .prepare(`
       SELECT
-        DATE(created_at) AS date,
+        DATE(created_at, '+9 hours') AS date,
         COUNT(*) AS event_count,
         SUM(CASE WHEN action_type = 'ADD' THEN delta_seconds ELSE 0 END) AS added_seconds,
         SUM(CASE WHEN action_type = 'SUBTRACT' THEN delta_seconds ELSE 0 END) AS subtracted_seconds

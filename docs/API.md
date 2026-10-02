@@ -445,6 +445,7 @@ CHZZK OAuth 콜백을 처리한다.
   - `401`: 인증 없음
   - `403`: 소유자 아님
   - `404`: 타이머 없음
+- **시간대 기준**: `hourlyDistribution[].hour`, `summary.peakHour`, `dailyActivity[].date`는 **KST(UTC+9)** 기준이다. `created_at`은 UTC로 저장되므로 SQL에서 `strftime('%H', created_at, '+9 hours')`, `DATE(created_at, '+9 hours')`로 옮겨 묶는다. 한국 전용 서비스라 시간대 파라미터는 받지 않는다.
 - **응답**:
 ```json
 {
