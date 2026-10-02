@@ -113,8 +113,29 @@ export async function revokeRefreshTokenFamily(
     .run();
 }
 
-// 동시 요청 grace period: 30초 이내에 같은 family의 ACTIVE 토큰이 있으면 race condition으로 판단
+// 동시 요청 grace period: 토큰이 rotation된 지 30초 이내에 다시 쓰이면 race condition으로 판단
 const RACE_GRACE_MS = 30_000;
+
+function isWithinRaceGrace(usedAt: string | null): boolean {
+  return usedAt !== null && Date.now() - new Date(usedAt).getTime() < RACE_GRACE_MS;
+}
+
+/** Grace: 새 토큰 발급 없이 사용자 정보만 반환한다 */
+async function graceResult(db: D1Database, row: RefreshTokenRow): Promise<RotateResult | null> {
+  const user = await db
+    .prepare("SELECT id, chzzk_user_id, nickname FROM users WHERE id = ?")
+    .bind(row.user_id)
+    .first<{ id: string; chzzk_user_id: string; nickname: string }>();
+  if (!user) return null;
+  return {
+    userId: user.id,
+    chzzkUserId: user.chzzk_user_id,
+    nickname: user.nickname,
+    newRawToken: null,
+    newTokenHash: null,
+    familyId: row.family_id,
+  };
+}
 
 export interface RotateResult {
   userId: string;
@@ -142,31 +163,11 @@ export async function rotateRefreshToken(
 
   // 2. USED/REVOKED면 → grace period 확인 후 reuse detection
   if (row.status === "USED" || row.status === "REVOKED") {
-    // 동시 요청 grace: 같은 family에 최근 발급된 ACTIVE 토큰이 있으면
-    // 정상적인 동시 요청으로 판단하고 사용자 정보만 반환
-    if (row.status === "USED") {
-      const recentActive = await db
-        .prepare(
-          "SELECT id FROM refresh_tokens WHERE family_id = ? AND status = 'ACTIVE' AND created_at > ? LIMIT 1"
-        )
-        .bind(row.family_id, new Date(Date.now() - RACE_GRACE_MS).toISOString())
-        .first<{ id: string }>();
-
-      if (recentActive) {
-        const user = await db
-          .prepare("SELECT id, chzzk_user_id, nickname FROM users WHERE id = ?")
-          .bind(row.user_id)
-          .first<{ id: string; chzzk_user_id: string; nickname: string }>();
-        if (!user) return null;
-        return {
-          userId: user.id,
-          chzzkUserId: user.chzzk_user_id,
-          nickname: user.nickname,
-          newRawToken: null,
-          newTokenHash: null,
-          familyId: row.family_id,
-        };
-      }
+    // 동시 요청 grace: 이 토큰 자신이 방금 rotation됐을 때만 정상적인 동시 요청으로 본다.
+    // family에 최근 ACTIVE 토큰이 있는지로 판단하면, 탈취자가 주기적으로 rotation하는 동안
+    // 피해자의 재사용이 계속 grace로 통과해 탐지가 일어나지 않는다.
+    if (row.status === "USED" && isWithinRaceGrace(row.used_at)) {
+      return graceResult(db, row);
     }
 
     await revokeRefreshTokenFamily(db, row.family_id);
@@ -187,34 +188,17 @@ export async function rotateRefreshToken(
     .run();
 
   if (!updateResult.meta.changes || updateResult.meta.changes === 0) {
-    // Race condition: 다른 요청이 이미 이 토큰을 사용함.
-    // 같은 family에 최근(30초 이내) 발급된 ACTIVE 토큰이 있으면
-    // 정상적인 동시 요청으로 판단하고 사용자 정보만 반환한다.
-    const recentActive = await db
-      .prepare(
-        "SELECT id FROM refresh_tokens WHERE family_id = ? AND status = 'ACTIVE' AND created_at > ? LIMIT 1"
-      )
-      .bind(row.family_id, new Date(Date.now() - RACE_GRACE_MS).toISOString())
-      .first<{ id: string }>();
+    // Race condition: 조회와 UPDATE 사이에 다른 요청이 이 토큰을 사용했다.
+    // 그 사이 family가 폐기됐을 수 있으므로 현재 상태를 다시 읽는다.
+    const current = await db
+      .prepare("SELECT status, used_at FROM refresh_tokens WHERE id = ?")
+      .bind(row.id)
+      .first<Pick<RefreshTokenRow, "status" | "used_at">>();
 
-    if (recentActive) {
-      // Grace: 새 토큰 발급 없이 사용자 정보만 반환
-      const user = await db
-        .prepare("SELECT id, chzzk_user_id, nickname FROM users WHERE id = ?")
-        .bind(row.user_id)
-        .first<{ id: string; chzzk_user_id: string; nickname: string }>();
-      if (!user) return null;
-      return {
-        userId: user.id,
-        chzzkUserId: user.chzzk_user_id,
-        nickname: user.nickname,
-        newRawToken: null,
-        newTokenHash: null,
-        familyId: row.family_id,
-      };
+    if (current?.status === "USED" && isWithinRaceGrace(current.used_at)) {
+      return graceResult(db, row);
     }
 
-    // 최근 ACTIVE 토큰 없음 → 진짜 토큰 재사용(탈취) → family 폐기
     await revokeRefreshTokenFamily(db, row.family_id);
     return null;
   }

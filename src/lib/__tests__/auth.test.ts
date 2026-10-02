@@ -228,32 +228,22 @@ describe("rotateRefreshToken", () => {
     expect(result!.familyId).toBe("family-1");
   });
 
-  it("USED 토큰 + 최근 ACTIVE 있음 → grace (사용자 정보 반환)", async () => {
+  it("USED 토큰이 방금(30초 이내) rotation됨 → grace (사용자 정보 반환)", async () => {
     const rawToken = "used-token";
     const tokenHash = await hashToken(rawToken);
 
-    let firstCallCount = 0;
-    db._stmt.first.mockImplementation(async () => {
-      firstCallCount++;
-      if (firstCallCount === 1) {
-        return {
+    db._stmt.first
+      .mockResolvedValueOnce({
           id: "rt-1",
           user_id: "user-1",
           token_hash: tokenHash,
           family_id: "family-1",
           status: "USED",
           expires_at: new Date(Date.now() + 86400000).toISOString(),
-          created_at: new Date().toISOString(),
-          used_at: new Date().toISOString(),
-        };
-      }
-      if (firstCallCount === 2) {
-        // grace: 최근 ACTIVE 토큰 존재
-        return { id: "rt-2" };
-      }
-      // user 조회
-      return { id: "user-1", chzzk_user_id: "chzzk-1", nickname: "tester" };
-    });
+          created_at: new Date(Date.now() - 120_000).toISOString(),
+          used_at: new Date(Date.now() - 5_000).toISOString(),
+        })
+      .mockResolvedValueOnce({ id: "user-1", chzzk_user_id: "chzzk-1", nickname: "tester" });
 
     const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
     expect(result).not.toBeNull();
@@ -263,35 +253,52 @@ describe("rotateRefreshToken", () => {
     expect(db._stmt.run).not.toHaveBeenCalled();
   });
 
-  it("USED 토큰 + 최근 ACTIVE 없음 → null + family 폐기 (reuse detection)", async () => {
+  it("USED 토큰이 rotation된 지 30초 넘음 → null + family 폐기 (reuse detection)", async () => {
     const rawToken = "used-token-old";
     const tokenHash = await hashToken(rawToken);
 
-    let firstCallCount = 0;
-    db._stmt.first.mockImplementation(async () => {
-      firstCallCount++;
-      if (firstCallCount === 1) {
-        return {
+    db._stmt.first.mockResolvedValueOnce({
           id: "rt-1",
           user_id: "user-1",
           token_hash: tokenHash,
           family_id: "family-1",
           status: "USED",
           expires_at: new Date(Date.now() + 86400000).toISOString(),
-          created_at: new Date().toISOString(),
-          used_at: new Date().toISOString(),
-        };
-      }
-      // grace: 최근 ACTIVE 토큰 없음
-      return null;
-    });
-
-    db._stmt.run.mockResolvedValue({ meta: { changes: 0 } });
+          created_at: new Date(Date.now() - 120_000).toISOString(),
+          used_at: new Date(Date.now() - 60_000).toISOString(),
+        });
+    db._stmt.run.mockResolvedValue({ meta: { changes: 2 } });
 
     const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
     expect(result).toBeNull();
     // family 폐기 호출됨
-    expect(db._stmt.run).toHaveBeenCalled();
+    expect(db._stmt.run).toHaveBeenCalledTimes(1);
+    const sqls = db.prepare.mock.calls.map((c) => String(c[0]));
+    expect(sqls.some((q) => q.includes("SET status = 'REVOKED'"))).toBe(true);
+  });
+
+  it("탈취자가 family를 계속 rotation해도 오래된 USED 토큰 재사용은 grace가 아니다", async () => {
+    const rawToken = "victim-old-token";
+    const tokenHash = await hashToken(rawToken);
+
+    // family에 방금 발급된 ACTIVE 토큰이 있어도 판정은 이 토큰의 used_at만 본다
+    db._stmt.first.mockResolvedValueOnce({
+          id: "rt-1",
+          user_id: "user-1",
+          token_hash: tokenHash,
+          family_id: "family-1",
+          status: "USED",
+          expires_at: new Date(Date.now() + 86400000).toISOString(),
+          created_at: new Date(Date.now() - 120_000).toISOString(),
+          used_at: new Date(Date.now() - 10 * 60_000).toISOString(),
+        });
+    db._stmt.run.mockResolvedValue({ meta: { changes: 3 } });
+
+    const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
+    expect(result).toBeNull();
+    const sqls = db.prepare.mock.calls.map((c) => String(c[0]));
+    expect(sqls.some((q) => q.includes("status = 'ACTIVE' AND created_at >"))).toBe(false);
+    expect(sqls.some((q) => q.includes("SET status = 'REVOKED'"))).toBe(true);
   });
 
   it("REVOKED 토큰 → null", async () => {
@@ -339,33 +346,24 @@ describe("rotateRefreshToken", () => {
     expect(result).toBeNull();
   });
 
-  it("동시 사용 (changes=0) + 최근 ACTIVE 토큰 있음 → grace (사용자 정보 반환, 새 토큰 없음)", async () => {
+  it("동시 사용 (changes=0) + 방금 USED가 됨 → grace (사용자 정보 반환, 새 토큰 없음)", async () => {
     const rawToken = "concurrent-token";
     const tokenHash = await hashToken(rawToken);
 
-    let firstCallCount = 0;
-    db._stmt.first.mockImplementation(async () => {
-      firstCallCount++;
-      if (firstCallCount === 1) {
-        // refresh_tokens 조회
-        return {
+    db._stmt.first
+      .mockResolvedValueOnce({
           id: "rt-1",
           user_id: "user-1",
           token_hash: tokenHash,
           family_id: "family-1",
           status: "ACTIVE",
           expires_at: new Date(Date.now() + 86400000).toISOString(),
-          created_at: new Date().toISOString(),
+          created_at: new Date(Date.now() - 120_000).toISOString(),
           used_at: null,
-        };
-      }
-      if (firstCallCount === 2) {
-        // grace: 최근 ACTIVE 토큰 조회
-        return { id: "rt-2" };
-      }
-      // user 조회
-      return { id: "user-1", chzzk_user_id: "chzzk-1", nickname: "tester" };
-    });
+        })
+      // 다른 요청이 방금 사용함
+      .mockResolvedValueOnce({ status: "USED", used_at: new Date().toISOString() })
+      .mockResolvedValueOnce({ id: "user-1", chzzk_user_id: "chzzk-1", nickname: "tester" });
 
     // UPDATE returns 0 changes (concurrent use)
     db._stmt.run.mockResolvedValue({ meta: { changes: 0 } });
@@ -379,28 +377,22 @@ describe("rotateRefreshToken", () => {
     expect(db._stmt.run).toHaveBeenCalledTimes(1);
   });
 
-  it("동시 사용 (changes=0) + 최근 ACTIVE 토큰 없음 → null + family 폐기", async () => {
+  it("동시 사용 (changes=0) + 그 사이 family가 폐기됨 → null + family 폐기", async () => {
     const rawToken = "reused-token";
     const tokenHash = await hashToken(rawToken);
 
-    let firstCallCount = 0;
-    db._stmt.first.mockImplementation(async () => {
-      firstCallCount++;
-      if (firstCallCount === 1) {
-        return {
+    db._stmt.first
+      .mockResolvedValueOnce({
           id: "rt-1",
           user_id: "user-1",
           token_hash: tokenHash,
           family_id: "family-1",
           status: "ACTIVE",
           expires_at: new Date(Date.now() + 86400000).toISOString(),
-          created_at: new Date().toISOString(),
+          created_at: new Date(Date.now() - 120_000).toISOString(),
           used_at: null,
-        };
-      }
-      // grace: 최근 ACTIVE 토큰 없음
-      return null;
-    });
+        })
+      .mockResolvedValueOnce({ status: "REVOKED", used_at: null });
 
     db._stmt.run.mockResolvedValue({ meta: { changes: 0 } });
 
