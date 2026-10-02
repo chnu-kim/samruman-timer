@@ -4,8 +4,11 @@
 
 ### 1. 홈 / 프로젝트 목록 (`/`, `/projects`)
 
+- `/`는 `/projects`로 redirect한다.
+- 로그인 시 '내 프로젝트' / '다른 프로젝트' 탭(탭마다 개수 표시)
+- 검색 입력, 정렬(최신순·이름순), 페이지네이션(12개 단위)
 - 프로젝트 카드 그리드 레이아웃
-- 각 카드: 프로젝트 이름, 설명, 소유자, 생성일. 타이머가 없는 프로젝트에만 '타이머 없음'을 표시한다(타이머 상태는 목록 API에 없어 표시하지 않는다)
+- 각 카드: 프로젝트 이름, 설명, 소유자, 생성일(상대 표기). 타이머가 없는 프로젝트에만 '타이머 없음'을 표시한다(타이머 상태는 목록 API에 없어 표시하지 않는다)
 - 로그인 시 "새 프로젝트" 버튼 표시
 - 반응형: 모바일 1열, 태블릿 2열, 데스크톱 3열
 
@@ -14,24 +17,27 @@
 - 프로젝트 정보 헤더 (이름, 설명, 소유자)
 - 프로젝트당 타이머 1개 — 해당 타이머의 상태를 바로 표시
   - 타이머 카드: 제목, 잔여 시간, 상태 뱃지
-  - 상태 뱃지 색상: RUNNING(초록), EXPIRED(빨강)
+  - 상태 뱃지 색상: SCHEDULED(보라, '예약됨'), RUNNING(초록, '실행 중'), EXPIRED(빨강, '만료')
   - 잔여 시간은 클라이언트에서 1초마다 갱신 표시
-- 소유자인 경우 타이머가 없을 때 "새 타이머" 버튼 표시
+  - 카드 전체가 타이머 상세(`/timers/[id]`)로 가는 링크이다
+- 소유자인 경우 타이머가 없을 때 "타이머 만들기" 버튼 표시
+- 헤더에 링크 복사 아이콘 버튼. 소유자에게는 통계(타이머가 있을 때)·프로젝트 삭제 버튼도 보인다. 이름·설명은 소유자가 인라인 편집(`EditableText`)
+- 목표 섹션: '진행 중' / '종료' 탭으로 나눈 `GoalCard` 목록, 소유자는 '새 목표' 버튼(타이머가 있어야 활성) → '새 목표 설정' 대화상자(`GoalForm`, `FormDialog`). 타이머도 목표도 없으면 섹션을 숨긴다
 
 ### 3. 타이머 상세 (`/timers/[id]`)
 
-핵심 페이지. OBS 브라우저 소스로 등록하여 방송 화면에 카운트다운 오버레이로 활용하는 핵심 화면이다. 다음 섹션으로 구성:
+핵심 페이지. 방송 화면에 띄우는 카운트다운은 별도의 오버레이 페이지(`/timers/[id]/overlay`)이고, 이 화면에서 오버레이 설정과 URL 복사를 한다. 다음 섹션으로 구성:
 
 #### 카운트다운 디스플레이
 - 큰 숫자로 잔여 시간 표시: `HH:MM:SS` 또는 `Dd HH:MM:SS`
-- 만료 시 `00:00:00` + EXPIRED 뱃지
+- 만료 시 `00:00:00` + 만료 뱃지. 예약 시작 전(SCHEDULED)에는 시작 예정 시각을 표시한다
 - 1초마다 클라이언트에서 갱신
 
 #### 시간 조작 (소유자만)
-- 프리셋 버튼: `+1시간`, `+5시간`, `+10시간`
+- 프리셋 버튼: `+1시간`, `+5시간`, `+10시간` (직접 입력 값에 누적). '빠른 적용' 모드에서는 누르는 즉시 적용된다. 모바일(md 미만)에는 모드와 무관하게 즉시 적용되는 `+1h`/`+5h`/`+10h` 하단 고정 바가 있다
 - 직접 입력: 시/분/초 입력 필드 + ADD/SUBTRACT 선택
-- 시청자 닉네임 입력 필드 (필수, 최대 50자, placeholder: "시청자 닉네임" — 시간 변경을 요청한 시청자)
-- "적용" 버튼
+- 시청자 닉네임 입력 필드 (확인 버튼으로 적용할 때 필수, 빠른 적용은 기본 닉네임으로 대체 가능, 최대 50자, placeholder: "시간 변경을 요청한 시청자", 기본 닉네임이 있으면 "기본: …" — 시간 변경을 요청한 시청자)
+- "추가 확인" / "차감 확인" 버튼 (변경량 표시)
 - 추가/차감 방향은 페이지가 상태 하나로 소유하고, 세그먼트·프리셋 라벨·키보드 단축키가 공유한다. 빠른 적용 모드에서 차감을 고르면 프리셋 라벨이 `-1시간`처럼 바뀌고, 차감 확인 버튼은 `danger` 스타일이다.
 - 키보드 단축키 (소유자, RUNNING/EXPIRED, 입력 필드 밖에서만. 삭제 확인 창·오버레이 설정 모달이 열려 있으면 전부 꺼지고, 도움말이 열려 있으면 숫자키와 X만 꺼진다)
 
@@ -46,60 +52,80 @@
   X·R·G는 한국어 IME가 켜져 있어도 동작하도록 문자 대신 `e.code`(`KeyX`/`KeyR`/`KeyG`)로 판별한다. 모든 단축키는 Cmd/Ctrl/Alt 조합을 무시해 브라우저 단축키(Cmd+1 탭 전환, Cmd+R 새로고침)를 막지 않는다. Tab은 포커스 이동에 쓰므로 단축키로 쓰지 않는다. 목록은 `SHORTCUT_HELP`(`src/hooks/useKeyboardShortcuts.ts`)와 맞춘다.
 
 #### 로그 리스트
-- 테이블 형태: 시각, 액션, 변경자, 변경량, 변경 전/후
+- 데스크톱(md 이상)은 테이블: 시각, 액션, 시청자, 변경량, 변경 전/후. 모바일은 카드 목록
 - 최근 순 정렬
-- 액션 타입별 색상/아이콘
-  - CREATE: 파랑
-  - ADD: 초록
-  - SUBTRACT: 빨강
-  - EXPIRE: 회색
-  - REOPEN: 노랑
+- 액션 타입별 색상 뱃지 (텍스트 병행)
+  - CREATE(생성): 파랑
+  - ADD(추가): 초록
+  - SUBTRACT(차감): 빨강
+  - EXPIRE(만료): 회색
+  - REOPEN(재시작): 노랑(amber)
+  - ACTIVATE(활성화): 청록
+  - DELETE(삭제): 짙은 회색
 - 페이지네이션 (하단)
-- 액션 타입 필터 (선택)
+- 액션 타입 필터: 토글 버튼 여러 개를 동시에 선택(`aria-pressed`), '초기화' 버튼
+
+#### 소유자 도구
+- 헤더 아이콘 버튼: 통계(`/timers/[id]/stats`), 링크 복사, 타이머 삭제. 통계·삭제는 소유자에게만 보인다
+- 'OBS 오버레이 설정' 버튼 → `OverlaySettings` 모달
 
 #### 그래프
 - 모드 선택 탭: 잔여 시간 추이 | 누적 변경량 | 이벤트 빈도
 - Recharts로 구현
 
+### 4. 타이머 통계 (`/timers/[id]/stats`)
+
+- 요약 카드(`StatsCardGrid`), 상위 후원자(`DonorRankingTable`), 시간대별 이벤트 횟수(`HourlyActivityChart`), 일별 활동 최근 30일(`DailyActivityChart`)
+
+### 5. 오버레이 (`/timers/[id]/overlay`)
+
+OBS 브라우저 소스용. 앱 크롬(헤더·푸터) 없이 카운트다운을 렌더링한다. 배경은 기본 투명이고 글꼴 크기·색·배경·위치 등은 쿼리 파라미터로 정한다.
+
+### 6. 로그인 (`/login`, `/callback`)
+
+CHZZK OAuth 로그인 진입 페이지. OAuth 콜백은 `/api/auth/callback`이 처리하고, `/callback` 페이지는 직접 들어오면 `/`로 보내기만 한다.
+
 ## 컴포넌트 계층
 
 ```
-App
-├── Header
-│   ├── Logo
-│   ├── Navigation
-│   └── UserMenu (로그인/로그아웃)
+RootLayout (ThemeProvider, ToastProvider, SessionExpiredHandler)
+├── Header (로고, 프로젝트 링크, ThemeToggle, 로그인/로그아웃)
 │
-├── ProjectListPage
-│   ├── CreateProjectForm (모달 또는 인라인)
+├── ProjectListPage (/projects)
+│   ├── CreateProjectForm
 │   └── ProjectCard[]
 │
-├── ProjectDetailPage
-│   ├── ProjectHeader
-│   ├── CreateTimerForm (모달 또는 인라인)
-│   └── 타이머 카드 (타이머 화면 링크, 프로젝트당 1개)
-│       ├── CountdownDisplay (대형)
-│       └── StatusBadge
+├── ProjectDetailPage (/projects/[id])
+│   ├── CreateTimerForm (FormDialog)
+│   ├── 타이머 카드 (타이머 화면 링크, 프로젝트당 1개)
+│   │   ├── CountdownDisplay (large)
+│   │   └── Badge
+│   └── GoalSection
+│       ├── GoalForm (FormDialog)
+│       └── GoalCard[] (GoalProgressBar)
 │
-├── TimerDetailPage
-│   ├── CountdownDisplay (대형)
-│   ├── StatusBadge
+├── TimerDetailPage (/timers/[id])
+│   ├── CountdownDisplay (large)
+│   ├── Badge
 │   ├── TimerControls
-│   │   ├── PresetButtons
-│   │   ├── CustomInput
-│   │   └── ActorNameInput
-│   ├── LogTable
-│   │   ├── LogRow[]
-│   │   ├── ActionTypeFilter
-│   │   └── Pagination
-│   └── GraphSection
+│   ├── OverlaySettings (모달)
+│   ├── 변경 기록 (테이블/카드, 액션 필터, Pagination)
+│   └── 그래프
 │       ├── GraphModeSelector
 │       ├── RemainingChart (LineChart)
 │       ├── CumulativeChart (AreaChart)
 │       └── FrequencyChart (BarChart)
 │
+├── TimerStatsPage (/timers/[id]/stats)
+│   ├── StatsCardGrid (StatsCard[])
+│   ├── DonorRankingTable
+│   ├── HourlyActivityChart
+│   └── DailyActivityChart
+│
 └── Footer
 ```
+
+공용 UI는 `src/components/ui/`(Badge, Button, Input, Pagination, ConfirmDialog, FormDialog, EditableText, ErrorState, Skeleton, Spinner, Toast, ThemeToggle, Icons)에 있다.
 
 ## Recharts 그래프 설계
 

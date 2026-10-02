@@ -6,15 +6,15 @@ paths:
 
 # D1 / 마이그레이션
 
-스키마 설계: `docs/DATABASE.md`. 현재 스키마의 최종 형태는 `migrations/`를 순서대로 적용한 결과다.
+스키마 설계: `docs/DATABASE.md`. 현재 스키마의 최종 형태는 `migrations/`를 순서대로 적용한 결과다 (현재 `0001`~`0008`).
 
 ## 마이그레이션 작성
 
 - 새 파일: `migrations/NNNN_snake_case_description.sql`, 기존 최대 번호 + 1.
 - 이미 존재하는 마이그레이션 파일은 수정하지 않는다. 프로덕션에 적용됐을 수 있다.
 - 컬럼 타입 관례: ID `TEXT PRIMARY KEY` (32자 hex), 날짜 `TEXT` (ISO 8601 UTC), enum은 `TEXT` + `CHECK (... IN (...))`.
-- SQLite는 `CHECK` 제약 변경이나 컬럼 수정을 `ALTER`로 못 한다. 이런 변경은 새 테이블 생성 → 데이터 복사 → 기존 테이블 삭제 → rename 순서로 한다 (`0002_scheduled_start.sql` 참고). 이때 인덱스도 다시 만든다.
-- D1은 외래 키 강제가 기본 꺼져 있으므로 참조 무결성은 앱 코드에서 보장한다.
+- SQLite는 `CHECK` 제약 변경이나 컬럼 수정을 `ALTER`로 못 한다. 이런 변경은 새 테이블 생성 → 데이터 복사 → 기존 테이블 삭제 → rename 순서로 한다 (`0003_soft_delete.sql` 참고. D1은 `PRAGMA foreign_keys = OFF`를 유지하지 않아 FK 의존성 순서를 지킨다). 이때 인덱스도 다시 만든다.
+- 삭제는 소프트 삭제(`status = 'DELETED'` 등)가 기본이다. 프로젝트를 삭제하면 하위 타이머도 함께 `DELETED`로 바꾼다. `ALTER TABLE ADD COLUMN`으로 추가한 컬럼(`projects.status`)에는 `CHECK`가 없어 허용 값을 앱 코드에서 보장한다(`0004` 주석).
 - 스키마를 바꾸면 `src/types/`의 행 타입과 `docs/DATABASE.md`를 함께 갱신한다.
 - 로컬 검증: `pnpm db:migrate:local`. 원격(`pnpm db:migrate`)은 사용자 확인 후에만 실행한다.
 - `migrations apply`는 작업 트리에 있는 미적용 파일을 전부 적용한다. 아직 머지되지 않은 마이그레이션 파일이 작업 트리에 있으면 그것까지 프로덕션에 들어가니, 원격 적용 전에 `migrations list --remote`로 적용될 목록을 확인한다.

@@ -26,7 +26,8 @@
 
 - `src/app/api/` — API 라우트 (`auth`, `projects`, `timers`)
 - `src/app/timers/[id]/overlay/` — OBS 브라우저 소스용 오버레이 페이지
-- `src/lib/` — 서버 로직 (`timer.ts` 잔여시간·상태전이, `auth.ts`, `chzzk.ts`, `db.ts`, `goal.ts`). `auth-fetch.ts`, `session-expired.ts`는 클라이언트용
+- `src/lib/` — 서버 로직 (`timer.ts` 잔여시간·상태전이, `auth.ts`, `chzzk.ts`, `db.ts`, `goal.ts`). `auth-fetch.ts`, `session-expired.ts`, `timer-sync.ts`, `overlay-animation.ts`는 클라이언트용
+- `src/hooks/` — 클라이언트 훅 (`usePolling`, `useKeyboardShortcuts` 등)
 - `src/components/{timer,project,goal,graph,stats,layout,providers,ui}/`
 - `migrations/NNNN_*.sql` — D1 스키마 변경 이력
 - `docs/` — 설계 문서. 해당 영역을 작업할 때 먼저 읽는다: `PRD`, `TIMER-LOGIC`, `DATABASE`, `AUTH`, `API`, `ARCHITECTURE`, `UI`, `UX-IMPROVEMENTS`(개선 백로그 체크리스트), `UI-UX-REVIEW`(스크린샷 근거의 UI/UX 리뷰 지적 목록)

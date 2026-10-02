@@ -14,8 +14,8 @@
 ```
 
 ### 인증
-- 인증 필요 엔드포인트는 `session` 쿠키의 JWT를 검증
-- 미인증 시 `401 Unauthorized`
+- 인증 필요 엔드포인트는 `src/middleware.ts`의 `PROTECTED_ROUTES`(메서드+경로 패턴)에 등록된 것이다. 미들웨어가 `session` 쿠키의 JWT를 검증하고, 만료됐으면 `refresh` 쿠키로 토큰을 갱신(rotation)한 뒤 `x-user-id`·`x-user-chzzk-id`·`x-user-nickname` 헤더를 주입한다
+- 미인증 시 `401 Unauthorized` (둘 다 없거나 갱신 실패 시 미들웨어가 바로 반환)
 - 권한 부족 시 `403 Forbidden`
 
 ### 에러 코드
@@ -50,14 +50,15 @@ CHZZK OAuth 콜백을 처리한다.
   - `code` (string, 필수): Authorization code
   - `state` (string, 필수): CSRF state
 - **응답**: `302 Redirect` → `oauth_next` 쿠키의 경로(다시 검증), 없으면 `/` (세션 쿠키 설정, `oauth_next` 삭제)
-- **에러**: state 불일치 또는 토큰 교환 실패 시 `/login?error=auth_failed`로 리다이렉트(`oauth_next` 삭제)
+- **에러**: `code`·`state` 누락, state 불일치(`oauth_state` 쿠키 대조), 토큰 교환·사용자 조회 실패 시 `/login?error=auth_failed`로 리다이렉트(`oauth_next` 삭제)
 
 ### POST /api/auth/logout
 
 로그아웃한다.
 
-- **인증**: 필요
-- **응답**: `200 OK` (세션 쿠키 삭제)
+- **인증**: 필요 (`PROTECTED_ROUTES`에 등록되어 미들웨어 검증을 거친다)
+- **동작**: `refresh` 쿠키가 있으면 해당 refresh token family 전체를 폐기한다 (폐기 실패해도 로그아웃은 진행)
+- **응답**: `200 OK`, `{ "data": null }` (`session`·`refresh` 쿠키 삭제)
 
 ### GET /api/auth/me
 
@@ -75,6 +76,7 @@ CHZZK OAuth 콜백을 처리한다.
   }
 }
 ```
+- **에러**: `404`: 사용자 없음
 
 ---
 
@@ -85,19 +87,33 @@ CHZZK OAuth 콜백을 처리한다.
 프로젝트 목록을 조회한다.
 
 - **인증**: 불필요
+- **쿼리 파라미터** (`/api/projects`, `/mine`, `/others` 공통):
+  - `q` (string, 선택): 이름·설명·소유자 닉네임 부분 일치 검색
+  - `page` (number, 기본값 1)
+  - `limit` (number, 기본값 12, 1~50으로 보정)
+  - `sort` (string, 선택): `name`이면 이름순, 그 외에는 최신순(`created_at DESC`)
+- 삭제된(`DELETED`) 프로젝트는 제외한다. `timerCount`는 비삭제 타이머 수, `totalPages`는 최소 1
 - **응답**:
 ```json
 {
-  "data": [
-    {
-      "id": "project_id",
-      "name": "프로젝트 이름",
-      "description": "설명",
-      "ownerNickname": "소유자 닉네임",
-      "timerCount": 3,
-      "createdAt": "2025-01-01T00:00:00Z"
+  "data": {
+    "projects": [
+      {
+        "id": "project_id",
+        "name": "프로젝트 이름",
+        "description": "설명",
+        "ownerNickname": "소유자 닉네임",
+        "timerCount": 1,
+        "createdAt": "2025-01-01T00:00:00Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 12,
+      "total": 30,
+      "totalPages": 3
     }
-  ]
+  }
 }
 ```
 
@@ -134,19 +150,28 @@ CHZZK OAuth 콜백을 처리한다.
 내 프로젝트 목록을 조회한다.
 
 - **인증**: 필요
+- **쿼리 파라미터**: `GET /api/projects`와 같다
 - **응답**:
 ```json
 {
-  "data": [
-    {
-      "id": "project_id",
-      "name": "프로젝트 이름",
-      "description": "설명",
-      "ownerNickname": "소유자 닉네임",
-      "timerCount": 3,
-      "createdAt": "2025-01-01T00:00:00Z"
+  "data": {
+    "projects": [
+      {
+        "id": "project_id",
+        "name": "프로젝트 이름",
+        "description": "설명",
+        "ownerNickname": "소유자 닉네임",
+        "timerCount": 1,
+        "createdAt": "2025-01-01T00:00:00Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 12,
+      "total": 30,
+      "totalPages": 3
     }
-  ]
+  }
 }
 ```
 
@@ -155,19 +180,28 @@ CHZZK OAuth 콜백을 처리한다.
 다른 사용자의 프로젝트 목록을 조회한다.
 
 - **인증**: 필요
+- **쿼리 파라미터**: `GET /api/projects`와 같다
 - **응답**:
 ```json
 {
-  "data": [
-    {
-      "id": "project_id",
-      "name": "프로젝트 이름",
-      "description": "설명",
-      "ownerNickname": "소유자 닉네임",
-      "timerCount": 3,
-      "createdAt": "2025-01-01T00:00:00Z"
+  "data": {
+    "projects": [
+      {
+        "id": "project_id",
+        "name": "프로젝트 이름",
+        "description": "설명",
+        "ownerNickname": "소유자 닉네임",
+        "timerCount": 1,
+        "createdAt": "2025-01-01T00:00:00Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 12,
+      "total": 30,
+      "totalPages": 3
     }
-  ]
+  }
 }
 ```
 
@@ -193,6 +227,7 @@ CHZZK OAuth 콜백을 처리한다.
   }
 }
 ```
+- **에러**: `404`: 프로젝트 없음 또는 삭제됨
 
 ### PATCH /api/projects/[id]
 
@@ -208,8 +243,8 @@ CHZZK OAuth 콜백을 처리한다.
 ```
 - **유효성 검사**:
   - 최소 1개 필드 필수
-  - `name`: 공백 제거 후 비어있으면 안 됨
-  - `description`: null 허용
+  - `name`: 공백 제거 후 비어있으면 안 됨 (앞뒤 공백을 제거해 저장, 길이 상한 검사 없음)
+  - `description`: 앞뒤 공백 제거 후 빈 문자열이면 null로 저장 (길이 상한 검사 없음)
 - **에러**:
   - `400`: 변경할 필드 없음, 이름 비어있음, JSON 파싱 실패
   - `401`: 인증 없음
@@ -283,10 +318,12 @@ CHZZK OAuth 콜백을 처리한다.
 ```
 - `remainingSeconds`는 서버에서 실시간 계산한 값
 - `SCHEDULED` 상태: `remainingSeconds`는 `baseRemainingSeconds` (고정값)
+- 조회 시 타이머마다 예약 활성화 감지 → 만료 감지를 실행한다. 정렬 `created_at DESC`, 삭제된 타이머 제외
+- **에러**: `404`: 프로젝트 없음 또는 삭제됨
 
 ### POST /api/projects/[id]/timers
 
-타이머를 생성한다. 프로젝트당 1개 타이머를 권장하며, 이미 타이머가 있는 경우 추가 생성 여부를 확인한다.
+타이머를 생성한다. 프로젝트당 타이머는 1개로, 비삭제 타이머가 이미 있으면 `400 BAD_REQUEST`로 거절한다.
 
 - **인증**: 필요 (프로젝트 소유자만)
 - **요청 본문**:
@@ -301,11 +338,17 @@ CHZZK OAuth 콜백을 처리한다.
 - **유효성 검사**:
   - `title`: 필수, 1~100자
   - `description`: 선택, 최대 500자
-  - `initialSeconds`: 필수, 양의 정수
-  - `scheduledStartAt`: 선택, 유효한 ISO 8601 미래 시각
+  - `initialSeconds`: 필수, 1~31,536,000 정수 (1년)
+  - `scheduledStartAt`: 선택, 유효한 ISO 8601 미래 시각 (`toISOString()`으로 정규화해 저장)
 - **동작**:
   - `scheduledStartAt` 미지정: 즉시 `RUNNING` 상태로 생성 (기존 동작)
   - `scheduledStartAt` 지정: `SCHEDULED` 상태로 생성, 해당 시각까지 카운트다운 미시작
+  - 타이머 생성과 `CREATE` 로그 기록을 `db.batch()`로 함께 실행
+- **에러**:
+  - `400`: JSON 파싱 실패, 유효성 검사 실패, 이미 타이머가 있음
+  - `401`: 인증 없음
+  - `403`: 프로젝트 소유자 아님
+  - `404`: 프로젝트 없음 또는 삭제됨
 - **응답**: `201 Created`
 ```json
 {
@@ -349,6 +392,7 @@ CHZZK OAuth 콜백을 처리한다.
 ```
 - 조회 시 예약 활성화 감지 → 만료 감지 로직 체이닝 실행 (TIMER-LOGIC.md 참조)
 - `SCHEDULED` 상태: `remainingSeconds`는 `baseRemainingSeconds` (고정값)
+- **에러**: `404`: 타이머 없음 또는 삭제됨
 
 ### PATCH /api/timers/[id]
 
@@ -364,8 +408,8 @@ CHZZK OAuth 콜백을 처리한다.
 ```
 - **유효성 검사**:
   - 최소 1개 필드 필수
-  - `title`: 공백 제거 후 비어있으면 안 됨
-  - `description`: null 허용
+  - `title`: 공백 제거 후 비어있으면 안 됨 (앞뒤 공백을 제거해 저장, 길이 상한 검사 없음)
+  - `description`: 앞뒤 공백 제거 후 빈 문자열이면 null로 저장 (길이 상한 검사 없음)
 - **에러**:
   - `400`: 변경할 필드 없음, 제목 비어있음, JSON 파싱 실패
   - `401`: 인증 없음
@@ -410,13 +454,18 @@ CHZZK OAuth 콜백을 처리한다.
 ```
 - **유효성 검사**:
   - `action`: 필수, "ADD" 또는 "SUBTRACT"
-  - `deltaSeconds`: 필수, 양의 정수
+  - `deltaSeconds`: 필수, 1~31,536,000 정수 (1년)
   - `actorName`: 필수, 1~50자 (시간 변경을 요청한 시청자 닉네임)
 - **제한**:
   - `SCHEDULED` 상태의 타이머는 시간 변경 불가 (`400 BAD_REQUEST`)
-  - 만료된 타이머(`EXPIRED`, 또는 아직 `RUNNING`으로 남아 있지만 잔여가 0초인 타이머)에 대한 `SUBTRACT`는 거절 (`400 BAD_REQUEST`, "만료된 타이머는 차감할 수 없습니다"). 아무것도 바꾸지 않으므로 로그도 남기지 않는다. `ADD`는 허용되며 타이머를 재시작한다(`REOPEN` + `ADD`)
-- **동작**: 요청 시 먼저 예약 활성화 감지를 실행한 후 시간 변경 수행
-- **응답**: `200 OK`
+  - 만료된 타이머(`EXPIRED`, 또는 아직 `RUNNING`으로 남아 있지만 잔여가 0초인 타이머)에 대한 `SUBTRACT`는 거절 (`400 BAD_REQUEST`, "만료된 타이머는 차감할 수 없습니다"). 아무것도 바꾸지 않으므로 로그도 남기지 않는다. `ADD`는 허용되며 `EXPIRED` 타이머는 재시작한다(`REOPEN` + `ADD`)
+- **동작**: 요청 시 먼저 예약 활성화 감지를 실행한 후 시간 변경 수행. `SUBTRACT`로 잔여가 0이 되면 `EXPIRED`로 전이하고 `EXPIRE` 로그를 함께 남긴다
+- **에러**:
+  - `400`: JSON 파싱 실패, 유효성 검사 실패, 예약 상태, 만료 타이머 차감
+  - `401`: 인증 없음
+  - `403`: 프로젝트 소유자 아님
+  - `404`: 타이머 없음 또는 삭제됨
+- **응답**: `200 OK` (`status`는 `RUNNING` 또는 `EXPIRED`, `log`는 이번 요청에서 남긴 로그 중 마지막 것 — 0초 도달 시 `EXPIRE` 로그)
 ```json
 {
   "data": {
@@ -427,6 +476,7 @@ CHZZK OAuth 콜백을 처리한다.
       "id": "log_id",
       "actionType": "ADD",
       "actorName": "시청자 닉네임",
+      "actorUserId": "user_id",
       "deltaSeconds": 3600,
       "beforeSeconds": 3600,
       "afterSeconds": 7200,
@@ -446,7 +496,7 @@ CHZZK OAuth 콜백을 처리한다.
 
 - **인증**: 필요 (프로젝트 소유자만)
 - **쿼리 파라미터**:
-  - `donorLimit` (number, 기본값 10, 최대 50): 상위 후원자 수
+  - `donorLimit` (number, 기본값 10, 1~50으로 보정): 상위 후원자 수
 - **에러**:
   - `401`: 인증 없음
   - `403`: 소유자 아님
@@ -491,6 +541,7 @@ CHZZK OAuth 콜백을 처리한다.
   }
 }
 ```
+- 집계 대상은 `ADD`·`SUBTRACT` 로그다. `uniqueDonors`와 `topDonors`는 `ADD`의 `actorName` 기준, `peakHour`는 이벤트가 없으면 `null`
 
 ---
 
@@ -504,7 +555,11 @@ CHZZK OAuth 콜백을 처리한다.
 - **쿼리 파라미터**:
   - `page` (number, 기본값 1): 페이지 번호
   - `limit` (number, 기본값 20, 최대 250): 페이지당 항목 수
-  - `actionType` (string, 선택): 필터링할 액션 타입 (쉼표 구분)
+  - `actionType` (string, 선택): 필터링할 액션 타입 (쉼표 구분). 허용: `CREATE`, `ADD`, `SUBTRACT`, `EXPIRE`, `REOPEN`, `ACTIVATE`, `DELETE`
+- 정렬: `created_at DESC`. `limit`은 1~250으로 보정, `totalPages`는 `ceil(total / limit)`
+- **에러**:
+  - `400`: 허용되지 않은 `actionType`
+  - `404`: 타이머 없음
 - **응답**:
 ```json
 {
@@ -538,6 +593,10 @@ CHZZK OAuth 콜백을 처리한다.
 - **인증**: 불필요
 - **쿼리 파라미터**:
   - `mode` (string, 필수): `remaining` | `cumulative` | `frequency`
+- **에러**:
+  - `400`: `mode` 누락 또는 유효하지 않음
+  - `404`: 타이머 없음
+- `remaining`은 모든 로그의 `afterSeconds`, `cumulative`·`frequency`는 `ADD`·`SUBTRACT` 로그만 사용한다. `frequency`의 `hour`는 UTC 시간 단위 버킷
 - **응답 (mode=remaining)**:
 ```json
 {
@@ -600,7 +659,7 @@ OBS 오버레이 설정을 조회한다.
 - `position`: `"center"` | `"top-left"` | `"top-right"` | `"bottom-left"` | `"bottom-right"`
 - `animation`: 오버레이 애니메이션 사용 여부. 시간 추가/차감 효과(flash, 변경량 표시)와 긴급·만료 펄스(깜빡임)를 함께 켜고 끈다. 끄면 긴급 상태는 색 변화로만 표시된다. 기본 `true`
 - **에러**:
-  - `404`: 타이머 없음
+  - `404`: 타이머 없음 또는 삭제됨
 
 ### PUT /api/timers/[id]/overlay-settings
 
@@ -622,6 +681,9 @@ OBS 오버레이 설정을 저장한다.
 - **유효성 검사**:
   - `fontSize`: 24~200 정수
   - `position`: 유효한 값만 허용
+  - `color`·`bg`: 문자열로 변환해 그대로 저장 (형식 검사 없음)
+  - `showTitle`·`shadow`·`animation`: `Boolean()`으로 변환
+- 생략한 필드는 기존 저장값이 아니라 기본값으로 저장된다 (전체 덮어쓰기 upsert)
 - **에러**:
   - `400`: JSON 파싱 실패, fontSize 범위 초과, 유효하지 않은 position
   - `401`: 인증 없음
@@ -638,7 +700,7 @@ OBS 오버레이 설정을 저장한다.
 프로젝트의 목표 목록을 조회한다.
 
 - **인증**: 불필요
-- **동작**: 조회 시 ACTIVE 목표의 달성 여부를 자동 감지하여 COMPLETED로 전이
+- **동작**: 조회 시 ACTIVE 목표의 달성·실패 여부를 자동 감지하여 COMPLETED 또는 FAILED로 전이 (`src/lib/goal.ts`의 `computeProgress`)
 - **응답**: `200 OK`
 ```json
 {
@@ -661,10 +723,11 @@ OBS 오버레이 설정을 저장한다.
   ]
 }
 ```
-- `type=DURATION`의 progress: `{ percentage, currentSeconds, remainingToTarget }`
-- `type=DEADLINE`의 progress: `{ percentage, timerSurvivesDeadline, deadlineIn }`
+- `type=DURATION`의 progress: `{ percentage, currentSeconds, remainingToTarget }` (`percentage` 최대 999)
+- `type=DEADLINE`의 progress: `{ percentage, timerSurvivesDeadline, deadlineIn }` (`percentage` 최대 100)
+- `status`: `ACTIVE` | `COMPLETED` | `FAILED` | `CANCELLED`
 - 정렬: `created_at DESC`
-- CANCELLED 상태의 목표는 제외
+- CANCELLED 상태의 목표도 포함해 반환한다
 - **에러**:
   - `404`: 프로젝트 없음
 
@@ -684,15 +747,15 @@ OBS 오버레이 설정을 저장한다.
 ```
 - **유효성 검사**:
   - `type`: 필수, `"DURATION"` 또는 `"DEADLINE"`
-  - `title`: 필수, 1~100자
-  - `targetSeconds`: DURATION일 때 필수, 1~8,760,000 (약 100일)
+  - `title`: 필수, 공백 제거 후 1자 이상, 최대 100자 (앞뒤 공백을 제거해 저장)
+  - `targetSeconds`: DURATION일 때 필수, 0 초과 8,760,000 이하 숫자 (약 100일)
   - `targetDatetime`: DEADLINE일 때 필수, ISO 8601 미래 시각
 - **에러**:
   - `400`: 파싱 실패, 제목 길이, 유효하지 않은 타입, 범위 초과, 과거 날짜
   - `401`: 인증 없음
   - `403`: 소유자 아님
-  - `404`: 프로젝트 없음
-- **응답**: `201 Created`
+  - `404`: 프로젝트 없음 또는 삭제됨
+- **응답**: `201 Created` (생성한 목표를 `GET` 목록 항목과 같은 형태로 반환, `progress` 포함)
 
 ### PATCH /api/projects/[id]/goals/[goalId]
 
@@ -705,4 +768,24 @@ OBS 오버레이 설정을 저장한다.
   - `401`: 인증 없음
   - `403`: 소유자 아님
   - `404`: 프로젝트 없음, 목표 없음
-- **응답**: `200 OK` (취소된 목표 정보 반환, status=CANCELLED)
+- **응답**: `200 OK` (취소된 목표 정보 반환, status=CANCELLED, `completedAt`에 취소 시각)
+
+### DELETE /api/projects/[id]/goals/[goalId]
+
+목표를 삭제한다. 행을 지우지 않고 status를 `CANCELLED`로 바꾼다 (ACTIVE뿐 아니라 COMPLETED·FAILED 목표도 대상). 목표 카드(`GoalCard`)의 삭제 버튼이 호출한다.
+
+- **인증**: 필요 (프로젝트 소유자만)
+- **요청 본문**: 없음
+- **에러**:
+  - `400`: 이미 CANCELLED인 목표
+  - `403`: 소유자 아님
+  - `404`: 프로젝트 없음, 목표 없음
+- **응답**: `200 OK`
+```json
+{
+  "data": {
+    "id": "goal_id"
+  }
+}
+```
+- **주의**: 이 엔드포인트는 현재 `src/middleware.ts`의 `PROTECTED_ROUTES`에 등록되어 있지 않다. 미들웨어가 `x-user-id`를 주입하지 않으므로 핸들러의 소유자 비교가 항상 실패해, 로그인한 소유자도 `403`을 받는다

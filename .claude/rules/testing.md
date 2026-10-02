@@ -13,12 +13,18 @@ paths:
 - `src/lib/__tests__/*.test.ts` — lib 단위 테스트
 - `src/__tests__/api/*.test.ts` — 라우트 핸들러 단위 테스트
 - `src/__tests__/proxy.test.ts` — `src/middleware.ts`
+- `src/__tests__/*-page.test.tsx` — 페이지 컴포넌트 (`projects-page`, `project-detail-page`, `timer-detail-page`, `overlay-page`)
+- `src/components/*/__tests__/*.test.tsx`, `src/hooks/__tests__/*.test.tsx` — 컴포넌트·훅 테스트
 - `src/__tests__/integration/*.test.ts` — 여러 라우트를 순서대로 호출하는 흐름 테스트 (예: `timer-lifecycle`, `auth-flow`, `cross-resource-auth`)
+
+## 환경
+
+`vitest.config.ts`의 기본 환경은 `node`이고 `src/test-setup.ts`가 `@testing-library/jest-dom`을 불러온다. DOM이 필요한 테스트(컴포넌트·훅·페이지)는 파일 맨 위에 `// @vitest-environment jsdom`을 둔다.
 
 ## Mock 전략
 
 - D1: `createMockDB()` + `mockGetDB(db)` (`src/__tests__/helpers.ts`), 또는 `vi.mock("@/lib/db")`.
-- 요청: `createGetRequest`, `createPostRequest`, `createPostRequestRaw`(잘못된 JSON 테스트용).
+- 요청: `createGetRequest`, `createPostRequest`, `createPostRequestRaw`(잘못된 JSON 테스트용), `createDeleteRequest`, `createPatchRequest`, `createPutRequest`, `createPutRequestRaw`.
 - 인증된 요청은 미들웨어가 주입하는 `x-user-id` 등 헤더를 직접 넣어 흉내 낸다.
 - CHZZK API: `global.fetch = vi.fn()`. JWT는 env를 stub하고 실제 `signJwt`/`verifyJwt`를 쓴다.
 - 통합 테스트에서 DB 응답은 호출 순서대로 `mockResolvedValueOnce`를 쌓는다. 순서가 어긋나면 엉뚱한 응답이 반환되므로, 테스트가 이상하게 실패하면 먼저 mock 순서를 의심한다.
