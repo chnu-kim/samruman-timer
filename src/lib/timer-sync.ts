@@ -28,3 +28,22 @@ export function hasExternalChange(
   const expected = Math.max(0, local.remainingSeconds - elapsed);
   return Math.abs(expected - server.remainingSeconds) >= EXTERNAL_CHANGE_THRESHOLD_SECONDS;
 }
+
+/**
+ * 폴링 결과를 화면 값과 맞춘다. 다른 기기의 변경이 없으면 화면에 반영한 잔여시간과 그 시각을 그대로 두어
+ * 카운트다운이 매 폴링마다 서버 값으로 다시 시작되지 않게 한다(초 단위 틱 위상이 흔들리는 것을 막는다).
+ * 변경이 있거나 처음 받는 값이면 서버 값을 그대로 쓰고 기준 시각을 새로 잡는다.
+ */
+export function reconcilePolledTimer<T extends { status: TimerStatus; remainingSeconds: number }>(
+  local: SyncedTimerSnapshot | undefined,
+  server: T,
+  nowMs: number,
+): { item: T; snapshot: SyncedTimerSnapshot } {
+  if (local && !hasExternalChange(local, server, nowMs)) {
+    return { item: { ...server, remainingSeconds: local.remainingSeconds }, snapshot: local };
+  }
+  return {
+    item: server,
+    snapshot: { status: server.status, remainingSeconds: server.remainingSeconds, syncedAtMs: nowMs },
+  };
+}

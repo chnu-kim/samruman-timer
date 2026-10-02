@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { CountdownDisplay } from "@/components/timer/CountdownDisplay";
 import { CreateTimerForm } from "@/components/timer/CreateTimerForm";
@@ -13,6 +13,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { PlusIcon, TimerIcon, TrashIcon, LinkIcon, ChartBarIcon } from "@/components/ui/Icons";
 import { ProjectDetailSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
+import { reconcilePolledTimer, type SyncedTimerSnapshot } from "@/lib/timer-sync";
 import { GoalCard } from "@/components/goal/GoalCard";
 import { GoalForm } from "@/components/goal/GoalForm";
 import Link from "next/link";
@@ -227,12 +228,23 @@ export default function ProjectDetailPage() {
     }
   }, [projectId]);
 
+  // 타이머별로 화면에 반영한 값과 그 시각. 폴링마다 카운트다운이 다시 시작되지 않도록 비교 기준으로 쓴다
+  const syncedRef = useRef(new Map<string, SyncedTimerSnapshot>());
+
   const fetchTimers = useCallback(async () => {
     try {
       const res = await fetch(`/api/projects/${projectId}/timers`);
       if (res.ok) {
         const json = (await res.json()) as ApiSuccessResponse<TimerListItem[]>;
-        setTimers(json.data);
+        const now = Date.now();
+        const nextSynced = new Map<string, SyncedTimerSnapshot>();
+        const items = json.data.map((server) => {
+          const { item, snapshot } = reconcilePolledTimer(syncedRef.current.get(server.id), server, now);
+          nextSynced.set(server.id, snapshot);
+          return item;
+        });
+        syncedRef.current = nextSynced;
+        setTimers(items);
       }
     } catch {
       // ignore
