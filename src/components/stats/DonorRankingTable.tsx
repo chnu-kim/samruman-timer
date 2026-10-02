@@ -23,12 +23,13 @@ export function DonorRankingTable({ donors, className }: DonorRankingTableProps)
     <div className={className}>
       {/* 데스크톱: 테이블 */}
       <div className="hidden md:block overflow-x-auto">
-        <table className="w-full text-sm">
+        {/* 넓은 화면에서 닉네임과 시간 사이가 벌어지지 않게 폭을 제한한다 */}
+        <table className="w-full max-w-2xl text-sm">
           <thead>
             <tr className="border-b border-border text-left text-muted-foreground">
               <th className="pb-2 pr-4 font-medium w-12">순위</th>
               <th className="pb-2 pr-4 font-medium">닉네임</th>
-              <th className="pb-2 pr-4 font-medium text-right">총 시간</th>
+              <th className="pb-2 pr-4 font-medium text-right">후원 시간</th>
               <th className="pb-2 font-medium text-right">이벤트 수</th>
             </tr>
           </thead>

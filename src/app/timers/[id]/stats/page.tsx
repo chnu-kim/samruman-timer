@@ -122,7 +122,7 @@ export default function TimerStatsPage() {
 
           {/* 시간대별 활동 */}
           <div>
-            <h2 className="border-l-2 border-accent pl-3 text-lg font-bold">시간대별 활동</h2>
+            <h2 className="border-l-2 border-accent pl-3 text-lg font-bold">시간대별 이벤트 횟수</h2>
             <div className="mt-4 rounded-xl border border-border bg-muted p-4">
               <HourlyActivityChart data={stats.hourlyDistribution} />
             </div>
@@ -130,7 +130,7 @@ export default function TimerStatsPage() {
 
           {/* 일별 활동 */}
           <div>
-            <h2 className="border-l-2 border-accent pl-3 text-lg font-bold">일별 활동</h2>
+            <h2 className="border-l-2 border-accent pl-3 text-lg font-bold">일별 활동 (최근 30일)</h2>
             <div className="mt-4 rounded-xl border border-border bg-muted p-4">
               <DailyActivityChart data={stats.dailyActivity} />
             </div>
