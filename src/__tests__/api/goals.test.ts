@@ -336,6 +336,49 @@ describe("POST /api/projects/[id]/goals", () => {
     expect(res.status).toBe(400);
   });
 
+  it("400 targetSeconds가 정수가 아님", async () => {
+    db._stmt.first.mockResolvedValueOnce(PROJECT_ROW);
+
+    const req = createPostRequest(
+      "/api/projects/proj-1/goals",
+      { type: "DURATION", title: "목표", targetSeconds: 0.5 },
+      { "x-user-id": "user-1" },
+    );
+    const res = await POST(req as never, makeParams() as never);
+
+    expect(res.status).toBe(400);
+  });
+
+  it("400 targetDatetime이 64자 초과", async () => {
+    db._stmt.first.mockResolvedValueOnce(PROJECT_ROW);
+
+    const req = createPostRequest(
+      "/api/projects/proj-1/goals",
+      { type: "DEADLINE", title: "목표", targetDatetime: `Jan 1 2099 (${"a".repeat(100)})` },
+      { "x-user-id": "user-1" },
+    );
+    const res = await POST(req as never, makeParams() as never);
+
+    expect(res.status).toBe(400);
+  });
+
+  it("targetDatetime은 ISO 8601 UTC로 정규화해 저장한다", async () => {
+    db._stmt.first.mockResolvedValueOnce(PROJECT_ROW);
+
+    const req = createPostRequest(
+      "/api/projects/proj-1/goals",
+      { type: "DEADLINE", title: "목표", targetDatetime: "2099-01-01T09:00:00+09:00" },
+      { "x-user-id": "user-1" },
+    );
+    const res = await POST(req as never, makeParams() as never);
+    const json = await parseJson(res);
+
+    expect(res.status).toBe(201);
+    expect(json.data.targetDatetime).toBe("2099-01-01T00:00:00.000Z");
+    const insertBinds = db._stmt.bind.mock.calls.find((c) => c.includes("2099-01-01T00:00:00.000Z"));
+    expect(insertBinds).toBeDefined();
+  });
+
   it("400 DEADLINE에 과거 날짜", async () => {
     db._stmt.first.mockResolvedValueOnce(PROJECT_ROW);
 
