@@ -1,6 +1,18 @@
 // @vitest-environment jsdom
+import { useState, type ComponentProps } from "react";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { TimerControls } from "../TimerControls";
+import type { ModifyAction } from "@/types";
+
+type HarnessProps = Omit<ComponentProps<typeof TimerControls>, "selectedAction" | "onActionChange"> & {
+  initialAction?: ModifyAction;
+};
+
+// 추가/차감 방향은 상위(page)가 소유하므로 테스트에서도 상태를 들고 내려 준다
+function Harness({ initialAction = "ADD", ...props }: HarnessProps) {
+  const [action, setAction] = useState<ModifyAction>(initialAction);
+  return <TimerControls {...props} selectedAction={action} onActionChange={setAction} />;
+}
 
 // Mock Toast
 const mockToast = vi.fn();
@@ -34,27 +46,27 @@ describe("TimerControls", () => {
   });
 
   it("renders nickname input and action toggle", () => {
-    render(<TimerControls timerId={timerId} status="RUNNING" />);
+    render(<Harness timerId={timerId} status="RUNNING" />);
     expect(screen.getByLabelText("시청자 닉네임")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "추가" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "차감" })).toBeInTheDocument();
   });
 
   it("shows message for SCHEDULED timers", () => {
-    render(<TimerControls timerId={timerId} status="SCHEDULED" />);
+    render(<Harness timerId={timerId} status="SCHEDULED" />);
     expect(screen.getByText(/예약된 타이머/)).toBeInTheDocument();
     expect(screen.queryByLabelText("시청자 닉네임")).not.toBeInTheDocument();
   });
 
   it("renders time presets", () => {
-    render(<TimerControls timerId={timerId} status="RUNNING" />);
+    render(<Harness timerId={timerId} status="RUNNING" />);
     expect(screen.getByRole("button", { name: "+1시간" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "+5시간" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "+10시간" })).toBeInTheDocument();
   });
 
   it("accumulates preset clicks in standard mode", () => {
-    render(<TimerControls timerId={timerId} status="RUNNING" />);
+    render(<Harness timerId={timerId} status="RUNNING" />);
     const btn1h = screen.getByRole("button", { name: "+1시간" });
 
     fireEvent.click(btn1h);
@@ -65,7 +77,7 @@ describe("TimerControls", () => {
   });
 
   it("validates empty nickname on submit", async () => {
-    render(<TimerControls timerId={timerId} status="RUNNING" />);
+    render(<Harness timerId={timerId} status="RUNNING" />);
 
     fireEvent.click(screen.getByRole("button", { name: "+1시간" }));
 
@@ -77,7 +89,7 @@ describe("TimerControls", () => {
   });
 
   it("validates zero time on submit", async () => {
-    render(<TimerControls timerId={timerId} status="RUNNING" />);
+    render(<Harness timerId={timerId} status="RUNNING" />);
 
     fireEvent.change(screen.getByLabelText("시청자 닉네임"), {
       target: { value: "테스터" },
@@ -88,12 +100,32 @@ describe("TimerControls", () => {
   });
 
   it("switches to SUBTRACT action", () => {
-    render(<TimerControls timerId={timerId} status="RUNNING" />);
+    render(<Harness timerId={timerId} status="RUNNING" />);
 
     const subtract = screen.getByRole("radio", { name: "차감" });
     fireEvent.click(subtract);
 
     expect(subtract).toHaveAttribute("aria-checked", "true");
+  });
+
+  // UX-02: 방향 상태는 상위가 소유한다
+  it("reflects selectedAction prop and reports changes via onActionChange", () => {
+    const onActionChange = vi.fn();
+    render(
+      <TimerControls
+        timerId={timerId}
+        status="RUNNING"
+        selectedAction="SUBTRACT"
+        onActionChange={onActionChange}
+      />,
+    );
+
+    // 상위에서 받은 값이 세그먼트에 그대로 보인다 (단축키로 바뀐 경우 포함)
+    expect(screen.getByRole("radio", { name: "차감" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "추가" })).toHaveAttribute("aria-checked", "false");
+
+    fireEvent.click(screen.getByRole("radio", { name: "추가" }));
+    expect(onActionChange).toHaveBeenCalledWith("ADD");
   });
 
   // ─── Optimistic UI Tests ───
@@ -105,7 +137,7 @@ describe("TimerControls", () => {
 
       const onModified = vi.fn();
       render(
-        <TimerControls
+        <Harness
           timerId={timerId}
           status="RUNNING"
           remainingSeconds={7200}
@@ -163,7 +195,7 @@ describe("TimerControls", () => {
 
       const onModified = vi.fn();
       render(
-        <TimerControls
+        <Harness
           timerId={timerId}
           status="RUNNING"
           remainingSeconds={3600}
@@ -190,7 +222,7 @@ describe("TimerControls", () => {
 
       const onModified = vi.fn();
       render(
-        <TimerControls
+        <Harness
           timerId={timerId}
           status="RUNNING"
           remainingSeconds={1800}
@@ -224,7 +256,7 @@ describe("TimerControls", () => {
 
       const onModified = vi.fn();
       render(
-        <TimerControls
+        <Harness
           timerId={timerId}
           status="RUNNING"
           remainingSeconds={7200}
@@ -260,7 +292,7 @@ describe("TimerControls", () => {
 
       const onModified = vi.fn();
       render(
-        <TimerControls
+        <Harness
           timerId={timerId}
           status="RUNNING"
           remainingSeconds={5000}
@@ -304,7 +336,7 @@ describe("TimerControls", () => {
 
       const onModified = vi.fn();
       render(
-        <TimerControls
+        <Harness
           timerId={timerId}
           status="RUNNING"
           remainingSeconds={7200}
@@ -346,7 +378,7 @@ describe("TimerControls", () => {
 
       const onModified = vi.fn();
       render(
-        <TimerControls
+        <Harness
           timerId={timerId}
           status="RUNNING"
           remainingSeconds={3600}
