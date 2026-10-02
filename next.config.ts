@@ -11,21 +11,29 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // 오버레이 경로 제외 — OBS 브라우저 소스(iframe)로 사용
-        source: "/((?!timers/[^/]+/overlay).*)",
+        source: "/:path*",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
         ],
       },
       {
+        // 오버레이 페이지만 정확히 제외하고 프레이밍을 막는다. `$`가 없으면 /timers/x/overlayfoo 같은 경로도 빠진다.
+        // script-src는 Next 인라인 스크립트·테마 초기화 스크립트 때문에 nonce 도입 전까지 두지 않는다.
+        source: "/((?!timers/[^/]+/overlay$).*)",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'; object-src 'none'; base-uri 'self'" },
+        ],
+      },
+      {
+        // OBS 브라우저 소스와 설정 화면 미리보기(iframe)로 쓰이므로 프레이밍은 허용한다.
+        // 오버레이에는 이미지가 없으므로 외부 이미지 로드(방송 PC IP 노출 경로)를 막는다.
         source: "/timers/:id/overlay",
         headers: [
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
+          { key: "Content-Security-Policy", value: "img-src 'self' data:; object-src 'none'; base-uri 'self'" },
         ],
       },
     ];
