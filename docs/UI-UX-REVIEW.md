@@ -111,7 +111,7 @@
 - **근거**: [03-projects-mine--d-light.png](ux-review/03-projects-mine--d-light.png) · 측정 캡처 [a11y-focus-projects.png](ux-review/measure/a11y-focus-projects.png) · `src/app/globals.css:15, 49, 66`, `src/components/ui/Button.tsx:37`
 
 #### UX-08. 만료 임박 카운트다운(라이트 amber-500)이 2.1:1이고, 무한 펄스가 대비를 더 떨어뜨린다
-- **상태**: 해결 — 라이트 색을 `text-amber-700`(5.05:1)·`text-red-600`(4.76:1)으로 바꿨다. 펄스를 인라인 style에서 `animate-pulse-urgent-slow/fast` 클래스로 옮기고 `prefers-reduced-motion: reduce`에서 끄는 규칙을 `globals.css`에 추가했다. 오버레이 펄스는 UX-24 범위로 남겼다.
+- **상태**: 해결 — 라이트 색을 `text-amber-700`(5.05:1)·`text-red-600`(4.76:1)으로 바꿨다. 펄스를 인라인 style에서 `animate-pulse-urgent-slow/fast` 클래스로 옮기고 `prefers-reduced-motion: reduce`에서 끄는 규칙을 `globals.css`에 추가했다. 오버레이 펄스는 UX-24 범위로 남겼다. 남은 점: 펄스 최저점(opacity 0.7/0.5)에서는 amber-700이 3.01:1, red-600이 2.56:1이다. 키프레임을 오버레이와 공유하므로 펄스 깊이 조정은 UX-24에서 함께 다룬다.
 - **심각도**: major · **영역**: 접근성 / 타이머 상태
 - **관찰**: 5분 미만일 때 `text-amber-500`을 흰 배경에 쓰는데, 대비가 약 2.1:1로 큰 글자 기준 3:1에도 못 미친다. `pulse-urgent-slow`는 opacity를 0.7까지 낮추고(약 1.7:1), 1분 미만의 red-500에 붙는 `pulse-urgent-fast`는 opacity 0.5까지 낮춘다(약 2.1:1). 저장소 어디에도 `prefers-reduced-motion` 처리가 없다. 다크 모드의 amber-400은 문제없다.
 - **이유**: 시청자가 시간을 보탤지 결정하는 가장 중요한 순간에 숫자가 가장 읽기 어려워진다. 5초 넘게 반복되는 깜빡임은 WCAG 2.2.2에도 해당한다.
