@@ -24,9 +24,10 @@ function LoginContent() {
         </div>
       )}
 
+      {/* API 라우트로 전체 이동해야 하므로 <a>를 두고, 공용 Button primary와 같은 색·포커스 스타일을 쓴다 */}
       <a
         href="/api/auth/login"
-        className="flex w-full items-center justify-center rounded-lg bg-foreground px-4 h-12 text-sm font-medium text-background transition-colors hover:opacity-80"
+        className="flex w-full items-center justify-center rounded-lg bg-accent px-4 h-12 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
         CHZZK로 로그인
       </a>
@@ -36,7 +37,7 @@ function LoginContent() {
 
 export default function LoginPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
+    <div className="flex min-h-[60vh] items-center justify-center bg-background">
       <Suspense>
         <LoginContent />
       </Suspense>
