@@ -36,14 +36,12 @@ export function FrequencyChart({ buckets, className }: FrequencyChartProps) {
             dataKey="hour"
             tickFormatter={formatHourShort}
             tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
-            stroke="var(--color-foreground)"
-            opacity={0.4}
+            stroke="var(--color-border)"
           />
           <YAxis
             allowDecimals={false}
             tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
-            stroke="var(--color-foreground)"
-            opacity={0.4}
+            stroke="var(--color-border)"
             width={30}
           />
           <Tooltip
@@ -65,7 +63,8 @@ export function FrequencyChart({ buckets, className }: FrequencyChartProps) {
             formatter={(value: string) =>
               value === "adds" ? "추가" : "차감"
             }
-            wrapperStyle={{ color: "var(--color-muted-foreground)", fontSize: "12px" }}
+            wrapperStyle={{ fontSize: "12px" }}
+            labelStyle={{ color: "var(--color-foreground)" }}
           />
           <Bar dataKey="adds" fill="#22c55e" stackId="a" radius={[2, 2, 0, 0]} />
           <Bar dataKey="subtracts" fill="#ef4444" stackId="a" radius={[2, 2, 0, 0]} />

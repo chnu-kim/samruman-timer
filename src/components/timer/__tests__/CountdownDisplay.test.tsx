@@ -102,6 +102,40 @@ describe("CountdownDisplay", () => {
     expect(screen.getByRole("timer")).toHaveTextContent("00:01:40");
   });
 
+  it("5분 미만이면 진한 amber 글자와 느린 펄스 클래스를 쓴다", () => {
+    render(
+      <CountdownDisplay remainingSeconds={240} status="RUNNING" />,
+    );
+    const timer = screen.getByRole("timer");
+    expect(timer.className).toContain("text-amber-700");
+    expect(timer.className).toContain("dark:text-amber-400");
+    expect(timer.className).toContain("animate-pulse-urgent-slow");
+    expect(timer.className).not.toContain("animate-pulse-urgent-fast");
+    // 동작 줄이기 규칙이 적용되도록 펄스를 인라인 style로 넣지 않는다
+    expect(timer.style.animation).toBe("");
+  });
+
+  it("1분 미만이면 진한 red 글자와 빠른 펄스 클래스를 쓴다", () => {
+    render(
+      <CountdownDisplay remainingSeconds={45} status="RUNNING" />,
+    );
+    const timer = screen.getByRole("timer");
+    expect(timer.className).toContain("text-red-600");
+    expect(timer.className).toContain("dark:text-red-400");
+    expect(timer.className).toContain("animate-pulse-urgent-fast");
+    expect(timer.className).not.toContain("animate-pulse-urgent-slow");
+    expect(timer.style.animation).toBe("");
+  });
+
+  it("5분 이상이면 긴급 색과 펄스가 없다", () => {
+    render(
+      <CountdownDisplay remainingSeconds={300} status="RUNNING" />,
+    );
+    const timer = screen.getByRole("timer");
+    expect(timer.className).not.toMatch(/text-(amber|red)-/);
+    expect(timer.className).not.toContain("animate-pulse-urgent");
+  });
+
   it("renders compact size by default with subtext placeholder", () => {
     render(
       <CountdownDisplay remainingSeconds={60} status="RUNNING" />,

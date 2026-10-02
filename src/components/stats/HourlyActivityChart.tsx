@@ -41,15 +41,13 @@ export function HourlyActivityChart({ data, className }: HourlyActivityChartProp
           <XAxis
             dataKey="hour"
             tickFormatter={(h) => `${h}시`}
-            tick={{ fontSize: 11 }}
-            stroke="var(--color-foreground)"
-            opacity={0.4}
+            tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+            stroke="var(--color-border)"
           />
           <YAxis
             allowDecimals={false}
-            tick={{ fontSize: 11 }}
-            stroke="var(--color-foreground)"
-            opacity={0.4}
+            tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+            stroke="var(--color-border)"
             width={30}
           />
           <Tooltip
@@ -70,6 +68,7 @@ export function HourlyActivityChart({ data, className }: HourlyActivityChartProp
             formatter={(value: string) =>
               value === "adds" ? "추가" : "차감"
             }
+            labelStyle={{ color: "var(--color-foreground)" }}
           />
           <Bar dataKey="adds" fill="#22c55e" stackId="a" radius={[2, 2, 0, 0]} />
           <Bar dataKey="subtracts" fill="#ef4444" stackId="a" radius={[2, 2, 0, 0]} />

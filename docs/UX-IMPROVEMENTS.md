@@ -70,8 +70,9 @@
   - 사용자 스토리: 스트리머로서 타이머가 곧 만료될 때 눈에 띄는 경고를 보고 싶다, 만료를 놓치지 않기 위해
   - 예상 공수: 0.5일
   - 개선안:
-    - 잔여 5분 미만: `text-amber-500` + 느린 pulse 애니메이션
-    - 잔여 1분 미만: `text-red-500` + 빠른 pulse 애니메이션
+    - 잔여 5분 미만: `text-amber-700 dark:text-amber-400` + 느린 pulse 애니메이션(`animate-pulse-urgent-slow`)
+    - 잔여 1분 미만: `text-red-600 dark:text-red-400` + 빠른 pulse 애니메이션(`animate-pulse-urgent-fast`)
+    - `prefers-reduced-motion: reduce`에서는 웹 화면의 pulse를 끈다 (`globals.css`)
     - 오버레이에도 동일 적용 (쿼리 파라미터 `urgentColor` 지원)
     - 접근성: `aria-label`에 "긴급" 문구 추가
   - 구현 위치: `src/components/timer/CountdownDisplay.tsx`

@@ -103,6 +103,7 @@
 - **근거**: [19-timer-stats--d-light.png](ux-review/19-timer-stats--d-light.png), [19-timer-stats--m-dark.png](ux-review/19-timer-stats--m-dark.png) · `src/app/api/timers/[id]/stats/route.ts:80, 104, 123-132`, `src/lib/db.ts:15`, `src/components/stats/StatsCardGrid.tsx:41`
 
 #### UX-07. 공용 포커스 링(`--ring`, 알파 40%)의 대비가 1.7:1(라이트), 1.95:1(다크)이다
+- **상태**: 해결 — `--ring`을 불투명 accent로 바꿨다(라이트 `#4f46e5`, 다크 `#818cf8`). UX-28로 라이트 accent가 `#4f46e5`가 되어 권고의 `#6366f1` 대신 새 accent 값을 따랐다. 흰 배경 대비 6.29:1, 다크 배경 대비 6.64:1이다.
 - **심각도**: major · **영역**: 접근성
 - **관찰**: `--ring`은 `rgba(99,102,241,0.4)`(다크에서는 `rgba(129,140,248,0.4)`)이다. 34곳에서 `focus-visible:outline-none`으로 브라우저 기본 outline을 지우고 이 링으로 대체한다. 프로젝트 카드에 포커스를 줘도 연보라 테두리가 hover 그림자와 잘 구분되지 않는다.
 - **이유**: WCAG 1.4.11(비텍스트 대비 3:1, AA) 미달이다. 키보드 사용자는 지금 어디에 있는지 알기 어렵다.
@@ -110,6 +111,7 @@
 - **근거**: [03-projects-mine--d-light.png](ux-review/03-projects-mine--d-light.png) · 측정 캡처 [a11y-focus-projects.png](ux-review/measure/a11y-focus-projects.png) · `src/app/globals.css:15, 49, 66`, `src/components/ui/Button.tsx:37`
 
 #### UX-08. 만료 임박 카운트다운(라이트 amber-500)이 2.1:1이고, 무한 펄스가 대비를 더 떨어뜨린다
+- **상태**: 해결 — 라이트 색을 `text-amber-700`(5.05:1)·`text-red-600`(4.76:1)으로 바꿨다. 펄스를 인라인 style에서 `animate-pulse-urgent-slow/fast` 클래스로 옮기고 `prefers-reduced-motion: reduce`에서 끄는 규칙을 `globals.css`에 추가했다. 오버레이 펄스는 UX-24 범위로 남겼다. 남은 점: 펄스 최저점(opacity 0.7/0.5)에서는 amber-700이 3.01:1, red-600이 2.56:1이다. 키프레임을 오버레이와 공유하므로 펄스 깊이 조정은 UX-24에서 함께 다룬다.
 - **심각도**: major · **영역**: 접근성 / 타이머 상태
 - **관찰**: 5분 미만일 때 `text-amber-500`을 흰 배경에 쓰는데, 대비가 약 2.1:1로 큰 글자 기준 3:1에도 못 미친다. `pulse-urgent-slow`는 opacity를 0.7까지 낮추고(약 1.7:1), 1분 미만의 red-500에 붙는 `pulse-urgent-fast`는 opacity 0.5까지 낮춘다(약 2.1:1). 저장소 어디에도 `prefers-reduced-motion` 처리가 없다. 다크 모드의 amber-400은 문제없다.
 - **이유**: 시청자가 시간을 보탤지 결정하는 가장 중요한 순간에 숫자가 가장 읽기 어려워진다. 5초 넘게 반복되는 깜빡임은 WCAG 2.2.2에도 해당한다.
@@ -117,6 +119,7 @@
 - **근거**: [17-timer-nonowner-urgent--d-light.png](ux-review/17-timer-nonowner-urgent--d-light.png), [17-timer-nonowner-urgent--m-light.png](ux-review/17-timer-nonowner-urgent--m-light.png) · `src/components/timer/CountdownDisplay.tsx:80-92`, `src/app/globals.css:98-106`
 
 #### UX-09. 라이트 모드 상태·액션 배지와 증감량 텍스트가 AA 4.5:1에 미달한다
+- **상태**: 해결 — `Badge` 라이트 배경을 green-700(4.94:1), red-600(4.76:1), cyan-700(5.28:1), amber-700(5.05:1)으로 올리고, 로그 변경량과 통계 랭킹 시간을 `text-green-700`으로 바꿨다. purple-600(5.53:1), blue-600(5.26:1), gray-500(4.84:1)은 점검 결과 통과라 그대로 두었다.
 - **심각도**: major · **영역**: 접근성 / 일관성
 - **관찰**: 12px 굵은 흰 글씨 배지의 대비가 bg-green-600에서 3.3:1(실행 중, 추가, 진행 중), bg-red-500에서 3.76:1(만료, 차감), cyan-600에서 3.68:1(활성화), amber-500에서 2.15:1(재시작)이다. 로그 '변경량' 열과 통계 랭킹의 `text-green-600`(12~14px)도 흰 배경에서 약 3.3:1이다. 다크 모드는 틴트 배경 패턴이라 모두 통과한다. 만료 화면에서는 큰 숫자가 회색이라, 상태를 텍스트로 알려 주는 요소가 사실상 이 작은 배지 하나다.
 - **이유**: 상태와 증감은 가장 자주 확인하는 정보인데, 가장 작은 글씨에 대비까지 낮다. WCAG 1.4.3(AA) 미달이다.
@@ -238,6 +241,7 @@
 - **근거**: [12-timer-overlay-settings--d-light.png](ux-review/12-timer-overlay-settings--d-light.png) · `src/components/timer/OverlaySettings.tsx:336-341, 356-361, 380-433`
 
 #### UX-26. 모든 차트의 축 눈금과 범례 글자가 opacity 0.4라 거의 읽히지 않는다
+- **상태**: 해결 — 5개 차트 축에서 `opacity`를 없애고 눈금 글자를 `--color-muted-foreground`(라이트 4.89:1, 다크 7.11:1), 축선을 `--color-border`로 바꿨다. 범례 글자는 Recharts가 계열 색을 인라인으로 넣어 `wrapperStyle`이 닿지 않으므로 `labelStyle`로 본문색을 지정했다.
 - **심각도**: minor · **영역**: 접근성 / 통계 / 타이머 조작
 - **관찰**: XAxis와 YAxis에 `opacity={0.4}`가 걸려 11px 눈금까지 흐려진다. 대비는 약 1.6~2.5:1(라이트)이다. 통계 범례의 '추가'(초록 글자)는 약 2:1이다.
 - **이유**: 툴팁은 hover나 탭이 필요하므로, 정적으로 값을 읽는 수단은 축뿐이다(WCAG 1.4.3).
@@ -252,6 +256,7 @@
 - **근거**: [15-timer-scheduled--d-light.png](ux-review/15-timer-scheduled--d-light.png), [16-timer-expired--d-light.png](ux-review/16-timer-expired--d-light.png), [17-timer-nonowner-urgent--m-light.png](ux-review/17-timer-nonowner-urgent--m-light.png) · `src/components/graph/RemainingChart.tsx:42`, `src/components/graph/CumulativeChart.tsx:43`
 
 #### UX-28. 라이트 accent 위 흰 글씨(4.47:1)와 muted 위 muted 글씨(4.35:1)가 AA에 조금 못 미친다
+- **상태**: 해결 — 라이트 토큰만 `--accent` `#4f46e5`, `--accent-hover` `#4338ca`, `--muted-foreground` `#6b6b6b`로 바꿨다. 흰 글씨/accent 6.29:1, muted/muted 4.89:1이다. 다크 토큰은 그대로다.
 - **심각도**: minor · **영역**: 접근성 / 일관성
 - **관찰**: 해당하는 곳은 primary 버튼('새 프로젝트', '새 목표'), 선택된 그래프 모드, 선택되지 않은 그래프 모드와 '차감' 토글이다.
 - **이유**: 가장 많이 쓰는 버튼과 추가/차감 선택의 글자가 4.5:1에 미달한다.

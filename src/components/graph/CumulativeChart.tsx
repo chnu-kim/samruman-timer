@@ -36,14 +36,12 @@ export function CumulativeChart({ points, className }: CumulativeChartProps) {
             dataKey="timestamp"
             tickFormatter={formatTimestampShort}
             tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
-            stroke="var(--color-foreground)"
-            opacity={0.4}
+            stroke="var(--color-border)"
           />
           <YAxis
             tickFormatter={(v: number) => `${(v / 3600).toFixed(0)}h`}
             tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
-            stroke="var(--color-foreground)"
-            opacity={0.4}
+            stroke="var(--color-border)"
             width={40}
           />
           <Tooltip
@@ -65,7 +63,8 @@ export function CumulativeChart({ points, className }: CumulativeChartProps) {
             formatter={(value: string) =>
               value === "totalAdded" ? "누적 추가" : "누적 차감"
             }
-            wrapperStyle={{ color: "var(--color-muted-foreground)", fontSize: "12px" }}
+            wrapperStyle={{ fontSize: "12px" }}
+            labelStyle={{ color: "var(--color-foreground)" }}
           />
           <Area
             type="monotone"

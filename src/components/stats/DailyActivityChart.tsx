@@ -48,14 +48,12 @@ export function DailyActivityChart({ data, className }: DailyActivityChartProps)
               const parts = d.split("-");
               return `${parts[1]}/${parts[2]}`;
             }}
-            tick={{ fontSize: 11 }}
-            stroke="var(--color-foreground)"
-            opacity={0.4}
+            tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+            stroke="var(--color-border)"
           />
           <YAxis
-            tick={{ fontSize: 11 }}
-            stroke="var(--color-foreground)"
-            opacity={0.4}
+            tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+            stroke="var(--color-border)"
             width={40}
             tickFormatter={(v) => `${v}h`}
           />
@@ -77,6 +75,7 @@ export function DailyActivityChart({ data, className }: DailyActivityChartProps)
             formatter={(value: string) =>
               value === "addedHours" ? "추가" : "차감"
             }
+            labelStyle={{ color: "var(--color-foreground)" }}
           />
           <Bar dataKey="addedHours" fill="#22c55e" stackId="a" radius={[2, 2, 0, 0]} />
           <Bar dataKey="subtractedHours" fill="#ef4444" stackId="a" radius={[2, 2, 0, 0]} />
