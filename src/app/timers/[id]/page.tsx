@@ -21,6 +21,7 @@ import { CumulativeChart } from "@/components/graph/CumulativeChart";
 import { FrequencyChart } from "@/components/graph/FrequencyChart";
 import { useKeyboardShortcuts, SHORTCUT_HELP } from "@/hooks/useKeyboardShortcuts";
 import { usePolling } from "@/hooks/usePolling";
+import { useDocumentTitle, APP_TITLE } from "@/hooks/useDocumentTitle";
 import { authFetch } from "@/lib/auth-fetch";
 import { hasExternalChange, type SyncedTimerSnapshot } from "@/lib/timer-sync";
 import type {
@@ -379,6 +380,8 @@ export default function TimerDetailPage() {
     setTimer(json.data);
     toast("타이머 설명이 수정되었습니다", "success");
   }
+
+  useDocumentTitle(timer ? `${timer.title} · ${APP_TITLE}` : null);
 
   if (loading) {
     return (

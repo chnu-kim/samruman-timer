@@ -10,6 +10,7 @@ import { DailyActivityChart } from "@/components/stats/DailyActivityChart";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { ChevronLeftIcon } from "@/components/ui/Icons";
 import { StatsPageSkeleton } from "@/components/ui/Skeleton";
+import { useDocumentTitle, APP_TITLE } from "@/hooks/useDocumentTitle";
 import type {
   ApiSuccessResponse,
   TimerDetailResponse,
@@ -59,6 +60,8 @@ export default function TimerStatsPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useDocumentTitle(timer ? `${timer.title} 통계 · ${APP_TITLE}` : null);
 
   if (loading) {
     return (
