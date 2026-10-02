@@ -169,6 +169,7 @@
 - **근거**: [16-timer-expired--d-light.png](ux-review/16-timer-expired--d-light.png) · `src/lib/timer.ts:126-139`, `src/components/timer/TimerControls.tsx:110`
 
 #### UX-15. 모바일에서 같은 값의 프리셋 두 세트가 다르게 동작한다(누적과 즉시 적용)
+- **상태**: 해결 — 하단 바 아래 줄에 `즉시 적용 → <닉네임>`을 항상 표시해 카드 프리셋(누적)과 달리 바로 적용됨을 알린다. 라벨(`+1h`)과 빠른 적용 모드 토글은 백로그(`UX-IMPROVEMENTS.md` 빠른 적용 모드 항목)와 충돌하지 않게 그대로 두었다.
 - **심각도**: minor · **영역**: 모바일 / 타이머 조작
 - **관찰**: 카드 안의 '+1시간/+5시간/+10시간'은 입력값에 더하기만 하고, 하단 바의 '+1h/+5h/+10h'는 확인 없이 바로 적용된다. 생김새(회색 외곽선과 초록 채움)와 표기(시간과 h)는 다르지만, 동작의 차이를 설명하는 문구는 없다. 백로그의 '빠른 적용 모드 토글 제거'(`UX-IMPROVEMENTS.md:166-170`)와 같은 인지 부하 문제다.
 - **이유**: 하단 바로 금액을 맞추려고 여러 번 누르면 그때마다 바로 적용된다.
@@ -176,6 +177,7 @@
 - **근거**: [11-timer-running-owner--m-light.png](ux-review/11-timer-running-owner--m-light.png) · 측정 캡처 [mob/timer-y400.png](ux-review/measure/mob/timer-y400.png) · `src/components/timer/TimerControls.tsx:19-29, 333-349, 411-429`
 
 #### UX-16. 하단 즉시 적용 바가 누구 이름으로 기록될지 보여 주지 않는다
+- **상태**: 해결 — 기존 안내문 자리에 하단 바가 기록할 닉네임(입력값, 비어 있으면 기본 닉네임)을 `즉시 적용 → 치즈냥`으로 항상 표시한다. 표시와 제출이 같은 `quickActor` 값을 쓴다. 닉네임이 없으면 기존 안내 `닉네임을 먼저 입력하세요`.
 - **심각도**: minor · **영역**: 모바일
 - **관찰**: 하단 바는 입력된 닉네임을 쓰고, 비어 있으면 기본 닉네임으로 즉시 적용한다. 적용한 뒤에도 닉네임은 그대로 남는다. 변경 기록을 보려고 스크롤하면 닉네임 입력란이 화면 밖으로 나가지만 바는 계속 활성 상태다.
 - **이유**: 직전 후원자의 이름으로 다음 시간이 기록돼도 확인할 수 없다. 랭킹과 통계가 틀어진다.
@@ -183,6 +185,7 @@
 - **근거**: [11-timer-running-owner--m-light.png](ux-review/11-timer-running-owner--m-light.png) · 측정 캡처 [mob/timer-y1300.png](ux-review/measure/mob/timer-y1300.png) · `src/components/timer/TimerControls.tsx:109-116, 160, 411-435`
 
 #### UX-17. 하단 바 높이 보정 여백이 카드 안에 들어가 있고, 페이지 끝의 푸터는 바에 가려진다
+- **상태**: 해결 — 카드 안의 `h-20` 보정 div를 지웠다. 푸터가 `main` 밖에 있어 페이지 컨테이너 패딩으로는 푸터가 드러나지 않으므로, 권고와 달리 `globals.css`에서 md 미만일 때 `body:has([data-quick-bar])`에 바 높이(84px + max(12px, safe-area))만큼 하단 패딩을 준다. 바가 렌더될 때(소유자, SCHEDULED 아님)만 적용된다. 390px에서 끝까지 스크롤하면 푸터 하단 748px, 바 상단 749px.
 - **심각도**: minor · **영역**: 모바일
 - **관찰**: 보정용 `h-20` div가 '시간 조작' 카드 안에 있어서 확인 버튼 아래에 80px 빈 공간이 생긴다. 하단 바의 실제 높이는 약 95px인데 페이지 끝에는 여백이 없어, 끝까지 스크롤해도 푸터가 완전히 가려지고 그래프 카드 하단도 약 20px 겹친다.
 - **이유**: 조작 영역이 불필요하게 길어지고, 그래프 하단과 연락처를 볼 수 없다.
@@ -190,6 +193,7 @@
 - **근거**: [11-timer-running-owner--m-light.png](ux-review/11-timer-running-owner--m-light.png) · 측정 캡처 [mob/timer-bottom.png](ux-review/measure/mob/timer-bottom.png) · `src/components/timer/TimerControls.tsx:411, 437`
 
 #### UX-18. 최근 닉네임 칩(약 26px)과 '기본 닉네임으로 설정/해제'(약 16px)의 터치 영역이 너무 작다
+- **상태**: 해결 — 기본 닉네임 설정/해제 버튼에 `min-h-11 px-2`(44px, 글자 정렬은 래퍼 `-ml-2`로 유지), 칩은 `py-2`와 간격 `gap-2`(높이 26→34px)로 키웠다.
 - **심각도**: minor · **영역**: 접근성 / 모바일
 - **관찰**: 칩은 `px-3 py-1 text-xs`에 간격 6px이다. 기본 닉네임 버튼은 패딩 없는 `text-xs` 텍스트 버튼이라 칩 바로 아래 약 6px 거리에 붙어 있다. 같은 폼의 프리셋은 48px이다. 프로젝트 규칙(`.claude/rules/ui.md`)은 터치 타겟 최소 44px을 요구한다.
 - **이유**: 방송 중 후원자를 바꿀 때 가장 많이 누르는 컨트롤이다. 16px 높이는 WCAG 2.5.8 최소 기준(24px)에도 못 미친다.
@@ -197,6 +201,7 @@
 - **근거**: [11-timer-running-owner--m-light.png](ux-review/11-timer-running-owner--m-light.png), [24-timer-add-flow--m-light.png](ux-review/24-timer-add-flow--m-light.png) · `src/components/timer/TimerControls.tsx:220-263`
 
 #### UX-19. `Button size="sm"`(32px)이 모바일의 로그아웃과 확인 다이얼로그 버튼에 그대로 쓰인다
+- **상태**: 해결 — Button `sm`에 `max-md:min-h-11`을 더해 md 미만에서만 44px이다(데스크톱 32px 그대로). 로그아웃은 이 변경만으로 390px에서 48x44가 되어 별도 클래스를 주지 않았다(`cn`이 클래스 충돌을 병합하지 않아 `h-11`/`h-8` 덮어쓰기는 순서에 의존한다). 확인 다이얼로그 버튼 간격은 `max-md:gap-3`. 관찰에 함께 적힌 그래프 탭은 Button이 아니어서 같은 `max-md:min-h-11`을 직접 줬다. 페이지네이션·목표 버튼은 Button sm이라 함께 해결된다.
 - **심각도**: minor · **영역**: 모바일 / 인증
 - **관찰**: 측정값은 헤더 로그아웃 약 40~48x32(아바타와 테마 토글 바로 옆, 확인 없이 즉시 로그아웃), 삭제 확인 다이얼로그의 '취소'와 '삭제' 높이 32px에 간격 8px, 목표 취소와 삭제, 페이지네이션, 그래프 탭도 32px이다.
 - **이유**: 프로젝트 규칙(44px) 위반이다. 방송 중 로그아웃을 잘못 누르면 OAuth를 다시 거치는 동안 시간 조작이 끊긴다.
@@ -269,6 +274,7 @@
 - **근거**: [03-projects-mine--d-light.png](ux-review/03-projects-mine--d-light.png), [11-timer-running-owner--d-light.png](ux-review/11-timer-running-owner--d-light.png) · `src/app/globals.css:8-13`, `src/components/graph/GraphModeSelector.tsx:20, 33`
 
 #### UX-29. 모바일에서 한국어 제목과 설명이 음절 단위로 끊긴다
+- **상태**: 해결 — EditableText의 h1·p(편집 가능/불가 두 경로 모두)에만 `break-keep [overflow-wrap:anywhere]`를 줬다. 전역 적용과 레이아웃 재배치는 하지 않았다.
 - **심각도**: minor · **영역**: 모바일 / 프로젝트 상세 / 타이머
 - **관찰**: 오른쪽 배지와 아이콘 그룹이 `shrink-0`이라 제목 칼럼이 좁아진다. '합방 타이 / 머', '서브어톤 / 메인 타이 / 머', '24시간 서브어 / 톤 마라톤', '타이머 없는 프로젝 / 트', '시작 예 / 정'처럼 끊긴다. 저장소 어디에도 `keep-all`이 없다.
 - **이유**: 대상을 식별하는 첫 요소가 깨져 보이고 읽기 어렵다.
@@ -276,6 +282,7 @@
 - **근거**: [15-timer-scheduled--m-light.png](ux-review/15-timer-scheduled--m-light.png), [11-timer-running-owner--m-light.png](ux-review/11-timer-running-owner--m-light.png), [08-project-detail-no-timer--m-light.png](ux-review/08-project-detail-no-timer--m-light.png), [09-project-detail-scheduled--m-light.png](ux-review/09-project-detail-scheduled--m-light.png) · `src/app/timers/[id]/page.tsx:375-398`, `src/app/projects/[id]/page.tsx:338-361`, `src/components/ui/EditableText.tsx:120-138`
 
 #### UX-30. 모바일 프로젝트 상세의 '실행 중' 배지가 두 줄로 깨진다
+- **상태**: 해결 — `Badge` 기본 클래스에 `whitespace-nowrap`을 추가했다. 390px 프로젝트 상세에서 배지 높이 36→20px(한 줄).
 - **심각도**: minor · **영역**: 모바일 / 프로젝트 상세
 - **관찰**: text-5xl 카운트다운 옆의 배지가 '실행 / 중'이 된다. Badge에 `whitespace-nowrap`이 없다.
 - **이유**: 상태 신호가 레이아웃 버그처럼 보인다.
@@ -297,6 +304,7 @@
 - **근거**: [07-project-detail-running-owner--m-light.png](ux-review/07-project-detail-running-owner--m-light.png), [08-project-detail-no-timer--m-light.png](ux-review/08-project-detail-no-timer--m-light.png) · `src/components/ui/EditableText.tsx:131-138`
 
 #### UX-33. 모바일에서 프로젝트 이름을 편집하면 저장(✓) 버튼이 삭제 아이콘 밑에 깔린다
+- **상태**: 해결 — 편집 행 래퍼에 `min-w-0`, input에 `min-w-0 w-full`을 줬다. 390px에서 ✓ 중심의 `elementFromPoint`가 '저장'이고 가로 스크롤이 없다(scrollWidth 395→390).
 - **심각도**: minor · **영역**: 프로젝트 상세 / 모바일
 - **관찰**: 390px에서 편집 input이 intrinsic 폭만큼 늘어나 ✓가 프로젝트 삭제 버튼 아래로 들어간다(`elementFromPoint`로 확인하면 '프로젝트 삭제'가 잡힌다). ✕는 뷰포트 밖으로 나가 가로 스크롤이 생긴다. 삭제는 확인 창을 거치고 blur로 저장되므로 데이터 손실은 없다.
 - **이유**: 저장하려던 손가락 앞에 삭제 확인창이 뜨고, 취소 버튼에는 닿을 수 없다.

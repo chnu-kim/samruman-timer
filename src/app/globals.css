@@ -150,3 +150,12 @@ body {
 .safe-area-bottom {
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }
+
+/* 모바일 하단 고정 빠른 액션 바(TimerControls, md 미만)가 페이지 끝의 그래프와 푸터를 가리지 않게
+   문서 끝에 바 높이만큼 여백을 둔다. 푸터가 main 밖에 있으므로 페이지 컨테이너가 아니라 body에 준다.
+   바 높이 = 상단 패딩 12 + 버튼 48 + 캡션 6+16 + 테두리 1 + 하단 패딩 max(12, safe-area) */
+@media (width < 48rem) {
+  body:has([data-quick-bar]) {
+    padding-bottom: calc(5.25rem + max(0.75rem, env(safe-area-inset-bottom)));
+  }
+}

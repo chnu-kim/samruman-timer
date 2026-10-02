@@ -26,7 +26,7 @@ export function GraphModeSelector({ mode, onModeChange, className }: GraphModeSe
           aria-controls="graph-panel"
           onClick={() => onModeChange(m.value)}
           className={cn(
-            "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+            "rounded-md px-3 py-1.5 text-sm font-medium transition-colors max-md:min-h-11",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
             mode === m.value
               ? "bg-accent text-accent-foreground"
