@@ -264,7 +264,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
         <div className="flex-1 overflow-y-auto p-6 pt-5">
         {/* URL 복사 — 모달의 최종 목적이므로 맨 위에 둔다 */}
         <div className="mb-5">
-          <label className="text-sm font-medium text-foreground">OBS 브라우저 소스 URL</label>
+          <span className="text-sm font-medium text-foreground">OBS 브라우저 소스 URL</span>
           {/* 오버레이 페이지는 URL 파라미터만 읽으므로 저장만으로는 방송 화면이 바뀌지 않는다 */}
           <p className="mt-0.5 text-xs text-muted-foreground">
             URL을 바꿨다면 OBS 브라우저 소스에 새로 붙여넣어야 방송에 반영됩니다.
@@ -282,7 +282,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
 
         {/* 프리셋 테마 */}
         <div className="mb-5">
-          <label className="text-sm font-medium text-foreground">프리셋 테마</label>
+          <span className="text-sm font-medium text-foreground">프리셋 테마</span>
           <div className="mt-1.5 flex flex-wrap gap-2">
             {PRESETS.map((preset) => (
               <button
@@ -299,9 +299,9 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
 
         {/* 폰트 크기 슬라이더 + 직접 입력 */}
         <div className="mb-5">
-          <label className="text-sm font-medium text-foreground">
+          <span className="text-sm font-medium text-foreground">
             폰트 크기
-          </label>
+          </span>
           <div className="mt-1.5 flex items-center gap-3">
             <input
               type="range"
@@ -355,7 +355,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
         {/* 색상 선택 — P1 #9: responsive grid */}
         <div className="mb-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="text-sm font-medium text-foreground">텍스트 색상</label>
+            <span className="text-sm font-medium text-foreground">텍스트 색상</span>
             <div className="mt-1.5 flex items-center gap-2">
               {/* P1 #6: 44px color input */}
               <input
@@ -387,7 +387,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
             </div>
           </div>
           <div>
-            <label className="text-sm font-medium text-foreground">배경색</label>
+            <span className="text-sm font-medium text-foreground">배경색</span>
             <div className="mt-1.5 flex items-center gap-2">
               {/* P1 #6: 44px color input */}
               <input
@@ -435,7 +435,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
 
         {/* 위치 선택 비주얼 그리드 — P1 #5: larger grid */}
         <div className="mb-5">
-          <label className="text-sm font-medium text-foreground">위치</label>
+          <span className="text-sm font-medium text-foreground">위치</span>
           <div className="mt-1.5 grid grid-cols-3 grid-rows-3 gap-1 w-56 h-40 border border-border rounded-lg p-1 bg-muted">
             {/* Row 1 */}
             <button
@@ -533,7 +533,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
 
         {/* 실시간 미리보기 — P1 #10: debounced iframe, P2 #11: CSS var background */}
         <div className="mb-5">
-          <label className="text-sm font-medium text-foreground">미리보기</label>
+          <span className="text-sm font-medium text-foreground">미리보기</span>
           <div
             className="mt-1.5 rounded-lg border border-border overflow-hidden"
             style={{ height: 200 }}
