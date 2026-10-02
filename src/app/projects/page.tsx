@@ -129,6 +129,15 @@ export default function ProjectsPage() {
     setPage(1);
   }, [debouncedQuery, sortBy, activeTab]);
 
+  // WAI-ARIA Tabs 패턴: 화살표 키로 선택을 옮길 때 포커스도 새 탭으로 옮긴다
+  function handleTabKeyDown(e: React.KeyboardEvent) {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    e.preventDefault();
+    const next: Tab = activeTab === "mine" ? "others" : "mine";
+    setActiveTab(next);
+    document.getElementById(`project-tab-${next}`)?.focus();
+  }
+
   function handleCreateSuccess(id: string) {
     router.push(`/projects/${id}`);
   }
@@ -184,12 +193,7 @@ export default function ProjectsPage() {
             aria-controls="project-tabpanel"
             tabIndex={activeTab === "mine" ? 0 : -1}
             onClick={() => setActiveTab("mine")}
-            onKeyDown={(e) => {
-              if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-                e.preventDefault();
-                setActiveTab(activeTab === "mine" ? "others" : "mine");
-              }
-            }}
+            onKeyDown={handleTabKeyDown}
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
               activeTab === "mine"
                 ? "border-accent text-accent"
@@ -205,12 +209,7 @@ export default function ProjectsPage() {
             aria-controls="project-tabpanel"
             tabIndex={activeTab === "others" ? 0 : -1}
             onClick={() => setActiveTab("others")}
-            onKeyDown={(e) => {
-              if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-                e.preventDefault();
-                setActiveTab(activeTab === "mine" ? "others" : "mine");
-              }
-            }}
+            onKeyDown={handleTabKeyDown}
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
               activeTab === "others"
                 ? "border-accent text-accent"
