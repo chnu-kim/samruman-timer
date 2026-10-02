@@ -86,6 +86,8 @@ export default function TimerDetailPage() {
   const [user, setUser] = useState<MeResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // 404는 다시 시도해도 같으므로 일시적 오류와 구분한다
+  const [notFound, setNotFound] = useState(false);
 
   // 로그
   const [logs, setLogs] = useState<TimerLogResponse[]>([]);
@@ -131,7 +133,7 @@ export default function TimerDetailPage() {
   usePolling({
     fn: pollTimer,
     interval: pollInterval,
-    enabled: !loading && !error && !!timer,
+    enabled: !loading && !error && !notFound && !!timer,
   });
 
   // 추가/차감 방향. 세그먼트, 프리셋 라벨, 단축키가 이 상태 하나를 공유한다
@@ -143,13 +145,17 @@ export default function TimerDetailPage() {
     try {
       const res = await fetch(`/api/timers/${timerId}`);
       if (!res.ok) {
-        setError("타이머를 찾을 수 없습니다.");
+        if (res.status === 404) {
+          setNotFound(true);
+        } else {
+          setError("타이머 정보를 불러오지 못했습니다.");
+        }
         return;
       }
       const json = (await res.json()) as ApiSuccessResponse<TimerDetailResponse>;
       setTimer(json.data);
     } catch {
-      setError("타이머 정보를 불러오는데 실패했습니다.");
+      setError("타이머 정보를 불러오지 못했습니다.");
     }
   }, [timerId]);
 
@@ -359,10 +365,14 @@ export default function TimerDetailPage() {
     );
   }
 
+  if (notFound) {
+    return <ErrorState message="타이머를 찾을 수 없습니다. 삭제되었거나 주소가 잘못되었습니다." />;
+  }
+
   if (error || !timer) {
     return (
       <ErrorState
-        message={error || "타이머를 찾을 수 없습니다."}
+        message={error || "타이머 정보를 불러오지 못했습니다."}
         onRetry={async () => { setError(""); setLoading(true); await fetchTimer(); setLoading(false); }}
       />
     );

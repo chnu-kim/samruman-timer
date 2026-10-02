@@ -187,6 +187,8 @@ export default function ProjectDetailPage() {
   const [timers, setTimers] = useState<TimerListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  // 404는 다시 시도해도 같으므로 일시적 오류와 구분한다
+  const [notFound, setNotFound] = useState(false);
   const [user, setUser] = useState<MeResponse | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [formKey, setFormKey] = useState(0);
@@ -201,6 +203,8 @@ export default function ProjectDetailPage() {
       if (res.ok) {
         const json = (await res.json()) as ApiSuccessResponse<ProjectDetailResponse>;
         setProject(json.data);
+      } else if (res.status === 404) {
+        setNotFound(true);
       } else {
         setError(true);
       }
@@ -303,10 +307,14 @@ export default function ProjectDetailPage() {
     return <ProjectDetailSkeleton />;
   }
 
+  if (notFound) {
+    return <ErrorState message="프로젝트를 찾을 수 없습니다. 삭제되었거나 주소가 잘못되었습니다." />;
+  }
+
   if (error || !project) {
     return (
       <ErrorState
-        message="프로젝트를 찾을 수 없습니다."
+        message="프로젝트를 불러오지 못했습니다."
         onRetry={async () => { setError(false); setLoading(true); await fetchProject(); setLoading(false); }}
       />
     );
