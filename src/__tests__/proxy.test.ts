@@ -89,10 +89,22 @@ describe("proxy: 보호 라우트 — 토큰 없음", () => {
     expect(res.status).toBe(401);
   });
 
-  it("POST /api/auth/logout → 401", async () => {
-    const req = makeRequest("POST", "/api/auth/logout");
+  it("DELETE /api/projects/abc/goals/g1 → 401", async () => {
+    const req = makeRequest("DELETE", "/api/projects/abc/goals/g1");
     const res = await proxy(req);
     expect(res.status).toBe(401);
+  });
+});
+
+describe("proxy: 로그아웃은 middleware 인증을 거치지 않는다", () => {
+  it("session 없이 refresh만 있어도 rotation 없이 라우트로 넘긴다", async () => {
+    const req = makeRequest("POST", "/api/auth/logout", {
+      cookie: "refresh=some-refresh-token",
+    });
+    const res = await proxy(req);
+    expect(res.status).not.toBe(401);
+    // 새 session 쿠키를 심으면 라우트의 삭제 쿠키를 덮어쓴다
+    expect(res.headers.get("set-cookie")).toBeNull();
   });
 });
 

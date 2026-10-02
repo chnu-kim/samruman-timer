@@ -13,12 +13,14 @@ import { validateEnv } from "@/lib/env";
 // 내부 전용 헤더 — 외부 요청에서 위조 방지를 위해 항상 삭제 후 재설정
 const INTERNAL_HEADERS = ["x-user-id", "x-user-chzzk-id", "x-user-nickname"];
 
+// POST /api/auth/logout은 일부러 제외한다. 보호하면 access 만료 상태의 로그아웃에서
+// middleware가 rotation한 새 session 쿠키가 라우트의 삭제 쿠키를 덮어써 로그인이 유지된다.
+// 로그아웃 라우트가 session·refresh 쿠키를 직접 확인한다.
 const PROTECTED_ROUTES: { method: string; pattern: RegExp }[] = [
   { method: "POST", pattern: /^\/api\/projects$/ },
   { method: "POST", pattern: /^\/api\/projects\/[^/]+\/timers$/ },
   { method: "POST", pattern: /^\/api\/timers\/[^/]+\/modify$/ },
   { method: "GET", pattern: /^\/api\/auth\/me$/ },
-  { method: "POST", pattern: /^\/api\/auth\/logout$/ },
   { method: "DELETE", pattern: /^\/api\/projects\/[^/]+$/ },
   { method: "DELETE", pattern: /^\/api\/timers\/[^/]+$/ },
   { method: "PATCH", pattern: /^\/api\/projects\/[^/]+$/ },
@@ -30,6 +32,7 @@ const PROTECTED_ROUTES: { method: string; pattern: RegExp }[] = [
   { method: "GET", pattern: /^\/api\/timers\/[^/]+\/stats$/ },
   { method: "POST", pattern: /^\/api\/projects\/[^/]+\/goals$/ },
   { method: "PATCH", pattern: /^\/api\/projects\/[^/]+\/goals\/[^/]+$/ },
+  { method: "DELETE", pattern: /^\/api\/projects\/[^/]+\/goals\/[^/]+$/ },
 ];
 
 export async function middleware(request: NextRequest) {

@@ -133,7 +133,7 @@ export const PATCH = withErrorHandler(async (
     );
   }
 
-  let body: { title?: string; description?: string };
+  let body: unknown;
   try {
     body = await request.json();
   } catch {
@@ -142,23 +142,36 @@ export const PATCH = withErrorHandler(async (
       { status: 400 }
     );
   }
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return NextResponse.json(
+      { error: { code: "BAD_REQUEST", message: "요청 본문은 JSON 객체여야 합니다" } },
+      { status: 400 }
+    );
+  }
+  const { title, description } = body as { title?: unknown; description?: unknown };
   const updates: string[] = [];
   const binds: (string | null)[] = [];
 
-  if (body.title !== undefined) {
-    const title = body.title.trim();
-    if (!title) {
+  // POST와 같은 길이 제한 — 공개 목록 응답에 그대로 실리므로 크기를 묶어 둔다
+  if (title !== undefined) {
+    if (typeof title !== "string" || !title.trim() || title.trim().length > 100) {
       return NextResponse.json(
-        { error: { code: "BAD_REQUEST", message: "타이머 제목은 비어있을 수 없습니다" } },
+        { error: { code: "BAD_REQUEST", message: "title은 1~100자 문자열이어야 합니다" } },
         { status: 400 }
       );
     }
     updates.push("title = ?");
-    binds.push(title);
+    binds.push(title.trim());
   }
-  if (body.description !== undefined) {
+  if (description !== undefined) {
+    if (description !== null && (typeof description !== "string" || description.length > 500)) {
+      return NextResponse.json(
+        { error: { code: "BAD_REQUEST", message: "description은 최대 500자 문자열이어야 합니다" } },
+        { status: 400 }
+      );
+    }
     updates.push("description = ?");
-    binds.push(body.description.trim() || null);
+    binds.push(description?.trim() || null);
   }
 
   if (updates.length === 0) {

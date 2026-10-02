@@ -133,6 +133,51 @@ describe("PATCH /api/timers/[id]", () => {
     expect(res.status).toBe(404);
   });
 
+  it("title 100자 초과 → 400", async () => {
+    db._stmt.first.mockResolvedValue({ id: "timer-1", status: "RUNNING", owner_user_id: "user-1" });
+    const req = createPatchRequest("/api/timers/timer-1", { title: "a".repeat(101) }, {
+      "x-user-id": "user-1",
+    });
+    const res = await PATCH(req as never, makeParams() as never);
+    expect(res.status).toBe(400);
+  });
+
+  it("title가 문자열이 아님 → 400", async () => {
+    db._stmt.first.mockResolvedValue({ id: "timer-1", status: "RUNNING", owner_user_id: "user-1" });
+    const req = createPatchRequest("/api/timers/timer-1", { title: 123 }, {
+      "x-user-id": "user-1",
+    });
+    const res = await PATCH(req as never, makeParams() as never);
+    expect(res.status).toBe(400);
+  });
+
+  it("description 500자 초과 → 400", async () => {
+    db._stmt.first.mockResolvedValue({ id: "timer-1", status: "RUNNING", owner_user_id: "user-1" });
+    const req = createPatchRequest("/api/timers/timer-1", { description: "a".repeat(501) }, {
+      "x-user-id": "user-1",
+    });
+    const res = await PATCH(req as never, makeParams() as never);
+    expect(res.status).toBe(400);
+  });
+
+  it("본문이 객체가 아님 → 400", async () => {
+    db._stmt.first.mockResolvedValue({ id: "timer-1", status: "RUNNING", owner_user_id: "user-1" });
+    const req = createPatchRequest("/api/timers/timer-1", ["x"], {
+      "x-user-id": "user-1",
+    });
+    const res = await PATCH(req as never, makeParams() as never);
+    expect(res.status).toBe(400);
+  });
+
+  it("본문이 null → 400", async () => {
+    db._stmt.first.mockResolvedValue({ id: "timer-1", status: "RUNNING", owner_user_id: "user-1" });
+    const req = createPatchRequest("/api/timers/timer-1", null, {
+      "x-user-id": "user-1",
+    });
+    const res = await PATCH(req as never, makeParams() as never);
+    expect(res.status).toBe(400);
+  });
+
   it("title 빈 문자열 → 400", async () => {
     db._stmt.first.mockResolvedValue({ id: "timer-1", status: "RUNNING", owner_user_id: "user-1" });
     const req = createPatchRequest("/api/timers/timer-1", { title: "" }, {

@@ -4,6 +4,10 @@ import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 initOpenNextCloudflareForDev();
 
 const nextConfig: NextConfig = {
+  // Next 16.3부터 빌드 타입 검사가 tsconfig의 모든 파일을 대상으로 해서, 테스트·스토리를 뺀 설정을 따로 쓴다
+  typescript: { tsconfigPath: "tsconfig.build.json" },
+  // next dev가 CLAUDE.md에 자체 안내 블록을 덧붙이지 않게 한다. 하네스는 직접 관리한다
+  agentRules: false,
   async headers() {
     return [
       {

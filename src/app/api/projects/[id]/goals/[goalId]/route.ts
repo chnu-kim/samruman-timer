@@ -8,6 +8,12 @@ export const DELETE = withErrorHandler(async (
 ) => {
   const { id: projectId, goalId } = await params;
   const userId = request.headers.get("x-user-id");
+  if (!userId) {
+    return NextResponse.json(
+      { error: { code: "UNAUTHORIZED", message: "인증이 필요합니다" } },
+      { status: 401 },
+    );
+  }
   const db = await getDB();
 
   const project = await db
@@ -63,6 +69,12 @@ export const PATCH = withErrorHandler(async (
 ) => {
   const { id: projectId, goalId } = await params;
   const userId = request.headers.get("x-user-id");
+  if (!userId) {
+    return NextResponse.json(
+      { error: { code: "UNAUTHORIZED", message: "인증이 필요합니다" } },
+      { status: 401 },
+    );
+  }
   const db = await getDB();
 
   const project = await db

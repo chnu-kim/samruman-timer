@@ -50,6 +50,14 @@ describe("PATCH /api/projects/[id]/goals/[goalId]", () => {
     });
   });
 
+  it("401 인증 없으면 에러", async () => {
+    const req = createPatchRequest("/api/projects/proj-1/goals/goal-1", {});
+    const res = await PATCH(req as never, makeParams() as never);
+
+    expect(res.status).toBe(401);
+    expect(db.prepare).not.toHaveBeenCalled();
+  });
+
   it("200 목표 취소 성공", async () => {
     db._stmt.first
       .mockResolvedValueOnce(PROJECT_ROW)  // project check
@@ -131,6 +139,14 @@ describe("DELETE /api/projects/[id]/goals/[goalId]", () => {
   beforeEach(() => {
     db = createMockDB();
     vi.mocked(getDB).mockResolvedValue(db as unknown as D1Database);
+  });
+
+  it("401 인증 없으면 에러", async () => {
+    const req = createDeleteRequest("/api/projects/proj-1/goals/goal-1");
+    const res = await DELETE(req as never, makeParams() as never);
+
+    expect(res.status).toBe(401);
+    expect(db.prepare).not.toHaveBeenCalled();
   });
 
   it("200 목표 소프트 삭제 성공", async () => {

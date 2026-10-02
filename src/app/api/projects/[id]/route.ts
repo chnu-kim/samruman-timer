@@ -86,7 +86,7 @@ export const PATCH = withErrorHandler(async (
     );
   }
 
-  let body: { name?: string; description?: string };
+  let body: unknown;
   try {
     body = await request.json();
   } catch {
@@ -95,23 +95,36 @@ export const PATCH = withErrorHandler(async (
       { status: 400 }
     );
   }
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return NextResponse.json(
+      { error: { code: "BAD_REQUEST", message: "요청 본문은 JSON 객체여야 합니다" } },
+      { status: 400 }
+    );
+  }
+  const { name, description } = body as { name?: unknown; description?: unknown };
   const updates: string[] = [];
   const binds: (string | null)[] = [];
 
-  if (body.name !== undefined) {
-    const name = body.name.trim();
-    if (!name) {
+  // POST와 같은 길이 제한 — 공개 목록 응답에 그대로 실리므로 크기를 묶어 둔다
+  if (name !== undefined) {
+    if (typeof name !== "string" || !name.trim() || name.trim().length > 100) {
       return NextResponse.json(
-        { error: { code: "BAD_REQUEST", message: "프로젝트 이름은 비어있을 수 없습니다" } },
+        { error: { code: "BAD_REQUEST", message: "name은 1~100자 문자열이어야 합니다" } },
         { status: 400 }
       );
     }
     updates.push("name = ?");
-    binds.push(name);
+    binds.push(name.trim());
   }
-  if (body.description !== undefined) {
+  if (description !== undefined) {
+    if (description !== null && (typeof description !== "string" || description.length > 500)) {
+      return NextResponse.json(
+        { error: { code: "BAD_REQUEST", message: "description은 최대 500자 문자열이어야 합니다" } },
+        { status: 400 }
+      );
+    }
     updates.push("description = ?");
-    binds.push(body.description.trim() || null);
+    binds.push(description?.trim() || null);
   }
 
   if (updates.length === 0) {

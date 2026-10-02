@@ -29,6 +29,26 @@ interface DeltaSumRow {
   total_subtracted: number | null;
 }
 
+const ACTIVE_TIMER_SQL = `SELECT id, base_remaining_seconds, last_calculated_at, status, scheduled_start_at, created_at
+       FROM timers WHERE project_id = ? AND status != 'DELETED' LIMIT 1`;
+
+/**
+ * 목표 진행률 계산에 필요한 타이머 상태. 목표 여러 개를 한 번에 계산할 때
+ * 목표마다 같은 집계 쿼리를 반복하지 않도록 한 번만 읽어 넘긴다.
+ */
+export interface ProgressSnapshot {
+  timer: TimerRow | null;
+  runningSeconds: number;
+}
+
+export async function loadProgressSnapshot(
+  db: D1Database,
+  projectId: string,
+): Promise<ProgressSnapshot> {
+  const timer = await db.prepare(ACTIVE_TIMER_SQL).bind(projectId).first<TimerRow>();
+  return { timer, runningSeconds: timer ? await runningSecondsOf(db, timer) : 0 };
+}
+
 /**
  * 타이머가 실제로 소비한 시간을 계산한다.
  *
@@ -43,16 +63,10 @@ export async function calculateRunningSeconds(
   db: D1Database,
   projectId: string,
 ): Promise<number> {
-  const timer = await db
-    .prepare(
-      `SELECT id, base_remaining_seconds, last_calculated_at, status, scheduled_start_at, created_at
-       FROM timers WHERE project_id = ? AND status != 'DELETED' LIMIT 1`,
-    )
-    .bind(projectId)
-    .first<TimerRow>();
+  return (await loadProgressSnapshot(db, projectId)).runningSeconds;
+}
 
-  if (!timer) return 0;
-
+async function runningSecondsOf(db: D1Database, timer: TimerRow): Promise<number> {
   const deltaSum = await db
     .prepare(
       `SELECT
@@ -85,9 +99,12 @@ export async function computeProgress(
   db: D1Database,
   goal: GoalRow,
   projectId: string,
+  snapshot?: ProgressSnapshot,
 ): Promise<{ progress: GoalProgress; newStatus: GoalStatus | null }> {
   if (goal.type === "DURATION") {
-    const currentSeconds = await calculateRunningSeconds(db, projectId);
+    const currentSeconds = snapshot
+      ? snapshot.runningSeconds
+      : await calculateRunningSeconds(db, projectId);
     const targetSeconds = goal.target_seconds ?? 0;
     const percentage = targetSeconds > 0 ? Math.round((currentSeconds / targetSeconds) * 100) : 0;
 
@@ -126,20 +143,18 @@ export async function computeProgress(
 
   const deadlineIn = Math.round((deadlineMs - nowMs) / 1000);
 
-  const timer = await db
-    .prepare(
-      `SELECT id, base_remaining_seconds, last_calculated_at, status, scheduled_start_at, created_at
-       FROM timers WHERE project_id = ? AND status != 'DELETED' LIMIT 1`,
-    )
-    .bind(projectId)
-    .first<TimerRow>();
+  const timer = snapshot
+    ? snapshot.timer
+    : await db.prepare(ACTIVE_TIMER_SQL).bind(projectId).first<TimerRow>();
 
   const timerIsAlive = timer
     ? timer.status === "RUNNING" && calculateRemaining(timer.base_remaining_seconds, timer.last_calculated_at) > 0
     : false;
 
   // DEADLINE: 타이머 생성~데드라인 구간에서 RUNNING 누적 시간 비율
-  const runningSeconds = await calculateRunningSeconds(db, projectId);
+  const runningSeconds = snapshot
+    ? snapshot.runningSeconds
+    : await calculateRunningSeconds(db, projectId);
   const timerCreatedMs = timer ? new Date(timer.created_at).getTime() : nowMs;
   const totalSpanSeconds = Math.max(1, Math.floor((deadlineMs - timerCreatedMs) / 1000));
   const percentage = Math.round((runningSeconds / totalSpanSeconds) * 100);

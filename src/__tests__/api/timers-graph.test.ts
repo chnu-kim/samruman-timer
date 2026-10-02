@@ -77,13 +77,13 @@ describe("GET /api/timers/[id]/graph", () => {
   });
 
   describe("mode=cumulative", () => {
-    it("누적 추가/차감량을 계산한다", async () => {
+    it("SQL이 계산한 누적 추가/차감량을 포인트로 반환한다", async () => {
       db._stmt.first.mockResolvedValueOnce({ id: "timer-1" });
       db._stmt.all.mockResolvedValue({
         results: [
-          { created_at: "2025-01-01T00:00:00Z", action_type: "ADD", delta_seconds: 3600 },
-          { created_at: "2025-01-01T01:00:00Z", action_type: "SUBTRACT", delta_seconds: 1800 },
-          { created_at: "2025-01-01T02:00:00Z", action_type: "ADD", delta_seconds: 7200 },
+          { created_at: "2025-01-01T00:00:00Z", total_added: 3600, total_subtracted: 0 },
+          { created_at: "2025-01-01T01:00:00Z", total_added: 3600, total_subtracted: 1800 },
+          { created_at: "2025-01-01T02:00:00Z", total_added: 10800, total_subtracted: 1800 },
         ],
       });
 
@@ -91,25 +91,34 @@ describe("GET /api/timers/[id]/graph", () => {
       expect(res.status).toBe(200);
       const body = await parseJson(res);
       expect(body.data.mode).toBe("cumulative");
-      expect(body.data.points).toHaveLength(3);
-      // 첫 번째: ADD 3600
-      expect(body.data.points[0]).toEqual({
-        timestamp: "2025-01-01T00:00:00Z",
-        totalAdded: 3600,
-        totalSubtracted: 0,
-      });
-      // 두 번째: SUBTRACT 1800
-      expect(body.data.points[1]).toEqual({
-        timestamp: "2025-01-01T01:00:00Z",
-        totalAdded: 3600,
-        totalSubtracted: 1800,
-      });
-      // 세 번째: ADD 7200 → 누적 10800
-      expect(body.data.points[2]).toEqual({
-        timestamp: "2025-01-01T02:00:00Z",
-        totalAdded: 10800,
-        totalSubtracted: 1800,
-      });
+      expect(body.data.points).toEqual([
+        { timestamp: "2025-01-01T00:00:00Z", totalAdded: 3600, totalSubtracted: 0 },
+        { timestamp: "2025-01-01T01:00:00Z", totalAdded: 3600, totalSubtracted: 1800 },
+        { timestamp: "2025-01-01T02:00:00Z", totalAdded: 10800, totalSubtracted: 1800 },
+      ]);
+    });
+  });
+
+  describe("포인트 수 상한", () => {
+    it.each(["remaining", "cumulative"])("mode=%s는 1000개 안팎으로 균등 추출하고 마지막 점을 포함한다", async (mode) => {
+      db._stmt.first.mockResolvedValueOnce({ id: "timer-1" });
+      db._stmt.all.mockResolvedValue({ results: [] });
+
+      await callGet(`?mode=${mode}`);
+
+      const sql = String(db.prepare.mock.calls.at(-1)?.[0]);
+      expect(sql).toContain("(rn - 1) % ((total + 1000 - 1) / 1000) = 0 OR rn = total");
+    });
+
+    it("mode=frequency는 최근 1000개 시간 구간만 반환한다", async () => {
+      db._stmt.first.mockResolvedValueOnce({ id: "timer-1" });
+      db._stmt.all.mockResolvedValue({ results: [] });
+
+      await callGet("?mode=frequency");
+
+      const sql = String(db.prepare.mock.calls.at(-1)?.[0]);
+      expect(sql).toMatch(/ORDER BY hour DESC\s+LIMIT 1000/);
+      expect(sql).toMatch(/\)\s+ORDER BY hour ASC/);
     });
   });
 
