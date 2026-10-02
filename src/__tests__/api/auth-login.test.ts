@@ -28,7 +28,11 @@ describe("GET /api/auth/login", () => {
     const res = await GET(loginReq());
     expect(res.status).toBe(307);
     expect(res.headers.get("Location")).toContain("chzzk.naver.com");
-    expect(findCookie(res, "oauth_state")).toContain("HttpOnly");
+    expect(findCookie(res, "__Host-oauth_state")).toContain("HttpOnly");
+    // __Host- 접두사 쿠키는 Secure와 Path=/가 있어야 브라우저가 받아들인다
+    expect(findCookie(res, "__Host-oauth_state")).toContain("Secure");
+    expect(findCookie(res, "__Host-oauth_state")).toContain("Path=/");
+    expect(findCookie(res, "__Host-oauth_state")).not.toContain("Domain");
   });
 
   // UX-74: 로그인 후 돌아갈 경로를 OAuth 왕복 동안 쿠키로 들고 간다
