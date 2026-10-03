@@ -46,7 +46,7 @@
 
 ## 이벤트 카탈로그
 
-새 이벤트를 만들면 이 표와 아래 상세에 추가한다. 이벤트 키는 영어 dot 표기(`auth.refresh.rejected`)다.
+새 이벤트를 만들면 이 표와 아래 상세에 추가한다. 이벤트 키는 영어 dot 표기(`auth.refresh.rejected`)다. `src/__tests__/observability-catalog.test.ts`가 코드의 `logger` 호출(이벤트 이름·레벨)과 이 표·상세 절을 양방향으로 대조하므로, 어긋나면 `pnpm test`가 실패한다. 이벤트 이름은 문자열 리터럴로 쓴다(레벨이 동적인 `logger[level]("event")`는 같은 파일의 `const level = ...` 선언에 레벨 리터럴이 있으면 허용). 스캐너가 호출을 못 찾는 형태는 테스트가 실패하므로 항상 `import { logger } from "@/lib/logger"` 후 `logger.<level>("event", ...)`로 직접 호출한다. 실패하는 형태는 별칭 import, `logger`를 변수에 대입·인자로 전달·구조분해, `const w = logger.warn` 같은 메서드 참조, `import * as X`·default import·re-export·`require`·동적 `import()`다(스캐너 `src/__tests__/logger-scan.ts`, 형태별 픽스처 `logger-scan.test.ts`).
 
 | event | level | 위치 | 주요 필드 |
 |-------|-------|------|-----------|
