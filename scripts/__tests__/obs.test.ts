@@ -179,6 +179,70 @@ describe("응답 정규화", () => {
     expect(noSource).toMatchObject({ level: "error", event: "Uncaught TypeError", versionTag: "t1", requestId: "r", error: "boom" });
   });
 
+  it("앱 필드가 source 없이 최상위에 펼쳐진 실제 이벤트 모양에서도 versionTag와 나머지 필드를 꺼낸다", () => {
+    // 2026-10-03 대시보드 JSON에서 관찰한 필드 구조만 옮겼다. 모든 ID·태그·URL은 지어낸 값이다
+    const real = {
+      timestamp: "2026-10-03T01:28:07.881Z",
+      message: "auth.oauth_state_invalid",
+      event: "auth.oauth_state_invalid",
+      versionTag: "aaaaaaaaaaaa",
+      versionId: "11111111-1111-4111-8111-111111111111",
+      reason: "missing_cookie",
+      requestId: "00000000-0000-4000-8000-000000000000",
+      level: "warn",
+      $workers: {
+        scriptName: SERVICE,
+        scriptVersion: { id: "11111111-1111-4111-8111-111111111111" },
+        event: { request: { method: "GET", url: "https://example.test/api/auth/callback", path: "/api/auth/callback" } },
+      },
+      $metadata: { id: "evt-synthetic", requestId: "runtime-synthetic", service: SERVICE, level: "warn", message: "auth.oauth_state_invalid" },
+    };
+    expect(normalizeEvent(real)).toEqual({
+      timestamp: "2026-10-03T01:28:07.881Z",
+      level: "warn",
+      event: "auth.oauth_state_invalid",
+      requestId: "00000000-0000-4000-8000-000000000000",
+      versionTag: "aaaaaaaaaaaa",
+      versionId: "11111111-1111-4111-8111-111111111111",
+      reason: "missing_cookie",
+    });
+  });
+
+  it.each([null, {}, "", "not json"])("source가 %j이면 최상위에 펼쳐진 앱 필드를 읽는다", (source) => {
+    const e = normalizeEvent({
+      source,
+      timestamp: NOW,
+      level: "error",
+      event: "api.unhandled",
+      versionTag: "bbbbbbbbbbbb",
+      versionId: "22222222-2222-4222-8222-222222222222",
+      kind: "schema_drift",
+    });
+    expect(e).toMatchObject({
+      event: "api.unhandled",
+      versionTag: "bbbbbbbbbbbb",
+      versionId: "22222222-2222-4222-8222-222222222222",
+      kind: "schema_drift",
+    });
+    expect(e).not.toHaveProperty("source");
+  });
+
+  it.each([{}, "plain text log"])("source가 %j여도 최상위 플랫폼 필드(dataset)는 앱 필드로 섞지 않는다", (source) => {
+    const e = normalizeEvent({ dataset: "cloudflare-workers", timestamp: NOW, source, $metadata: { level: "info", message: "x" } });
+    expect(e).not.toHaveProperty("dataset");
+    expect(e).toMatchObject({ level: "info", event: "x" });
+  });
+
+  it("source가 있으면 최상위 플랫폼 필드(dataset 등)를 앱 필드로 섞지 않는다", () => {
+    const e = normalizeEvent({
+      dataset: "cloudflare-workers",
+      timestamp: NOW,
+      source: { level: "info", event: "a.b", reason: "x" },
+    });
+    expect(e).not.toHaveProperty("dataset");
+    expect(e).toMatchObject({ event: "a.b", reason: "x" });
+  });
+
   it("extractEvents는 result.events.events·result.events·배열 모양을 모두 받는다", () => {
     const e = errEvent();
     expect(extractEvents({ result: { events: { events: [e] } } })).toHaveLength(1);

@@ -170,6 +170,26 @@ function parseSource(source) {
   return {};
 }
 
+/** 이벤트 최상위에 오는 플랫폼 필드. `$`로 시작하지 않아도 앱 필드가 아니다 */
+const TOP_LEVEL_PLATFORM_KEYS = new Set(["source", "dataset"]);
+
+/**
+ * 앱 로그 필드. API가 JSON 로그를 `source`에 담아 주면 그것만 쓰고, 없거나 비어 있으면(null·`{}`·해석 불가 문자열)
+ * 최상위에 펼쳐진 것으로 본다(2026-10 대시보드 JSON 실측: event·versionTag·reason 등이 최상위).
+ * 최상위를 읽을 때는 `$`로 시작하는 키와 `dataset` 같은 플랫폼 필드를 뺀다
+ */
+function appFields(raw) {
+  const fromSource = parseSource(raw.source);
+  if (Object.keys(fromSource).length > 0) return fromSource;
+  /** @type {Record<string, unknown>} */
+  const top = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (k.startsWith("$") || TOP_LEVEL_PLATFORM_KEYS.has(k)) continue;
+    top[k] = v;
+  }
+  return top;
+}
+
 function toIso(v) {
   if (typeof v === "number" && Number.isFinite(v)) {
     // 초 단위로 오는 경우도 받는다
@@ -189,11 +209,11 @@ export function extractEvents(body) {
 
 /**
  * 이벤트 하나를 앱 로그 필드 중심의 평평한 객체로 바꾼다.
- * 앱 필드는 source → 최상위 → $metadata 순으로 찾는다. 버전은 앱 필드가 없으면 $workers.scriptVersion을 쓴다.
+ * 앱 필드는 source → 최상위(둘을 합친 appFields) → $metadata 순으로 찾는다. 버전은 앱 필드가 없으면 $workers.scriptVersion을 쓴다.
  * @param {{ withStack?: boolean }} opts stack은 길어서 request 조회에서만 앞부분을 남긴다
  */
 export function normalizeEvent(raw, { withStack = false } = {}) {
-  const src = parseSource(raw.source);
+  const src = appFields(raw);
   const meta = isObj(raw.$metadata) ? raw.$metadata : {};
   const workers = isObj(raw.$workers) ? raw.$workers : {};
   const scriptVersion = isObj(workers.scriptVersion) ? workers.scriptVersion : {};

@@ -147,7 +147,7 @@ node scripts/obs.mjs verify --tag <sha> [--since 3d] [--event <e>] [--issue <id>
 - 종료 코드: 0 성공, 2 조회 실패(인자 오류, 네트워크, 401/403, API 오류). 401/403이면 토큰 권한 안내를 낸다. 토큰은 어떤 출력에도 나오지 않는다
 - 보관 기간이 지나면(현재 3일, 2026-12-01부터 7일) 조회되지 않는다
 
-API 응답의 정확한 모양은 확인되지 않은 채로 만들었다. 정규화가 이상하면(필드가 비거나 0건인데 대시보드에는 있음) `--json`으로 원문을 보고 `scripts/lib/obs.mjs`의 정규화 함수를 고친다. 앱 필드의 필터 키 형식이 다르면 `APP_FIELD_PREFIX` 한 줄을 고친다.
+2026-10-03 프로덕션 이벤트(대시보드 JSON) 실측: 앱 필드(`event`·`level`·`requestId`·`versionTag`·`versionId`·`reason` 등)는 이벤트 **최상위**에 펼쳐지고, 플랫폼 필드는 `$metadata`(`service`·`requestId`(런타임 ID, 앱의 requestId와 다름)·`rayId`·`trigger`)와 `$workers`(`scriptVersion.id`·`event.request.path`, 쿼리스트링 제거됨)에 담긴다. 그래서 정규화는 최상위와 `source`를 함께 읽는다. 배포된 Worker에서 `versionTag`가 붙는 것도 이때 확인했다. API(`telemetry/query`) 응답의 봉투 모양은 아직 토큰으로 확인하지 못했다. 정규화가 이상하면(필드가 비거나 0건인데 대시보드에는 있음) `--json`으로 원문을 보고 `scripts/lib/obs.mjs`의 정규화 함수를 고친다. 앱 필드의 필터 키 형식이 다르면 `APP_FIELD_PREFIX` 한 줄을 고친다.
 
 ### verify 판정
 
