@@ -633,6 +633,24 @@ describe("run verify", () => {
     expect(JSON.parse(r2.out[0])).toMatchObject({ expectEventCount: 1 });
   });
 
+  it("--event로 좁혀도 태그 로그에 health.schema_drift가 있으면 notes로 알린다", async () => {
+    const drift = rawEvent({ level: "error", event: "health.schema_drift", kind: "schema_drift", versionTag: TAG });
+    const health = rawEvent({ level: "info", event: "health.check", versionTag: TAG });
+    const r = await exec(
+      ["verify", "--tag", TAG, "--event", "auth.login.failed", "--expect-event", "health.check"],
+      verifyRoute({ tagEvents: [health, drift] })
+    );
+    // 판정은 대상 이벤트 기준 그대로(clean)지만, 원격 마이그레이션 누락은 따로 보여야 한다
+    expect(r.code).toBe(EXIT.OK);
+    expect(JSON.parse(r.out[0]).notes.join("\n")).toContain("health.schema_drift 1건");
+    // 드리프트가 없으면 이 note는 없다
+    const clean = await exec(
+      ["verify", "--tag", TAG, "--event", "auth.login.failed", "--expect-event", "health.check"],
+      verifyRoute({ tagEvents: [health] })
+    );
+    expect(JSON.parse(clean.out[0]).notes.join("\n")).not.toContain("health.schema_drift");
+  });
+
   it("태그 error 이벤트가 있으면 1", async () => {
     const r = await exec(["verify", "--tag", TAG], verifyRoute({ errors: [errEvent()], tagEvents: [errEvent()] }));
     expect(r.code).toBe(EXIT.RECURRED);

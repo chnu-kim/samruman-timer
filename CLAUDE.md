@@ -9,7 +9,7 @@
 - `pnpm build-storybook` — 스토리 빌드 검증
 - `pnpm db:migrate:local` — 로컬 D1에 마이그레이션 적용. `pnpm db:migrate:remote` — 원격(프로덕션) D1에 적용, 사용자 확인 후에만 실행. `pnpm db:migrate`는 플래그가 없어 wrangler 4에서 로컬에 적용된다
 - `pnpm run deploy` — 프로덕션 배포 (`pnpm deploy`는 pnpm 내장 workspace 명령이라 스크립트가 실행되지 않는다). 사용자가 명시적으로 요청할 때만 실행. `scripts/deploy.mjs`가 git short SHA를 버전 태그로 붙이고 dirty 트리나 origin/main에 없는 HEAD면 거부한다(`--dry-run`으로 확인)
-- 배포와 원격 마이그레이션은 별개 명령이라 한쪽만 실행되기 쉽다. 실제로 코드만 배포되고 `0007` 마이그레이션이 빠져 프로덕션 로그인이 깨진 적이 있다. 배포 전이나 프로덕션 오류를 조사할 때는 `npx wrangler d1 migrations list samrumantimer-db --remote`로 원격에 적용 안 된 마이그레이션부터 확인한다. 로그는 대시보드 Workers Logs(보관됨)나 `npx wrangler tail samrumantimer`(실시간).
+- 배포와 원격 마이그레이션은 별개 명령이라 한쪽만 실행되기 쉽다. 실제로 코드만 배포되고 `0007` 마이그레이션이 빠져 프로덕션 로그인이 깨진 적이 있다. 배포 전이나 프로덕션 오류를 조사할 때는 `npx wrangler d1 migrations list samrumantimer-db --remote`로 원격에 적용 안 된 마이그레이션부터 확인한다. 외부 프로브(`.github/workflows/health.yml`)가 매시 `GET /api/health`로 원격 스키마 드리프트를 감지해 실패하면 GitHub 알림이 간다. 새 마이그레이션을 추가하면 `src/lib/health.ts`의 `EXPECTED_LATEST_MIGRATION`도 바꾼다(테스트가 확인한다). 로그는 대시보드 Workers Logs(보관됨)나 `npx wrangler tail samrumantimer`(실시간).
 - `node scripts/obs.mjs <errors|events|request|summary|issues|issue|verify|triage>` — 프로덕션 운영 로그·Issues 읽기 전용 조회(`CF_OBS_TOKEN` 필요). `verify --tag <sha>`는 배포 후 재발 여부를, `triage [--since 24h]`는 지금의 정상/비정상(카탈로그 기준을 옮긴 `scripts/lib/obs-rules.mjs` 규칙표)을 exit code로 낸다. 절차는 `docs/OBSERVABILITY.md`, 조사 루프는 `prod-triage` skill. 토큰이 없으면 Cloudflare 플러그인의 `execute` 도구로 같은 API를 부를 수 있다. 플러그인 인증은 쓰기 권한까지 가질 수 있으므로 OBSERVABILITY "Cloudflare 플러그인으로 조회"에 적힌 조회용 엔드포인트만 부른다. 판정은 토큰 없이도 코드가 한다: `verify`·`triage ... --print-plugin-code`가 낸 조회 코드를 execute로 돌리고 그 결과 파일로 `--input <file>`
 
 변경을 마무리하기 전에 `pnpm test`와 `pnpm build`를 통과시킨다. UI 컴포넌트를 바꿨다면 `pnpm build-storybook`도.
@@ -28,7 +28,7 @@
 
 - `src/app/api/` — API 라우트 (`auth`, `projects`, `timers`)
 - `src/app/timers/[id]/overlay/` — OBS 브라우저 소스용 오버레이 페이지
-- `src/lib/` — 서버 로직 (`timer.ts` 잔여시간·상태전이, `auth.ts`, `chzzk.ts`, `db.ts`, `goal.ts`). `auth-fetch.ts`, `session-expired.ts`, `timer-sync.ts`, `overlay-animation.ts`, `overlay-mode.ts`, `overlay-polling.ts`, `overlay-recovery.ts`, `pwa.ts`는 클라이언트용, `safe-redirect.ts`, `overlay-style.ts`, `site.ts`(사이트 절대 주소·SEO 메타 상수)는 서버·클라이언트 공용
+- `src/lib/` — 서버 로직 (`timer.ts` 잔여시간·상태전이, `auth.ts`, `chzzk.ts`, `db.ts`, `goal.ts`, `health.ts` 헬스체크의 기대 최신 마이그레이션). `auth-fetch.ts`, `session-expired.ts`, `timer-sync.ts`, `overlay-animation.ts`, `overlay-mode.ts`, `overlay-polling.ts`, `overlay-recovery.ts`, `pwa.ts`는 클라이언트용, `safe-redirect.ts`, `overlay-style.ts`, `site.ts`(사이트 절대 주소·SEO 메타 상수)는 서버·클라이언트 공용
 - `src/hooks/` — 클라이언트 훅 (`usePolling`, `useKeyboardShortcuts` 등)
 - `src/components/{timer,project,goal,graph,stats,layout,providers,ui}/`
 - `migrations/NNNN_*.sql` — D1 스키마 변경 이력

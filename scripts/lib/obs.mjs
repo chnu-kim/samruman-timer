@@ -934,6 +934,13 @@ export function evaluateVerify(bundle, opts, { strict = false } = {}) {
   if (expectEvent && tagEventCount >= MAX_LIMIT && expectEventCount === 0) {
     notes.push(`태그 로그가 ${MAX_LIMIT}건에서 잘려 --expect-event를 다 보지 못했을 수 있다`);
   }
+  // 헬스체크가 잡은 원격 마이그레이션 누락. --event로 좁히면 재발 후보에 안 잡히므로 판정과 별개로 알린다
+  const schemaDriftCount = tagEvents.filter((e) => e.event === "health.schema_drift").length;
+  if (schemaDriftCount > 0 && event !== "health.schema_drift") {
+    notes.push(
+      `태그 로그에 health.schema_drift ${schemaDriftCount}건: 이 버전은 원격 마이그레이션이 빠졌거나 어긋났다. 재발 판정보다 npx wrangler d1 migrations list samrumantimer-db --remote 확인이 먼저다`
+    );
+  }
 
   // 2) 재발 후보
   const candidateBody = recorded(bundle.candidateQuery, "재발 후보 조회(candidateQuery)", (req) =>

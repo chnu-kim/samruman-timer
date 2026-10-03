@@ -347,7 +347,7 @@ npx opennextjs-cloudflare build && npx opennextjs-cloudflare deploy --tag=<git s
 | Workers Logs (2026-12-01 이전) | 하루 200,000 이벤트, 3일 보관 | 그날 남은 시간 동안 1% 샘플링 |
 | Workers Logs (2026-12-01 이후) | 하루 0.5GB, 7일 보관. Issues도 같은 한도를 쓴다 | 00:00 UTC까지 수집 중단 |
 
-Free 플랜은 추가 구매가 불가능하므로 어느 경우든 과금되지 않는다. invocation log를 끈 지금은 앱 이벤트(로그인, refresh 거부, 경고·오류)만 쓴다. 가장 많은 것은 `auth.refresh.rejected`(`docs/OBSERVABILITY.md` 이벤트 카탈로그)로, 거부된 쿠키를 가진 브라우저의 페이지 조회 수만큼 늘어난다. 그래도 이벤트 수는 요청 수를 넘을 수 없으므로(요청당 많아야 한두 건) 요청 한도(하루 100,000건)가 로그 한도보다 먼저 찬다.
+Free 플랜은 추가 구매가 불가능하므로 어느 경우든 과금되지 않는다. invocation log를 끈 지금은 앱 이벤트(로그인, refresh 거부, 헬스체크, 경고·오류)만 쓴다. 외부 프로브(`.github/workflows/health.yml`, 매시)가 요청과 `health.check` 로그를 하루 24건씩 더하는데, 요청 한도(100,000건)와 로그 한도(200,000 이벤트) 모두에 비해 무시할 수준이다. 수동 실행(`workflow_dispatch`)도 한 번에 1건(일시 오류 재시도 시 최대 3건)이다. 가장 많은 것은 `auth.refresh.rejected`(`docs/OBSERVABILITY.md` 이벤트 카탈로그)로, 거부된 쿠키를 가진 브라우저의 페이지 조회 수만큼 늘어난다. 그래도 이벤트 수는 요청 수를 넘을 수 없으므로(요청당 많아야 한두 건) 요청 한도(하루 100,000건)가 로그 한도보다 먼저 찬다.
 
 ### 대시보드에서 찾기
 
