@@ -102,9 +102,19 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
   // 추가/차감 방향. 세그먼트, 프리셋 라벨, 단축키가 이 상태 하나를 공유한다
   const [selectedAction, setSelectedAction] = useState<ModifyAction>("ADD");
 
+  // 상위 화면은 렌더마다 새 콜백을 넘긴다. 첫 로드 effect가 의존하는 fetchTimer의 의존성에 넣으면
+  // 렌더마다 첫 로드를 다시 하므로 ref로 최신 콜백만 읽는다
+  const onTimerRemovedRef = useRef(onTimerRemoved);
+  onTimerRemovedRef.current = onTimerRemoved;
+
   const fetchTimer = useCallback(async () => {
     try {
       const res = await fetch(`/api/timers/${timerId}`);
+      // 목록을 받은 뒤 첫 조회 전에 다른 곳에서 삭제됐을 수 있다. 오류 화면 대신 '타이머 없음'으로 보낸다
+      if (res.status === 404 && onTimerRemovedRef.current) {
+        onTimerRemovedRef.current();
+        return;
+      }
       if (!res.ok) {
         setError(true);
         return;
@@ -194,7 +204,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
     try {
       const res = await fetch(`/api/timers/${timerId}`);
       if (res.status === 404) {
-        onTimerRemoved?.();
+        onTimerRemovedRef.current?.();
         return;
       }
       if (!res.ok) return;
@@ -227,7 +237,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
     } catch {
       // 폴링 실패는 무시
     }
-  }, [timerId, logPage, activeFilters, logsExpanded, fetchLogs, fetchGraph, onTimeChanged, onTimerRemoved]);
+  }, [timerId, logPage, activeFilters, logsExpanded, fetchLogs, fetchGraph, onTimeChanged]);
 
   usePolling({
     fn: pollTimer,
