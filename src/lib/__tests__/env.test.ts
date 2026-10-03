@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { validateEnv, resetEnvValidation } from "../env";
+import { validateEnv, resetEnvValidation, EnvValidationError } from "../env";
 
 describe("validateEnv", () => {
   beforeEach(() => {
     resetEnvValidation();
-    vi.stubEnv("JWT_SECRET", "test-secret");
+    vi.stubEnv("JWT_SECRET", "test-secret-key-at-least-32-chars-long!");
     vi.stubEnv("CHZZK_CLIENT_ID", "test-client-id");
     vi.stubEnv("CHZZK_CLIENT_SECRET", "test-client-secret");
     vi.stubEnv("BASE_URL", "http://localhost:3000");
@@ -17,6 +17,18 @@ describe("validateEnv", () => {
   it("JWT_SECRET 누락 시 에러", () => {
     vi.stubEnv("JWT_SECRET", "");
     expect(() => validateEnv()).toThrow("JWT_SECRET");
+  });
+
+  it("실패 오류는 문제가 된 변수 이름만 invalid에 담는다", () => {
+    vi.stubEnv("JWT_SECRET", "");
+    vi.stubEnv("BASE_URL", "");
+    try {
+      validateEnv();
+      expect.unreachable();
+    } catch (err) {
+      expect(err).toBeInstanceOf(EnvValidationError);
+      expect((err as EnvValidationError).invalid).toEqual(["JWT_SECRET", "BASE_URL"]);
+    }
   });
 
   it("CHZZK_CLIENT_ID 누락 시 에러", () => {
@@ -59,9 +71,12 @@ describe("validateEnv", () => {
   });
 
   it("JWT_SECRET이 32바이트보다 짧으면 경고만 남기고 통과", () => {
+    vi.stubEnv("JWT_SECRET", "test-secret");
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(() => validateEnv()).not.toThrow();
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("JWT_SECRET"));
+    const entry = JSON.parse(String(warn.mock.calls[0][0]));
+    expect(entry).toMatchObject({ level: "warn", event: "env.weak_jwt_secret", minBytes: 32 });
     warn.mockRestore();
   });
 

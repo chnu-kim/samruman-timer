@@ -124,7 +124,7 @@ src/
     chzzk.ts                            — CHZZK OAuth 클라이언트
     goal.ts                             — 목표 진행률 계산
     env.ts                              — 필수 환경변수 검증
-    logger.ts                           — 구조화 로그
+    logger.ts                           — 운영 로그(JSON 한 줄, event 키)와 errorFields
     safe-redirect.ts                    — 로그인 후 next 경로 검증 (서버·클라이언트 공용)
     overlay-style.ts                    — 오버레이 색상·배경 값 검증 (서버·클라이언트 공용)
     auth-fetch.ts                       — (클라이언트) 401이면 세션 만료 이벤트를 보내는 fetch 래퍼
@@ -152,6 +152,7 @@ migrations/
   0006_goals.sql                        — 목표
   0007_refresh_tokens.sql               — refresh token
   0008_overlay_animation.sql            — 오버레이 애니메이션 설정
+  0009_timer_unique_and_session_lifetime.sql — 프로젝트당 타이머 유일 인덱스, refresh family 절대 만료
 
 wrangler.toml                           — Cloudflare Workers 설정
 open-next.config.ts                     — @opennextjs/cloudflare 설정 (기본값)
@@ -218,7 +219,21 @@ binding = "ASSETS"
 binding = "DB"
 database_name = "samrumantimer-db"
 database_id = "<DATABASE_ID>"
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+redact_query_string = true
+
+[observability.logs]
+enabled = true
+invocation_logs = false
+
+[observability.issues]
+enabled = true
 ```
+
+`[observability]`의 의미와 운영 절차는 아래 "운영 로그·관측" 절에 있다.
 
 ### D1 바인딩 접근
 
@@ -255,7 +270,7 @@ wrangler d1 create samrumantimer-db
 
 # 마이그레이션 적용 (플래그가 없으면 wrangler 4는 로컬 DB에 적용한다)
 wrangler d1 migrations apply samrumantimer-db --local    # pnpm db:migrate:local
-wrangler d1 migrations apply samrumantimer-db --remote   # 원격(프로덕션)
+wrangler d1 migrations apply samrumantimer-db --remote   # pnpm db:migrate:remote, 원격(프로덕션)
 
 # 원격에 적용 안 된 마이그레이션 확인
 npx wrangler d1 migrations list samrumantimer-db --remote
@@ -283,3 +298,111 @@ npx opennextjs-cloudflare build && npx opennextjs-cloudflare deploy
   - 캐시 정책·오프라인 페이지를 바꾸면 `sw.js`의 `CACHE_VERSION`을 올린다. `activate`에서 이전 버전 캐시를 지운다. HTML을 캐시하지 않으므로 `skipWaiting`·`clients.claim`으로 바로 교체한다.
   - 로그아웃 시 캐시 정리는 하지 않는다. 사용자 데이터가 캐시에 들어가지 않기 때문이다. 나중에 HTML·API 응답을 캐시하게 되면 로그아웃 때 캐시를 지워야 한다.
 - CSP: 지금은 `script-src`·`worker-src`·`default-src`가 없어 충돌하지 않는다. 이후 추가할 때는 `worker-src 'self'`와 `manifest-src 'self'`도 함께 둔다.
+
+## 운영 로그·관측
+
+여기서 "운영 로그"는 Workers Logs에 남는 서버 로그를 말한다. 시간 변경 기록인 도메인 테이블 `timer_logs`와는 다르다.
+
+### 구성
+
+- **Workers Logs** (`[observability.logs]`): 코드의 `console.*` 출력을 대시보드에 보관하고 JSON 필드로 검색한다. 앱 로그는 모두 `src/lib/logger.ts`를 거친다
+- **Issues** (`[observability.issues]`): 오류를 묶어 보여 준다. 대시보드에서만 켜 두면 다음 `pnpm run deploy` 때 꺼지므로 `wrangler.toml`에 선언한다 (wrangler 4.134 이상)
+- `head_sampling_rate = 1`: 샘플에서 빠진 요청은 앱 로그도 함께 빠진다. error 로그를 잃지 않으려고 낮추지 않는다
+- `redact_query_string = true`: 로그·트레이스의 요청 URL에서 쿼리스트링을 지운다. `/api/auth/callback?code=&state=`가 남지 않게 하려는 것이다
+- **invocation log는 끈다** (`invocation_logs = false`). 아래 "invocation log를 켜는 절차" 참고
+- 쓰지 않는 것: Traces, Logpush, Tail Workers, OpenTelemetry export, Analytics Engine, 외부 SaaS(Sentry 등). 유료이거나 무료 플랜에서 쓸 수 있는지 확인되지 않았다
+
+### 로그 형식
+
+`logger.{info,warn,error}(event, fields?)`는 한 줄짜리 JSON을 `console.log`·`console.warn`·`console.error`로 낸다.
+
+```json
+{ "requestId": "…", "method": "GET", "path": "/api/projects", "errorName": "Error",
+  "error": "D1_ERROR: no such table: projects: SQLITE_ERROR", "kind": "schema_drift",
+  "cause": "…", "stack": "…",
+  "level": "error", "event": "api.unhandled", "message": "api.unhandled", "timestamp": "2026-10-03T00:11:29.908Z" }
+```
+
+- `level`·`event`·`message`·`timestamp`는 예약 키라 fields가 덮어쓰지 못한다. `message`는 대시보드 목록의 표시 열이라 `event`와 같은 값을 넣는다
+- `requestId`는 미들웨어가 만든 UUID다. 같은 값이 응답 헤더 `x-request-id`로 나가므로, 사용자가 알려 준 값으로 로그를 찾는다. 들어온 `x-request-id`나 `cf-ray`는 쓰지 않는다
+- `errorFields(err)`는 `{ errorName, error(300자), cause(300자, 있을 때), stack(2000자), kind }`를 만든다. `kind`는 `schema_drift`(`no such table|column`, 원격 마이그레이션 누락), `timeout`(`TimeoutError`, `AbortSignal.timeout`. `ChzzkApiError`처럼 감싼 오류는 `timedOut: true`나 cause의 `TimeoutError`로 판정), `unknown`이다. stack 첫 줄의 메시지도 300자로 잘라 붙이므로 메시지 상한이 stack에서 풀리지 않는다
+- invocation log를 껐으므로 `api.unhandled`·`auth.refresh.failed` 같은 오류 로그에는 `method`와 `path`(쿼리스트링 제외 pathname)를 직접 넣는다
+
+### PII 규칙
+
+- 남기지 않는다: 토큰(access·refresh·OAuth code/state), 토큰 해시, 쿠키, nickname, chzzkUserId, actorName, 쿼리스트링, 외부(CHZZK) 응답 본문 원문
+- 남겨도 된다: 서버가 만든 내부 ID(userId·timerId·projectId·familyId), requestId, method, pathname
+- CHZZK 실패 응답은 본문을 버리고 JSON `code` 필드만 오류 메시지에 붙인다(`ChzzkApiError`). 200인데 JSON이 아닌 본문도 `invalid JSON` `ChzzkApiError`로 바꾸고, 본문 일부를 인용하는 `SyntaxError`는 cause로 달지 않는다
+
+### 이벤트 목록
+
+| event | level | 위치 | 주요 필드 |
+|-------|-------|------|-----------|
+| `api.unhandled` | error | `withErrorHandler` (`lib/db.ts`) | requestId, method, path, 오류 필드 |
+| `env.invalid` | error | middleware | requestId, method, path, invalid(변수 이름만) |
+| `env.weak_jwt_secret` | warn | `lib/env.ts` | variable, minBytes |
+| `auth.refresh.failed` | error | middleware (refresh 중 예외 → 500) | requestId, method, path, 오류 필드 |
+| `auth.refresh.reuse_detected` | warn | middleware (이번 요청이 family의 행을 실제로 폐기했을 때만, 보통 사건당 한 번) | requestId, method, path, userId, familyId |
+| `auth.refresh.rejected` | info | middleware | requestId, method, path, reason(`not_found`·`expired`·`family_expired`·`revoked`·`user_missing`) |
+| `auth.oauth_state_invalid` | warn / info | `/api/auth/callback` | requestId, reason(warn: `missing_state`·`missing_cookie`·`mismatch` / info: `missing_code`) |
+| `auth.login.failed` | error | `/api/auth/callback` | requestId, method, path, stage(`token`·`user`·`db`), status, timedOut, durationMs, 오류 필드 |
+| `auth.login.succeeded` | info | `/api/auth/callback` | requestId, userId, durationMs |
+| `auth.logout.revoke_failed` | error | `/api/auth/logout` | requestId, method, path, 오류 필드 |
+| `timer.modify.conflict_exhausted` | warn | `/api/timers/[id]/modify` (409) | requestId, timerId, action |
+| `timer.create.unique_race` | warn | `POST /api/projects/[id]/timers` | requestId, projectId |
+
+refresh 쿠키 없이 보호 라우트를 부른 401은 정상 흐름이고 양이 많아 남기지 않는다. 반면 거부된 refresh 쿠키(폐기된 family = `revoked`, `expired`, `family_expired`, `not_found`)는 쿠키를 로그아웃에서만 지우므로 그 브라우저가 페이지를 열 때마다(Header와 페이지가 각각 `/api/auth/me`를 부르므로 한 화면에 1~2건) `auth.refresh.rejected`가 다시 남는다. 쿠키가 만료(최대 30일)되거나 다시 로그인할 때까지 이어진다. 그래서 `auth.refresh.rejected` 건수는 사건 수가 아니라 페이지 조회 수에 가깝고, 사건 수는 `auth.refresh.reuse_detected`로 센다. `env.invalid`는 검증이 성공했을 때만 캐시되므로 설정을 고칠 때까지 요청마다 한 건씩 남는다.
+
+### 무료 한도와 초과 시 동작
+
+아래 수치는 이 절을 쓸 때(2026-10) 조사한 Cloudflare 문서 기준이다. 바뀔 수 있으니 대시보드의 사용량 화면에서 확인한다.
+
+| 항목 | Free 한도 | 넘으면 |
+|------|-----------|--------|
+| Workers 요청 | 하루 100,000건 | 그날 남은 시간 동안 오류 1027로 Worker가 실행되지 않는다 |
+| Workers Logs (2026-12-01 이전) | 하루 200,000 이벤트, 3일 보관 | 그날 남은 시간 동안 1% 샘플링 |
+| Workers Logs (2026-12-01 이후) | 하루 0.5GB, 7일 보관. Issues도 같은 한도를 쓴다 | 00:00 UTC까지 수집 중단 |
+
+Free 플랜은 추가 구매가 불가능하므로 어느 경우든 과금되지 않는다. invocation log를 끈 지금은 앱 이벤트(로그인, refresh 거부, 경고·오류)만 쓴다. 가장 많은 것은 위의 `auth.refresh.rejected`로, 거부된 쿠키를 가진 브라우저의 페이지 조회 수만큼 늘어난다. 그래도 이벤트 수는 요청 수를 넘을 수 없으므로(요청당 많아야 한두 건) 요청 한도(하루 100,000건)가 로그 한도보다 먼저 찬다.
+
+### 대시보드에서 찾기
+
+Cloudflare 대시보드 → Workers & Pages → `samrumantimer` → Observability(Logs)에서 쿼리 빌더로 필터한다.
+
+- 사용자 신고 추적: `requestId` = 응답 헤더 `x-request-id` 값
+- 서버 오류 전체: `level` = `error`
+- 마이그레이션 누락 의심: `kind` = `schema_drift` (보이면 `npx wrangler d1 migrations list samrumantimer-db --remote`로 확인)
+- 로그인 장애: `event` = `auth.login.failed`, `stage`·`status`·`timedOut`로 나눠 본다
+- 세션 탈취 의심: `event` = `auth.refresh.reuse_detected` (보통 사건당 한 건. rotation의 DB 쓰기는 원자적이라 `auth.refresh.failed` 뒤에 따라오는 오탐은 없다. 남은 예외는 AUTH.md "rotation의 원자성" 참고)
+- 묶인 오류는 Issues 탭에서 본다
+
+### wrangler tail
+
+보관과 무관하게 실시간 로그를 볼 때 쓴다. Free 플랜에서도 된다.
+
+```bash
+npx wrangler tail samrumantimer                       # 사람이 읽는 형식
+npx wrangler tail samrumantimer --format json         # 원본 이벤트(요청 메타데이터 포함)
+npx wrangler tail samrumantimer --search '"level":"error"' # 앱 오류 로그만(처리된 500 포함)
+npx wrangler tail samrumantimer --search auth.refresh # 문자열 검색
+```
+
+`--status error`는 호출 결과(outcome)가 `error`인 것, 즉 잡히지 않은 예외만 보여 준다. 이 앱의 오류(`api.unhandled`, `auth.refresh.failed`, `env.invalid`, `auth.login.failed`)는 모두 잡아서 500 응답이나 리다이렉트로 끝내므로 outcome이 `ok`라 `--status error`에는 나오지 않는다. 앱 오류는 위처럼 `--search`로 로그 내용(`"level":"error"`)을 걸러 본다.
+
+로컬에서는 `npx opennextjs-cloudflare preview`가 같은 앱 로그를 터미널(또는 로컬 explorer의 observability 쿼리)로 보여 준다.
+
+### invocation log를 켜는 절차
+
+invocation log는 요청마다 메서드·URL·상태 코드와 함께 요청 메타데이터와 헤더를 자동으로 담는다. Cloudflare 문서는 헤더를 가린다고 적지 않는다. `Cookie` 헤더에는 `session` JWT와 `refresh` 원문이 있으므로, 이것이 그대로 남으면 대시보드에 접근할 수 있는 사람은 30일짜리 세션을 가져갈 수 있다. 그래서 확인 전까지 끈다.
+
+켜려면 다음 순서를 따른다.
+
+1. 지금 설정 그대로 `npx wrangler tail samrumantimer --format json`을 실행하고, 로그인한 브라우저로 보호 API(예: `GET /api/auth/me`)를 한 번 부른다
+2. 출력된 이벤트의 `event.request.headers`에 `cookie`가 있는지, 값이 가려졌는지(`REDACTED` 등) 확인한다
+3. 가려져 있을 때만 `invocation_logs = true`로 바꿔 배포한다. 배포 후 대시보드에서 invocation log 한 건을 열어 `$workers.event.request.headers`에 cookie 원문이 없는지 다시 확인한다. 원문이 보이면 즉시 `false`로 되돌려 재배포한다
+4. 켜면 요청 수만큼 이벤트가 늘어난다(하루 요청 수 ≈ 이벤트 수). 위 한도 표와 비교한다
+
+### 한계
+
+- 클라이언트에서 난 렌더 오류(React error boundary가 잡는 예외)는 서버로 보내지 않으므로 운영 로그에 남지 않는다. 클라이언트 오류 수집 엔드포인트는 인증 없는 공개 쓰기 경로가 되어 요청 한도를 소모시키는 공격 대상이 되므로 두지 않았다
+- invocation log를 끈 동안에는 오류가 없는 요청의 상태 코드·지연은 보관되지 않는다. 대시보드의 Workers 지표(요청 수·오류율)로 대신 본다

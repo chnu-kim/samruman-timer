@@ -12,7 +12,7 @@ vi.mock("@/lib/auth", async (importOriginal) => {
 
 import { getCurrentUser } from "@/lib/auth";
 import { getDB } from "@/lib/db";
-import { createMockDB } from "../helpers";
+import { createMockDB, parseJson } from "../helpers";
 import { POST } from "@/app/api/auth/logout/route";
 import { NextRequest } from "next/server";
 
@@ -42,7 +42,7 @@ describe("POST /api/auth/logout", () => {
     const res = await POST(createPostReq("session=valid-token") as never);
     expect(res.status).toBe(200);
 
-    const body = await res.json();
+    const body = await parseJson(res);
     expect(body.data).toBeNull();
 
     const setCookie = res.headers.get("Set-Cookie");
@@ -54,7 +54,7 @@ describe("POST /api/auth/logout", () => {
 
     const res = await POST(createPostReq() as never);
     expect(res.status).toBe(401);
-    const body = await res.json();
+    const body = await parseJson(res);
     expect(body.error.code).toBe("UNAUTHORIZED");
   });
 
@@ -73,5 +73,30 @@ describe("POST /api/auth/logout", () => {
     const cookies = res.headers.getSetCookie();
     expect(cookies.some((c) => c.startsWith("session=;") && c.includes("Max-Age=0"))).toBe(true);
     expect(cookies.some((c) => c.startsWith("refresh=;") && c.includes("Max-Age=0"))).toBe(true);
+  });
+
+  it("family 폐기가 실패해도 로그아웃은 200으로 끝나고 revoke_failed를 남긴다", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(getCurrentUser).mockResolvedValue(null);
+    const db = createMockDB();
+    db._stmt.first.mockRejectedValue(new Error("D1_ERROR: network connection lost"));
+    vi.mocked(getDB).mockResolvedValue(db);
+
+    const res = await POST(createPostReq("refresh=raw-refresh") as never);
+
+    expect(res.status).toBe(200);
+    const cookies = res.headers.getSetCookie();
+    expect(cookies.some((c) => c.startsWith("refresh=;") && c.includes("Max-Age=0"))).toBe(true);
+    expect(error).toHaveBeenCalledTimes(1);
+    const entry = JSON.parse(String(error.mock.calls[0][0]));
+    expect(entry).toMatchObject({
+      level: "error",
+      event: "auth.logout.revoke_failed",
+      method: "POST",
+      path: "/api/auth/logout",
+      error: "D1_ERROR: network connection lost",
+    });
+    expect(JSON.stringify(entry)).not.toContain("raw-refresh");
+    error.mockRestore();
   });
 });
