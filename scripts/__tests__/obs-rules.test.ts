@@ -20,7 +20,7 @@ function bucketOf(events: Ev[], event: string): { bucket: string; group: Group }
 }
 
 describe("이벤트별 규칙(경계값: 임계 - 1은 정상, 임계는 비정상)", () => {
-  it.each(["api.unhandled", "env.invalid", "auth.refresh.failed", "auth.logout.revoke_failed"])(
+  it.each(["api.unhandled", "env.invalid", "auth.refresh.failed", "auth.logout.revoke_failed", "health.schema_drift"])(
     "%s는 1건이라도 비정상",
     (event) => {
       expect(bucketOf([], event).bucket).toBe("none");

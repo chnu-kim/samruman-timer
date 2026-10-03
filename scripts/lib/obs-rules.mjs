@@ -59,6 +59,8 @@ export const TRIAGE_RULES = [
     ],
   },
   { event: "timer.create.unique_race", levels: ["warn"], conditions: [{ id: "total", min: 3 }] },
+  // 원격 D1 마이그레이션 누락·불일치. 1건이라도 사람이 원격 마이그레이션을 확인해야 한다
+  { event: "health.schema_drift", levels: ["error"], conditions: [{ id: "any", min: 1 }] },
 ];
 
 const RULES_BY_EVENT = new Map(TRIAGE_RULES.map((r) => [r.event, r]));
