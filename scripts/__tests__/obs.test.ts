@@ -1240,6 +1240,44 @@ describe("verify --input (플러그인 조회 결과로 판정)", () => {
       expect(text).toContain("accountId");
     });
 
+    it("--json을 안내 명령에 옮긴다", async () => {
+      const r = await execOffline(["verify", "--tag", TAG, ...WINDOW, "--json", "--print-plugin-code"]);
+      expect(r.code).toBe(EXIT.OK);
+      const guide = r.err.find((l) => l.includes("verify --input"));
+      expect(guide).toMatch(/ --json(\s|$)/);
+    });
+
+    it("telemetry 응답에서 판정에 쓰는 이벤트 배열만 남긴다(run의 계정·사용자 ID, series·fields는 버린다)", async () => {
+      const acct = "2".repeat(32);
+      const user = "3".repeat(32);
+      const base = fullRoute({ tagEvents: [infoEvent] });
+      const route: Route = (url, init) => {
+        if (!url.pathname.endsWith("/telemetry/query")) return base(url, init);
+        const res = base(url, init) as { body: { result: { events: Record<string, unknown> } } };
+        const result = res.body.result;
+        return ok({
+          run: { accountId: acct, workspaceId: acct, userId: user },
+          events: { ...result.events, series: [{ time: 1, data: [] }], fields: [{ key: "event" }] },
+        });
+      };
+      const network = await exec(["verify", "--tag", TAG, ...WINDOW, "--skip-issues"], route);
+      const { judged, bundle } = await viaPlugin(["--tag", TAG, ...WINDOW, "--skip-issues"], route);
+      const text = JSON.stringify(bundle);
+      expect(text).not.toContain(acct);
+      expect(text).not.toContain(user);
+      expect(text).not.toContain("series");
+      expect(text).not.toContain("fields");
+      expect(judged.code).toBe(network.code);
+      expect(withoutInputNote(judged.out[0])).toEqual(JSON.parse(network.out[0]));
+    });
+
+    it("--until이 미래면 --until을 짚어 2", async () => {
+      const r = await execOffline(["verify", "--input", "b.json", "--tag", TAG, "--since", SINCE, "--until", "2099-01-01T00:00:00.000Z"]);
+      expect(r.code).toBe(EXIT.FAILED);
+      expect(r.err.join("\n")).toContain("--until이 미래다");
+      expect(r.err.join("\n")).not.toContain("--since가 미래다");
+    });
+
     it("--input과 함께 쓰면 2", async () => {
       const r = await execOffline(["verify", "--tag", TAG, ...WINDOW, "--input", "b.json", "--print-plugin-code"]);
       expect(r.code).toBe(EXIT.FAILED);

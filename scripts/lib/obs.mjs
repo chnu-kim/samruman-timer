@@ -72,18 +72,21 @@ export function parseDuration(value) {
   return ms;
 }
 
-/** --since는 기간(`1h`) 또는 ISO 시각(`2026-10-03T00:00:00Z`, 배포 시각 등)을 받는다. 시작 시각(ms)을 돌려준다 */
-export function parseSince(value, nowMs) {
+/**
+ * --since는 기간(`1h`) 또는 ISO 시각(`2026-10-03T00:00:00Z`, 배포 시각 등)을 받는다. 시작 시각(ms)을 돌려준다.
+ * --until도 같은 형식이라 이 함수를 쓴다. flag는 오류 메시지에 쓸 옵션 이름이다
+ */
+export function parseSince(value, nowMs, flag = "--since") {
   const s = String(value).trim();
   if (/^\d+\s*[smhd]$/.test(s)) return nowMs - parseDuration(s);
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
     const t = Date.parse(s);
     if (!Number.isNaN(t)) {
-      if (t > nowMs) throw new UsageError(`--since가 미래다: ${value}`);
+      if (t > nowMs) throw new UsageError(`${flag}${flag === "--until" ? "이" : "가"} 미래다: ${value}`);
       return t;
     }
   }
-  throw new UsageError(`--since 형식이 아니다: ${value} (예: 1h, 3d, 2026-10-03T00:00:00Z)`);
+  throw new UsageError(`${flag} 형식이 아니다: ${value} (예: 1h, 3d, 2026-10-03T00:00:00Z)`);
 }
 
 export function parseLimit(value, fallback) {
@@ -1095,9 +1098,11 @@ export function buildPluginCode(opts) {
   };
   const query = async (body) => {
     const res = await call("POST", "/telemetry/query", { body });
+    // 판정은 이벤트 배열만 읽는다. run(계정·사용자 ID)·series·fields 같은 나머지는 대화로 돌려보내지 않는다
     const r = res && res.result;
-    if (r && r.events && Array.isArray(r.events.events)) r.events.events = r.events.events.map(slimEvent);
-    else if (r && Array.isArray(r.events)) r.events = r.events.map(slimEvent);
+    if (r && r.events && Array.isArray(r.events.events)) res.result = { events: { events: r.events.events.map(slimEvent) } };
+    else if (r && Array.isArray(r.events)) res.result = { events: r.events.map(slimEvent) };
+    else if (r && typeof r === "object") delete r.run;
     return { request: body, response: res };
   };
   const tsOf = (o) => {
@@ -1164,6 +1169,7 @@ function printPluginCode(opts, io) {
     ...(opts.skipIssues ? ["--skip-issues"] : []),
     ...(opts.expectEvent ? ["--expect-event", opts.expectEvent] : []),
     ...(opts.minEventsGiven ? ["--min-events", String(opts.minEvents)] : []),
+    ...(opts.json ? ["--json"] : []),
   ];
   io.err("# 위 코드를 Cloudflare 플러그인 execute 도구의 code로 그대로 넘긴다(조회용 엔드포인트만 부른다)");
   io.err("# 반환된 JSON을 저장소 밖(scratchpad 등) 파일에 그대로 저장하고 판정한다:");
@@ -1239,7 +1245,7 @@ export async function run(argv, deps) {
     const json = flags.json === true;
     const limit = parseLimit(flags.limit, 100);
     const since = (fallback) => parseSince(flags.since ?? fallback, nowMs);
-    const until = flags.until === undefined ? nowMs : parseSince(flags.until, nowMs);
+    const until = flags.until === undefined ? nowMs : parseSince(flags.until, nowMs, "--until");
     const window = (fallback) => {
       const from = since(fallback);
       if (from >= until) throw new UsageError("--since가 --until보다 늦다");

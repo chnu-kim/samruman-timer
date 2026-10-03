@@ -207,12 +207,13 @@ Claude Code에 Cloudflare 플러그인이 연결돼 있으면 그 `execute` 도�
   occurrences: { "<issueId>": [ { request: { query: { per_page: 100, cursor? } }, response }, ... ] } }    // Issues를 볼 때만
 ```
 
-응답의 이벤트·occurrence는 `slimEvent`·`slimOccurrence`로 stack 본문, `$workers.event` 같은 verify가 읽지 않는 필드를 덜어 낸 것이다(결과가 대화로 돌아오므로). 그래도 태그 로그가 많으면 결과가 크다. `--since`를 배포 시각으로 좁힌다.
+응답의 이벤트·occurrence는 `slimEvent`·`slimOccurrence`로 stack 본문, `$workers.event` 같은 verify가 읽지 않는 필드를 덜어 낸 것이다(결과가 대화로 돌아오므로). `telemetry/query` 응답은 `result`에서 이벤트 배열만 남기고 `run`(계정·사용자 ID)·`events.series`(빈 버킷)·`events.fields`는 버린다. 그래도 태그 로그가 많으면 결과가 크다. `--since`를 배포 시각으로 좁힌다.
 
 판정은 토큰 경로와 같은 함수(`evaluateVerify`)가 한다. 파일은 누가 어떻게 모았는지 코드가 보지 못하므로 근거가 애매한 곳을 더 좁게 본다:
 
 - 입력 오류(2, 판정 객체 없음): JSON이 아니거나 `format`이 다르다, 기록된 요청이 그 옵션으로 verify가 보낼 요청과 다르다(태그·기간·필터·`limit`·`dry`. 키 순서는 상관없다), 응답이 실패다(`success: false`, 403 등), 응답에서 이벤트·Issue·occurrence 배열을 찾지 못했다(0건으로 보지 않는다)
 - `truncated`(2): 다음 쪽을 불러야 하는데 기록이 없다, Issue가 있는 쪽에 `result_info.total_pages`가 없다, 행이 있는 occurrence 쪽에 `result_info.cursors.after`가 없다(끝인지 빠뜨렸는지 모른다). 이미 찾은 재발은 이때도 1이다
+  - 미확인(2026-10-03): 플러그인 execute가 occurrence 응답의 `result_info.cursors`를 그대로 넘기는지는 실측하지 못했다(그때 active Issue가 0건). execute 도구의 응답 타입 선언에는 `cursors`가 없다. 깎여 온다면 기간 안 occurrence가 있는 Issue는 플러그인 경로에서 늘 `truncated`(2)가 된다(fail closed). active Issue가 생기면 한 번 실측해 "응답 모양"에 적고, 깎여 온다면 조회 코드가 cursor 유무를 따로 기록하게 고친다
 - `--input`에서는 `--since`·`--until`을 ISO 시각으로 둘 다 받는다. 기록된 요청과 대조할 기간이 판정할 때마다 바뀌면 안 되기 때문이다
 - 판정은 파일이 실제 조회 결과 그대로라는 전제 위에 있다. 코드는 요청과 쪽 연결만 확인한다. 보고에 "플러그인 조회 결과로 `verify --input` 판정"이라고 적는다
 
