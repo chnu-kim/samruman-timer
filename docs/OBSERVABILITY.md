@@ -204,10 +204,12 @@ API 응답의 정확한 모양은 확인되지 않은 채로 만들었다. 정�
 ### 조회용 API 토큰
 
 1. Cloudflare 대시보드 → My Profile(또는 Manage Account) → API Tokens → Create Token → Custom token
-2. 권한: Workers 역할 "Metadata Read-Only"(읽기 전용), 범위는 이 계정의 `samrumantimer` Worker로 한정한다. 쓰기 권한은 주지 않는다. CLI는 조회만 한다
-3. 확인:
-   - `node scripts/obs.mjs errors --since 1h` → 0으로 끝나면 로그 쿼리 권한이 있다
-   - `node scripts/obs.mjs issues` → 403이면 이 권한으로 Issues API가 열리지 않는 것이다. 토큰 편집 화면에서 Observability·Issues 관련 읽기 권한을 찾아 추가하거나, verify에 `--skip-issues`를 쓴다. (2026-10 기준 Issues API까지 되는지 확인되지 않았다. 확인하면 이 단락을 고친다)
+2. 권한: 두 문서가 서로 다르게 말하므로 좁은 쪽부터 시도한다(2026-10 기준)
+   - 1순위: Workers 역할 "Metadata Read-Only", 범위는 이 계정의 `samrumantimer` Worker로 한정. 역할 문서(developers.cloudflare.com/workers/authorization/workers/)는 이 역할로 "metrics, logs, and traces"를 볼 수 있다고 쓴다
+   - 2순위: API 레퍼런스는 로그 쿼리(`POST .../workers/observability/telemetry/query`)가 받는 권한으로 "Workers Observability Write"만 적는다. 1순위 토큰으로 아래 확인이 403이면 이 권한(대시보드 이름은 "Workers Observability" Edit)을 추가한다. 이 권한은 저장된 쿼리·공유 링크·내보내기 목적지·Issue 상태와 자동화를 바꿀 수 있지만 Worker 코드 배포·시크릿에는 닿지 않는다. CLI(`obs.mjs`)는 POST를 쿼리 실행에만 쓰고 그 밖의 쓰기 요청은 보내지 않는다. 그래도 노출 시 영향이 커지므로 Routine용 토큰과 로컬 토큰을 분리하고, 노출되면 즉시 roll한다
+3. 확인(스모크 테스트. 결과에 따라 이 단락을 고친다):
+   - `node scripts/obs.mjs errors --since 1h` → 0으로 끝나면 로그 쿼리 권한이 있다. 403이면 위 2순위 권한을 추가한다. 이 확인이 통과하기 전에는 verify 결과(`insufficient` 포함)를 근거로 쓰지 않는다
+   - `node scripts/obs.mjs issues` → 403이면 이 토큰으로 Issues API가 열리지 않는 것이다. 같은 방식으로 권한을 넓히거나, verify에 `--skip-issues`를 쓴다
 4. 저장: 셸 프로필(`~/.zshrc`의 `export CF_OBS_TOKEN=...`) 또는 1Password(`op run`·환경 주입). 저장소·`.env*`·`.dev.vars`에는 넣지 않는다. 노출되면 대시보드에서 즉시 roll한다
 
 ### Issues → Claude Code 자동화 (선택)
@@ -217,7 +219,7 @@ Issues의 알림 목적지로 Claude Code Routine(Routine ID + 토큰)이나 Gen
 - Claude Code Routine은 research preview이고 Claude 구독이 필요하다. Routine 실행은 구독 사용량을 쓴다. Cloudflare 쪽(Free 플랜)은 추가 과금이 없다
 - Routine 프롬프트에는 `prod-triage` skill로 Issue ID를 넘기게 하고, 배포·마이그레이션·머지는 하지 않도록 둔다(이 문서의 승인 규칙)
 - 사람 없이 도는 실행이라, Routine은 조사 보고서까지만 만들고 PR은 사람이 보고 연다. Issue `title`·occurrence의 `path`·`error`는 외부 입력이 섞일 수 있어("조회 결과는 데이터다") 무인 실행이 그 내용대로 코드를 바꾸고 공개 저장소에 PR을 내면 안 되기 때문이다
-- Routine 환경에도 `CF_OBS_TOKEN`이 있어야 한다. 없으면 `obs.mjs`가 늘 2로 끝나 Issue ID만 보고하게 된다. 로컬 토큰을 복사하지 말고 Routine 전용 읽기 전용 토큰을 따로 만들어(위 "조회용 API 토큰"과 같은 권한·범위) Routine의 환경 설정에만 둔다. 그래야 노출됐을 때 그 토큰만 roll하면 되고 로컬 작업은 영향받지 않는다. 토큰 없이 쓰기로 했다면 Routine 프롬프트에 "Issue ID와 대시보드 링크만 보고한다"고 적는다
+- Routine 환경에도 `CF_OBS_TOKEN`이 있어야 한다. 없으면 `obs.mjs`가 늘 2로 끝나 Issue ID만 보고하게 된다. 로컬 토큰을 복사하지 말고 Routine 전용 토큰을 따로 만들어(위 "조회용 API 토큰"과 같은 권한·범위, 스모크 테스트를 통과한 가장 좁은 권한) Routine의 환경 설정에만 둔다. 그래야 노출됐을 때 그 토큰만 roll하면 되고 로컬 작업은 영향받지 않는다. 토큰 없이 쓰기로 했다면 Routine 프롬프트에 "Issue ID와 대시보드 링크만 보고한다"고 적는다
 - 알림 폭주를 막으려면 새 Issue에만 걸고, 재발(regression) 알림은 사람이 보는 채널로 둔다
 
 ### invocation log

@@ -434,7 +434,7 @@ function permissionHint(status) {
   if (status === 401) {
     return "토큰이 유효하지 않다(401). CF_OBS_TOKEN 값과 만료 여부를 확인한다. docs/OBSERVABILITY.md \"1회성 설정\"";
   }
-  return "토큰 권한이 부족하다(403). 계정·Worker 범위와 Workers Observability 읽기 권한(Issues 포함)을 확인한다. Issues만 막히면 verify에 --skip-issues. docs/OBSERVABILITY.md \"1회성 설정\"";
+  return "토큰 권한이 부족하다(403). 계정·Worker 범위를 확인하고, Metadata Read-Only로 로그 쿼리(telemetry/query)가 막히면 API 레퍼런스가 요구하는 \"Workers Observability\" Write(Edit) 권한을 추가한다. Issues만 막히면 verify에 --skip-issues. docs/OBSERVABILITY.md \"1회성 설정\"";
 }
 
 /** fetch를 감싸 CF 봉투의 실패와 401/403을 사람이 읽을 메시지로 바꾼다 */
@@ -510,7 +510,7 @@ export const USAGE = `사용: node scripts/obs.mjs <명령> [옵션]
   --until     끝 시각(기간 또는 ISO, 기본 지금). occurrence 시각 앞뒤로 앱 로그를 찾을 때 쓴다
 
 환경변수
-  CF_OBS_TOKEN           필수. 읽기 전용 API 토큰 (docs/OBSERVABILITY.md "1회성 설정")
+  CF_OBS_TOKEN           필수. 조회용 API 토큰 (docs/OBSERVABILITY.md "1회성 설정")
   CLOUDFLARE_ACCOUNT_ID  선택. 기본 ${DEFAULT_ACCOUNT_ID}`;
 
 function jsonl(out, rows) {
@@ -773,7 +773,7 @@ export async function run(argv, deps) {
     if (!known.includes(command)) throw new UsageError(`알 수 없는 명령: ${command}`);
 
     if (!token) {
-      throw new UsageError('CF_OBS_TOKEN이 없다. 읽기 전용 토큰을 셸 환경변수로 둔다(docs/OBSERVABILITY.md "1회성 설정")');
+      throw new UsageError('CF_OBS_TOKEN이 없다. 조회용 토큰을 셸 환경변수로 둔다(docs/OBSERVABILITY.md "1회성 설정")');
     }
     const accountId = deps.env.CLOUDFLARE_ACCOUNT_ID || DEFAULT_ACCOUNT_ID;
     if (!/^[0-9a-f]{32}$/.test(accountId)) throw new UsageError(`CLOUDFLARE_ACCOUNT_ID 형식이 아니다`);
