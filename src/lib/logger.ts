@@ -5,7 +5,9 @@
  * 대시보드에서 `event`, `requestId`, `kind` 등으로 바로 필터할 수 있다.
  * 도메인의 시간 변경 기록(timer_logs)과는 다르다.
  *
- * 이벤트 이름은 영어 dot 표기(`auth.refresh.rejected`)로 쓴다. 목록은 docs/ARCHITECTURE.md "운영 로그·관측" 절.
+ * 이벤트 이름은 영어 dot 표기(`auth.refresh.rejected`)로 쓴다. 목록은 docs/OBSERVABILITY.md "이벤트 카탈로그".
+ *
+ * 모든 로그에 배포 버전(`versionId`, `versionTag`)을 붙인다. 배포 후 재발 여부를 버전 단위로 가르기 위해서다.
  *
  * PII 규칙
  * - 금지: 토큰(access·refresh·OAuth code/state), 토큰 해시, 쿠키, nickname, chzzkUserId, actorName,
@@ -13,15 +15,53 @@
  * - 허용: 내부 userId·timerId·projectId·familyId(서버가 만든 hex ID), requestId, method, pathname
  */
 
+import { getCloudflareContext } from "@opennextjs/cloudflare";
+
 type LogLevel = "info" | "warn" | "error";
 
 export type LogFields = Record<string, unknown>;
 
+type VersionFields = { versionId?: string; versionTag?: string };
+
+/** 버전은 isolate 수명 동안 바뀌지 않으므로 한 번 읽으면 캐시한다. 실패는 캐시하지 않는다(요청 컨텍스트 밖에서 먼저 불릴 수 있다) */
+let cachedVersion: VersionFields | undefined;
+
+/**
+ * `[version_metadata]` 바인딩(CF_VERSION_METADATA)에서 버전을 읽는다.
+ * 테스트·빌드·요청 컨텍스트 밖에서는 getCloudflareContext가 던지므로 빈 객체를 돌려주고 필드를 생략한다.
+ * 로깅이 버전 조회 때문에 실패하면 안 되므로 어떤 예외도 밖으로 내보내지 않는다
+ */
+function versionFields(): VersionFields {
+  if (cachedVersion) return cachedVersion;
+  try {
+    const ctx: unknown = getCloudflareContext();
+    // 동기 호출이 thenable을 돌려주는 환경(모킹 등)이면 쓰지 않고, 거부돼도 unhandled rejection이 되지 않게 막는다
+    if (ctx && typeof (ctx as { then?: unknown }).then === "function") {
+      (ctx as Promise<unknown>).then(undefined, () => {});
+      return {};
+    }
+    const meta = (ctx as { env?: { CF_VERSION_METADATA?: Partial<WorkerVersionMetadata> } } | undefined)?.env
+      ?.CF_VERSION_METADATA;
+    if (!meta || typeof meta.id !== "string" || meta.id === "") return {};
+    const fields: VersionFields = { versionId: meta.id };
+    // --tag 없이 배포하면 tag가 빈 문자열이다
+    if (typeof meta.tag === "string" && meta.tag !== "") fields.versionTag = meta.tag;
+    cachedVersion = fields;
+    return fields;
+  } catch {
+    return {};
+  }
+}
+
 function log(level: LogLevel, event: string, fields?: LogFields) {
-  // 예약 키를 뒤에 두어 fields가 level·event·timestamp를 덮어쓰지 못하게 한다.
+  // 예약 키를 뒤에 두어 fields가 level·event·timestamp·versionId·versionTag를 덮어쓰지 못하게 한다.
+  // 버전을 모를 때도 fields의 같은 이름 키는 undefined로 지워 JSON에서 빠지게 한다(가짜 버전으로 verify가 속지 않도록).
   // message는 Workers Logs 목록의 표시 열이라 event와 같은 값으로 남긴다
   const entry = {
     ...fields,
+    versionId: undefined,
+    versionTag: undefined,
+    ...versionFields(),
     level,
     event,
     message: event,
