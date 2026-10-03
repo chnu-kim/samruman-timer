@@ -170,30 +170,29 @@ describe("TimerControls", () => {
     expect(onActionChange).toHaveBeenCalledWith("ADD");
   });
 
-  // UX-03: 빠른 적용 모드의 프리셋 라벨 부호가 실제 방향을 따른다
-  it("shows '-' preset labels in quick mode when subtracting and sends SUBTRACT", () => {
+  // UX-03: 즉시 적용되는 하단 바의 라벨 부호가 실제 방향을 따른다
+  it("shows '-' labels on the instant bar when subtracting and sends SUBTRACT", () => {
     mockFetch.mockReturnValueOnce(new Promise(() => {}));
     render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={7200} initialAction="SUBTRACT" />);
 
-    // 일반 모드에서는 누적 입력이므로 '+' 유지
+    // 카드 프리셋은 입력값에 더하는 누적 입력이므로 방향과 무관하게 '+'다
     expect(screen.getByRole("button", { name: "+1시간" })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "테스터" } });
-    fireEvent.click(screen.getByRole("checkbox"));
-
-    expect(screen.queryByRole("button", { name: "+1시간" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "-1시간" }));
+    fireEvent.click(screen.getByRole("button", { name: "-1h" }));
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
     expect(body).toMatchObject({ action: "SUBTRACT", deltaSeconds: 3600 });
   });
 
-  it("keeps '+' preset labels in quick mode when adding", () => {
+  it("has no quick-apply mode toggle; card presets only fill the input", () => {
     render(<Harness timerId={timerId} status="RUNNING" />);
-    fireEvent.click(screen.getByRole("checkbox"));
-    expect(screen.getByRole("button", { name: "+1시간" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "-1시간" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "테스터" } });
+    fireEvent.click(screen.getByRole("button", { name: "+1시간" }));
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "추가 확인 (1시간)" })).toBeEnabled();
   });
 
   it("uses danger style for the confirm button when subtracting", () => {
@@ -466,7 +465,7 @@ describe("TimerControls", () => {
       expect(screen.getByRole("button", { name: "시간을 입력해주세요" })).toBeDisabled();
     });
 
-    it("quick mode applies optimistically on preset tap", async () => {
+    it("instant bar applies optimistically on tap", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -494,11 +493,8 @@ describe("TimerControls", () => {
         target: { value: "테스터" },
       });
 
-      // 빠른 적용 모드 활성화
-      fireEvent.click(screen.getByRole("checkbox"));
-
-      // 프리셋 클릭 — 즉시 optimistic 적용
-      fireEvent.click(screen.getByRole("button", { name: "+1시간" }));
+      // 하단 바 클릭 — 즉시 optimistic 적용
+      fireEvent.click(screen.getByRole("button", { name: "+1h" }));
 
       expect(onModified).toHaveBeenCalledTimes(1);
       expect(onModified).toHaveBeenCalledWith(
@@ -531,18 +527,16 @@ describe("TimerControls", () => {
         />,
       );
 
-      // 닉네임 + 빠른 적용 모드
       fireEvent.change(screen.getByLabelText("시청자 닉네임"), {
         target: { value: "테스터" },
       });
-      fireEvent.click(screen.getByRole("checkbox"));
 
-      // 첫 번째 프리셋 클릭
-      fireEvent.click(screen.getByRole("button", { name: "+1시간" }));
+      // 첫 번째 하단 바 클릭
+      fireEvent.click(screen.getByRole("button", { name: "+1h" }));
       expect(onModified).toHaveBeenCalledTimes(1);
 
-      // 두 번째 프리셋 클릭 — 첫 번째 API 완료 전
-      fireEvent.click(screen.getByRole("button", { name: "+1시간" }));
+      // 두 번째 클릭 — 첫 번째 API 완료 전
+      fireEvent.click(screen.getByRole("button", { name: "+1h" }));
       expect(onModified).toHaveBeenCalledTimes(2);
 
       // fetch가 2번 호출됨 (loading으로 블로킹되지 않음)
