@@ -149,8 +149,8 @@ Access token 만료 시 자동 갱신을 위한 refresh token rotation 방식을
 
 1. 로그인 시 access token(15분) + refresh token(30일) 쌍을 발급하며, 로그인마다 새 `family_id`를 만들고 이후 rotation은 같은 `family_id`로 체이닝
 2. Access token 만료 시 미들웨어가 refresh token으로 자동 갱신 (투명 갱신)
-3. 갱신 시 이전 refresh token은 `UPDATE ... WHERE status = 'ACTIVE'`로 `USED` 처리(`used_at` 기록)하고 새 토큰 발급 (같은 `family_id`). DB에 없는 토큰이나 만료된 `ACTIVE` 토큰은 상태를 바꾸지 않고 실패한다
-4. 이미 `USED`된 토큰 제시 시 해당 family 전체 폐기 (토큰 탈취 대응). 단 아래 동시 요청 grace에 해당하는 `USED` 토큰은 예외. `REVOKED` 토큰도 폐기 UPDATE를 다시 돌린다(아래 "rotation의 비원자성" 때문에 폐기된 family에 늦게 생긴 `ACTIVE` 토큰을 막으려는 것). 바뀐 행이 없으면 `revoked`, 있으면 `reuse_detected`로 거부한다
+3. 갱신 시 사용자 행을 먼저 확인한 뒤, 이전 refresh token의 `USED` 처리(`UPDATE ... WHERE status = 'ACTIVE'`, `used_at` 기록)와 새 토큰 INSERT(같은 `family_id`)를 `db.batch` 하나(트랜잭션)로 실행한다. INSERT는 `INSERT ... SELECT ... WHERE changes() = 1`이라 UPDATE가 실제로 행을 바꿨을 때만 들어간다. DB에 없는 토큰, 만료된 `ACTIVE` 토큰, 사용자 행이 없는 토큰은 상태를 바꾸지 않고 실패한다
+4. 이미 `USED`된 토큰 제시 시 해당 family 전체 폐기 (토큰 탈취 대응). 단 아래 동시 요청 grace에 해당하는 `USED` 토큰은 예외. `REVOKED` 토큰도 폐기 UPDATE를 다시 돌린다. 바뀐 행이 없으면 `revoked`, 있으면 `reuse_detected`로 거부한다. rotation을 원자화한 뒤로는 폐기된 family에 `ACTIVE` 토큰이 새로 생기지 않지만(아래 "rotation의 원자성"), 원자화 이전 코드가 남긴 행에 대한 방어선이고 UPDATE 한 번이라 비용이 작아 유지한다
 5. 로그아웃 시 해당 family 전체 `REVOKED` 처리
 6. 새 토큰의 만료는 `min(지금 + 30일, family_expires_at)`. 그래서 계속 쓰는 세션도 로그인 후 90일이 지나면 다시 로그인해야 한다. 갱신할 때 `family_expires_at`이 이미 지났으면 토큰 자체 만료가 남아 있어도 거부한다
 7. 로그인할 때 그 사용자의 만료된 행을 지운다. rotation마다 행이 하나씩 쌓이기 때문이다
@@ -169,16 +169,19 @@ access token이 만료된 상태에서 여러 요청이 같은 refresh token으�
 - 공격자가 탈취한 refresh token을 사용하면, 정상 사용자의 다음 갱신 시 이미 `USED` 상태의 토큰이 감지됨
 - 감지 즉시 해당 family의 `ACTIVE`/`USED` 토큰을 모두 `REVOKED` 처리 (`revokeRefreshTokenFamily`)
 - 공격자와 정상 사용자 모두 재로그인 필요
-- 폐기 뒤에도 두 브라우저는 폐기된 refresh 쿠키를 계속 보낸다(쿠키는 로그아웃에서만 지운다). 이 요청들도 폐기 UPDATE를 다시 돌리지만 바뀐 행이 없어 `revoked`(info)로 거부되므로, 탈취 의심 경보 `auth.refresh.reuse_detected`는 family를 실제로 폐기한 요청에서만 나간다(보통 사건당 한 번. 폐기 뒤 늦게 생긴 `ACTIVE` 토큰을 다시 막은 경우엔 한 번 더 나갈 수 있다)
+- 폐기 뒤에도 두 브라우저는 폐기된 refresh 쿠키를 계속 보낸다(쿠키는 로그아웃에서만 지운다). 이 요청들도 폐기 UPDATE를 다시 돌리지만 바뀐 행이 없어 `revoked`(info)로 거부되므로, 탈취 의심 경보 `auth.refresh.reuse_detected`는 family를 실제로 폐기한 요청에서만 나간다(사건당 한 번. 원자화 이전에 늦게 생긴 `ACTIVE` 토큰이 남아 있던 family라면 그 토큰을 막으며 한 번 더 나갈 수 있다)
 
-#### rotation의 비원자성 (알려진 한계)
+#### rotation의 원자성
 
-rotation은 `USED` 전환 UPDATE → 새 토큰 INSERT → 사용자 조회 → (미들웨어) JWT 서명 순으로 각각 따로 실행된다. UPDATE가 성공한 뒤 이후 단계에서 D1 장애가 나면 미들웨어는 500 `INTERNAL_ERROR`를 주고, 브라우저는 이미 `USED`가 된 이전 refresh 쿠키를 그대로 가진다(새 쿠키가 설정되지 않음).
+rotation 순서는 토큰 조회 → 상태·만료 확인 → 사용자 조회 → `db.batch([USED 전환 UPDATE, 새 토큰 INSERT ... WHERE changes() = 1])` → (미들웨어) JWT 서명·쿠키 설정이다.
 
-- 30초 안에 다시 요청하면 grace로 통과해 새 access token(15분)만 받는다
-- 그 뒤 access가 만료되면 이전 토큰은 grace 밖의 `USED`라 `reuse_detected`로 판정된다. family가 폐기되고, 탈취가 아닌데도 warn이 남으며, 사용자는 원래 장애로부터 약 15분 뒤 로그아웃된다
+- 사용자 조회를 상태 변경보다 먼저 하므로, 사용자 행이 없으면 아무것도 바꾸지 않고 `user_missing`으로 거부한다
+- batch는 하나의 트랜잭션이다. batch가 실패하면 UPDATE도 롤백되어 이전 토큰이 `ACTIVE`로 남는다. 미들웨어는 500 `INTERNAL_ERROR`를 주고 브라우저는 이전 쿠키를 그대로 갖지만, 그 쿠키는 다음 요청에서 정상 rotation된다(`reuse_detected` 오탐이 생기지 않는다)
+- 동시 요청이 먼저 `USED`로 바꿨으면 UPDATE가 0행이고 INSERT도 실행되지 않는다. 이때는 상태를 다시 읽어 grace 또는 재사용 판정으로 간다
 
-장애가 UPDATE 뒤에 정확히 떨어져야 하는 드문 경우라 이 PR에서는 구조를 바꾸지 않았다. `auth.refresh.failed`에는 familyId·userId가 없으므로(토큰을 조회하기 전에 실패할 수 있다) ID로는 잇지 못한다. `auth.refresh.failed` 뒤 약 15분 안에 `reuse_detected`가 나오면 시간으로 짝지어 이 경우를 먼저 의심한다. 고치려면 UPDATE와 INSERT를 `db.batch`로 묶어 한쪽이 실패하면 이전 토큰이 `ACTIVE`로 남게 한다
+이전에는 UPDATE·INSERT·사용자 조회가 각각 따로 실행돼, UPDATE 뒤에 D1 장애가 나면 이전 쿠키가 grace 밖의 `USED`가 되어 약 15분 뒤 탈취가 아닌데도 `reuse_detected`로 family가 폐기될 수 있었다.
+
+남은 창은 batch가 커밋된 뒤 응답이 브라우저에 닿지 못한 경우(JWT 서명 실패, 연결 끊김)뿐이다. 이때 브라우저는 `USED`가 된 이전 쿠키를 가진 채 남아 30초 grace 뒤 `reuse_detected`가 될 수 있다. DB 장애가 아니라 응답 전달 실패라 드물고, 서버만으로는 막을 수 없다.
 
 #### DB 스키마 (`refresh_tokens`, `migrations/0007_refresh_tokens.sql` + `0009`)
 

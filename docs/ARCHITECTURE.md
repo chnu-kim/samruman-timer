@@ -342,7 +342,7 @@ Cloudflare 대시보드 → Workers & Pages → `samrumantimer` → Observabilit
 - 서버 오류 전체: `level` = `error`
 - 마이그레이션 누락 의심: `kind` = `schema_drift` (보이면 `npx wrangler d1 migrations list samrumantimer-db --remote`로 확인)
 - 로그인 장애: `event` = `auth.login.failed`, `stage`·`status`·`timedOut`로 나눠 본다
-- 세션 탈취 의심: `event` = `auth.refresh.reuse_detected` (보통 사건당 한 건. 약 15분 전에 `auth.refresh.failed`가 있었다면 AUTH.md "rotation의 비원자성"의 오탐일 수 있다. `auth.refresh.failed`에는 familyId가 없어 시간으로만 짝짓는다)
+- 세션 탈취 의심: `event` = `auth.refresh.reuse_detected` (보통 사건당 한 건. rotation의 DB 쓰기는 원자적이라 `auth.refresh.failed` 뒤에 따라오는 오탐은 없다. 남은 예외는 AUTH.md "rotation의 원자성" 참고)
 - 묶인 오류는 Issues 탭에서 본다
 
 ### wrangler tail

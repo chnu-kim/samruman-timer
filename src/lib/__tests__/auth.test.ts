@@ -249,6 +249,57 @@ describe("rotateRefreshToken", () => {
     expect(result.nickname).toBe("tester");
     expect(result.newRawToken).toBeTruthy();
     expect(result.familyId).toBe("family-1");
+
+    // USED 전환과 새 토큰 INSERT는 batch 한 번으로 실행된다
+    expect(db.batch).toHaveBeenCalledTimes(1);
+    expect(db.batch.mock.calls[0][0]).toHaveLength(2);
+    expect(db._stmt.run).not.toHaveBeenCalled();
+    const sqls = db.prepare.mock.calls.map((c) => String(c[0]));
+    const updateIdx = sqls.findIndex((q) => q.includes("SET status = 'USED'"));
+    const insertIdx = sqls.findIndex((q) => q.startsWith("INSERT INTO refresh_tokens"));
+    expect(sqls[updateIdx]).toContain("WHERE id = ? AND status = 'ACTIVE'");
+    // INSERT는 UPDATE가 실제로 행을 바꿨을 때만 들어간다
+    expect(sqls[insertIdx]).toMatch(/SELECT \?, \?, \?, \?, 'ACTIVE', \?, \?, \? WHERE changes\(\) = 1$/);
+    expect(updateIdx).toBeLessThan(insertIdx);
+    // 사용자 조회는 상태 변경 문장보다 먼저 준비된다
+    const userIdx = sqls.findIndex((q) => q.includes("FROM users"));
+    expect(userIdx).toBeGreaterThan(-1);
+    expect(userIdx).toBeLessThan(updateIdx);
+    // 새 토큰 INSERT의 바인딩: user_id, token_hash, family_id
+    const insertBinds = db._stmt.bind.mock.calls[insertIdx];
+    expect(insertBinds[1]).toBe("user-1");
+    expect(insertBinds[2]).toBe(result.newTokenHash);
+    expect(insertBinds[3]).toBe("family-1");
+  });
+
+  it("batch(USED 전환 + 새 토큰 INSERT)가 실패하면 throw하고 그 밖의 쓰기는 하지 않는다", async () => {
+    // D1 batch는 트랜잭션이라 실패하면 UPDATE도 롤백되어 옛 토큰이 ACTIVE로 남는다.
+    // 그래서 브라우저가 옛 쿠키로 다시 오면 USED 재사용(reuse_detected)이 아니라 정상 rotation이 된다
+    const activeRow = {
+      id: "rt-1",
+      user_id: "user-1",
+      token_hash: "h",
+      family_id: "family-1",
+      status: "ACTIVE",
+      expires_at: new Date(Date.now() + 86400000).toISOString(),
+      created_at: new Date(Date.now() - 120_000).toISOString(),
+      used_at: null,
+    };
+    const user = { id: "user-1", chzzk_user_id: "chzzk-1", nickname: "tester" };
+    db._stmt.first.mockResolvedValueOnce(activeRow).mockResolvedValueOnce(user);
+    db.batch.mockRejectedValueOnce(new Error("D1_ERROR: network"));
+
+    await expect(rotateRefreshToken(db as unknown as D1Database, "retry-token")).rejects.toThrow("D1_ERROR");
+    // batch 밖에서 따로 실행된 쓰기(USED 전환·폐기)가 없다
+    expect(db._stmt.run).not.toHaveBeenCalled();
+
+    // 옛 토큰은 여전히 ACTIVE이므로 재시도는 폐기 없이 정상 rotation된다
+    db._stmt.first.mockResolvedValueOnce(activeRow).mockResolvedValueOnce(user);
+    const retry = await rotateRefreshToken(db as unknown as D1Database, "retry-token");
+    if (!retry.ok) throw new Error(`재시도 실패: ${retry.reason}`);
+    expect(retry.newRawToken).toBeTruthy();
+    const sqls = db.prepare.mock.calls.map((c) => String(c[0]));
+    expect(sqls.some((q) => q.includes("SET status = 'REVOKED'"))).toBe(false);
   });
 
   it("USED 토큰이 방금(30초 이내) rotation됨 → grace (사용자 정보 반환)", async () => {
@@ -341,12 +392,13 @@ describe("rotateRefreshToken", () => {
 
     const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
     expect(result).toEqual({ ok: false, reason: "revoked", userId: "user-1", familyId: "family-1" });
-    // 폐기 UPDATE는 다시 돌린다(늦게 생긴 ACTIVE 토큰 차단)
+    // 폐기 UPDATE는 다시 돌린다(원자화 이전에 늦게 생긴 ACTIVE 토큰 차단)
     expect(db._stmt.run).toHaveBeenCalledTimes(1);
   });
 
   it("REVOKED 토큰인데 폐기된 family에 늦게 생긴 ACTIVE 토큰이 있으면 폐기하고 reuse_detected", async () => {
-    // 다른 요청의 USED 전환과 새 토큰 INSERT 사이에 family 폐기가 끼어 ACTIVE 토큰이 남은 경우
+    // rotation 원자화 이전 코드에서 USED 전환과 새 토큰 INSERT 사이에 family 폐기가 끼어 ACTIVE 토큰이 남은 경우.
+    // 지금은 생기지 않지만 기존 데이터에 대한 방어선으로 재폐기를 유지한다
     db._stmt.first.mockResolvedValue({
       id: "rt-1",
       user_id: "user-1",
@@ -423,20 +475,22 @@ describe("rotateRefreshToken", () => {
           created_at: new Date(Date.now() - 120_000).toISOString(),
           used_at: null,
         })
+      .mockResolvedValueOnce({ id: "user-1", chzzk_user_id: "chzzk-1", nickname: "tester" })
       // 다른 요청이 방금 사용함
-      .mockResolvedValueOnce({ status: "USED", used_at: new Date().toISOString() })
-      .mockResolvedValueOnce({ id: "user-1", chzzk_user_id: "chzzk-1", nickname: "tester" });
+      .mockResolvedValueOnce({ status: "USED", used_at: new Date().toISOString() });
 
-    // UPDATE returns 0 changes (concurrent use)
-    db._stmt.run.mockResolvedValue({ meta: { changes: 0 } });
+    // batch의 UPDATE가 0행(동시 사용). INSERT는 changes() = 1 조건으로 실행되지 않는다
+    db.batch.mockResolvedValueOnce([{ meta: { changes: 0 } }, { meta: { changes: 0 } }]);
 
     const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
     if (!result.ok) throw new Error(`rotation 실패: ${result.reason}`);
     expect(result.userId).toBe("user-1");
     expect(result.newRawToken).toBeNull();
     expect(result.newTokenHash).toBeNull();
-    // family 폐기 호출 안 됨 (UPDATE 1회만)
-    expect(db._stmt.run).toHaveBeenCalledTimes(1);
+    // family 폐기 호출 안 됨, 사용자도 다시 조회하지 않는다(token, user, 상태 재조회 3회)
+    expect(db.batch).toHaveBeenCalledTimes(1);
+    expect(db._stmt.run).not.toHaveBeenCalled();
+    expect(db._stmt.first).toHaveBeenCalledTimes(3);
   });
 
   it("동시 사용 (changes=0) + 그 사이 다른 요청이 family를 폐기함 → revoked (중복 경보 없음)", async () => {
@@ -454,14 +508,17 @@ describe("rotateRefreshToken", () => {
           created_at: new Date(Date.now() - 120_000).toISOString(),
           used_at: null,
         })
+      .mockResolvedValueOnce({ id: "user-1", chzzk_user_id: "chzzk-1", nickname: "tester" })
       .mockResolvedValueOnce({ status: "REVOKED", used_at: null });
 
+    db.batch.mockResolvedValueOnce([{ meta: { changes: 0 } }, { meta: { changes: 0 } }]);
     db._stmt.run.mockResolvedValue({ meta: { changes: 0 } });
 
     const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
     expect(result).toMatchObject({ ok: false, reason: "revoked", userId: "user-1", familyId: "family-1" });
-    // UPDATE (0 changes) + family 폐기 시도(0 changes)
-    expect(db._stmt.run).toHaveBeenCalledTimes(2);
+    // batch(UPDATE 0 changes) + family 폐기 시도(0 changes)
+    expect(db.batch).toHaveBeenCalledTimes(1);
+    expect(db._stmt.run).toHaveBeenCalledTimes(1);
   });
 
   it("동시 사용 (changes=0) + 다른 요청이 grace 밖에서 USED로 만듦 → 이번 요청이 폐기하면 reuse_detected", async () => {
@@ -476,16 +533,16 @@ describe("rotateRefreshToken", () => {
         created_at: new Date(Date.now() - 120_000).toISOString(),
         used_at: null,
       })
+      .mockResolvedValueOnce({ id: "user-1", chzzk_user_id: "chzzk-1", nickname: "tester" })
       .mockResolvedValueOnce({ status: "USED", used_at: new Date(Date.now() - 60_000).toISOString() });
-    db._stmt.run
-      .mockResolvedValueOnce({ meta: { changes: 0 } }) // USED 전환 CAS 실패
-      .mockResolvedValueOnce({ meta: { changes: 2 } }); // family 폐기
+    db.batch.mockResolvedValueOnce([{ meta: { changes: 0 } }, { meta: { changes: 0 } }]); // USED 전환 CAS 실패
+    db._stmt.run.mockResolvedValueOnce({ meta: { changes: 2 } }); // family 폐기
 
     const result = await rotateRefreshToken(db as unknown as D1Database, "reused-token");
     expect(result).toEqual({ ok: false, reason: "reuse_detected", userId: "user-1", familyId: "family-1" });
   });
 
-  it("rotation 뒤 사용자 행이 없으면 user_missing", async () => {
+  it("사용자 행이 없으면 상태를 바꾸지 않고 user_missing", async () => {
     const rawToken = "orphan-token";
     const tokenHash = await hashToken(rawToken);
     db._stmt.first
@@ -500,10 +557,14 @@ describe("rotateRefreshToken", () => {
         used_at: null,
       })
       .mockResolvedValueOnce(null);
-    db._stmt.run.mockResolvedValue({ meta: { changes: 1 } });
 
     const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
     expect(result).toEqual({ ok: false, reason: "user_missing", userId: "user-gone", familyId: "family-1" });
+    // USED 전환도 새 토큰 발급도 하지 않는다(옛 토큰이 ACTIVE로 남는다)
+    expect(db.batch).not.toHaveBeenCalled();
+    expect(db._stmt.run).not.toHaveBeenCalled();
+    const sqls = db.prepare.mock.calls.map((c) => String(c[0]));
+    expect(sqls.some((q) => q.includes("SET status = 'USED'") || q.startsWith("INSERT"))).toBe(false);
   });
 
   it("grace 경로에서 사용자 행이 없어도 user_missing", async () => {
