@@ -95,6 +95,8 @@ OBS 브라우저 소스용. 앱 크롬(헤더·푸터) 없이 카운트다운을
 
 **렌더 오류** (`overlay/error.tsx`, `src/lib/overlay-recovery.ts`): 아무것도 그리지 않고 투명 배경과 오버레이 모드(`src/lib/overlay-mode.ts`)를 다시 적용한다. 페이지가 언마운트되며 이를 지우기 때문이다. `reset()`을 5초부터 두 배씩, 최대 60초 간격으로 다시 시도하고, 5번 실패하면 `location.reload()`한다. reload는 `sessionStorage` 카운터로 장애당 2번까지만 하고(저장소를 읽거나 쓸 수 없으면 하지 않는다), 그 뒤에는 60초 간격 `reset()`을 계속한다. 타이머를 그린 뒤 5분 동안 렌더 오류 없이 버텨야 회복으로 보고 횟수와 상한을 되돌린다. 그리기만 하면 바로 되돌리면, 데이터를 그린 다음에야 터지는 오류에서 백오프와 reload 상한이 매번 처음부터 시작돼 끝없이 돈다. 같은 오류가 5분 넘게 정상으로 버틴 뒤에야 다시 난다면 그때마다 새 장애로 보고 reload를 다시 2번까지 한다. `retry()`는 매번 RSC 요청을 보내므로 쓰지 않는다. 루트 레이아웃에서 난 오류는 `global-error.tsx`가 받는데, 오버레이 경로이면 투명한 빈 화면만 그리고 같은 정책(`src/hooks/useOverlayRecovery.ts`)으로 `reset()`·reload를 자동으로 시도한다.
 
+PWA 서비스워커는 OBS 브라우저 소스에서 등록하지 않는다. 이미 SW가 있는 브라우저(설정 화면의 iframe 미리보기, 오버레이 URL을 직접 연 탭)에서도 오버레이 문서 요청과 그 문서가 보낸 청크 요청(referrer가 오버레이)은 가로채지 않는다. 예외로 CSS가 부르는 폰트는 referrer가 CSS 파일이라 해시 정적 자산 캐시를 탈 수 있다. 방송 화면에 오프라인 안내나 오래된 시간이 나가지 않게 하기 위해서다 (`docs/ARCHITECTURE.md`의 PWA 절).
+
 ### 6. 로그인 (`/login`, `/callback`)
 
 CHZZK OAuth 로그인 진입 페이지. OAuth 콜백은 `/api/auth/callback`이 처리하고, `/callback` 페이지는 직접 들어오면 `/`로 보내기만 한다.
