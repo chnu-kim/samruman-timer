@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDB, withErrorHandler } from "@/lib/db";
 import { compareSchema, EXPECTED_LATEST_MIGRATION } from "@/lib/health";
 import { logger } from "@/lib/logger";
+import type { ApiErrorResponse } from "@/types";
 
 // 프로브가 매번 실제 Worker·D1에 닿아야 하므로 응답을 어디에도 캐시하지 않는다
 const NO_STORE = { "Cache-Control": "no-store" };
@@ -34,7 +35,7 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
       actual,
     });
     return NextResponse.json(
-      { error: { code: "SERVICE_UNAVAILABLE", message: "서비스를 사용할 수 없습니다" } },
+      { error: { code: "SERVICE_UNAVAILABLE", message: "서비스를 사용할 수 없습니다" } } satisfies ApiErrorResponse,
       { status: 503, headers: NO_STORE }
     );
   }
