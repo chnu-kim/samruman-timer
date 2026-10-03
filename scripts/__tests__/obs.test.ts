@@ -18,6 +18,15 @@ import {
   attributeVersion,
   collectOccurrences,
   judgeVerify,
+  evaluateVerify,
+  fetchVerifyBundle,
+  createClient,
+  buildPluginCode,
+  slimEvent,
+  slimOccurrence,
+  InputError,
+  VERIFY_INPUT_FORMAT,
+  DEFAULT_ACCOUNT_ID,
   MAX_LIMIT,
   EXIT,
   SERVICE,
@@ -831,5 +840,554 @@ describe("errors·events 기간·경로", () => {
     expect(queryFilters(r.calls[0])).toContainEqual(eq("path", "/api/x"));
     const bad = await exec(["errors", "--since", "1h", "--until", "2h"], () => ok({}));
     expect(bad.code).toBe(EXIT.FAILED);
+  });
+});
+
+describe("verify --input (플러그인 조회 결과로 판정)", () => {
+  // 테스트용 합성 계정 ID. 플러그인 sandbox가 주입하는 accountId를 흉내 낸다
+  const ACCT = "0".repeat(32);
+  const SINCE = "2026-09-30T12:00:00.000Z";
+  const UNTIL = new Date(NOW).toISOString();
+  const WINDOW = ["--since", SINCE, "--until", UNTIL];
+  const INPUT_NOTE = "조회 결과 파일로 판정했다";
+
+  /** 쪽 메타데이터(total_pages, cursors.after)까지 갖춘 응답을 주는 라우트. 플러그인 응답 모양({ success, status, result, result_info })과 같다 */
+  function fullRoute(opts: {
+    errors?: unknown[];
+    tagEvents?: unknown[];
+    issuePages?: unknown[][];
+    occurrences?: Record<string, unknown[][]>;
+  }): Route {
+    return (url, init) => {
+      if (url.pathname.endsWith("/telemetry/query")) {
+        const body = JSON.parse(String(init.body));
+        const isTag = body.parameters.filters.some((f: { key: string }) => f.key === "versionTag");
+        return ok({ events: { events: isTag ? (opts.tagEvents ?? []) : (opts.errors ?? []) } });
+      }
+      if (url.pathname.endsWith("/issues")) {
+        const pages = opts.issuePages ?? [[]];
+        const page = Number(url.searchParams.get("page") ?? 1);
+        const result = pages[page - 1] ?? [];
+        return {
+          body: {
+            success: true,
+            errors: [],
+            messages: [],
+            result,
+            result_info: { page, per_page: 100, count: result.length, total_count: pages.flat().length, total_pages: pages.length },
+          },
+        };
+      }
+      const m = /\/issues\/([^/]+)\/occurrences$/.exec(url.pathname);
+      if (m) {
+        const pages = opts.occurrences?.[m[1]] ?? [[]];
+        const cursor = url.searchParams.get("cursor");
+        const idx = cursor ? Number(cursor.slice(1)) - 1 : 0;
+        const result = pages[idx] ?? [];
+        const after = idx + 1 < pages.length ? `p${idx + 2}` : null;
+        return {
+          body: { success: true, errors: [], messages: [], result, result_info: { per_page: 100, count: result.length, cursors: { after } } },
+        };
+      }
+      return undefined;
+    };
+  }
+
+  /** 플러그인 execute의 cloudflare.request를 라우트로 흉내 낸다 */
+  function fakeCloudflare(route: Route) {
+    const calls: { method: string; path: string; body: unknown }[] = [];
+    const cloudflare = {
+      request: async ({ method, path, query, body }: { method: string; path: string; query?: Record<string, unknown>; body?: unknown }) => {
+        const url = new URL(`https://api.cloudflare.com/client/v4${path}`);
+        for (const [k, v] of Object.entries(query ?? {})) if (v !== undefined) url.searchParams.set(k, String(v));
+        calls.push({ method, path: url.pathname, body });
+        const res = route(url, { method, body: body === undefined ? undefined : JSON.stringify(body) });
+        if (!res) return { success: false, status: 404, result: null, errors: [{ code: 404, message: "no route" }], messages: [] };
+        return { status: res.status ?? 200, ...(res.body as object) };
+      },
+    };
+    return { cloudflare, calls };
+  }
+
+  /** 출력된 코드를 sandbox처럼 cloudflare·accountId만 보이는 함수로 돌린다(모듈 스코프 참조가 있으면 여기서 깨진다) */
+  async function runPluginCode(code: string, route: Route) {
+    const { cloudflare, calls } = fakeCloudflare(route);
+    const fn = new Function("cloudflare", "accountId", `"use strict"; return (${code});`)(cloudflare, ACCT);
+    const result = await fn();
+    // execute 결과는 JSON으로 대화에 돌아오고 파일로 저장된다
+    return { bundle: JSON.parse(JSON.stringify(result)), calls };
+  }
+
+  async function execOffline(argv: string[], files: Record<string, string> = {}, env: Record<string, string | undefined> = {}) {
+    const out: string[] = [];
+    const err: string[] = [];
+    const fetch = vi.fn();
+    const code = await run(argv, {
+      fetch: fetch as unknown as typeof globalThis.fetch,
+      env,
+      now: () => NOW,
+      out: (l: string) => out.push(l),
+      err: (l: string) => err.push(l),
+      readFile: (p: string) => {
+        if (!(p in files)) throw new Error(`ENOENT: ${p}`);
+        return files[p];
+      },
+    });
+    return { code, out, err, fetch };
+  }
+
+  /** --print-plugin-code → 플러그인 실행 → --input 판정까지 한 번에 돈다 */
+  async function viaPlugin(args: string[], route: Route) {
+    const printed = await execOffline(["verify", ...args, "--print-plugin-code"]);
+    expect(printed.code).toBe(EXIT.OK);
+    const { bundle, calls } = await runPluginCode(printed.out.join("\n"), route);
+    const judged = await execOffline(["verify", "--input", "bundle.json", ...args], { "bundle.json": JSON.stringify(bundle) });
+    return { judged, bundle, calls, printed };
+  }
+
+  const withoutInputNote = (line: string) => {
+    const r = JSON.parse(line);
+    return { ...r, notes: r.notes.filter((n: string) => !n.startsWith(INPUT_NOTE)) };
+  };
+
+  const infoEvent = rawEvent({ level: "info", event: "auth.login.succeeded", versionTag: TAG });
+  const occ = (over: Record<string, unknown>) => ({
+    id: "o1",
+    timestamp: "2026-10-03T11:30:00Z",
+    worker: { scriptVersion: { id: "ver-1", tag: TAG } },
+    invocation: { id: "inv", method: "GET", path: "/api/x", statusCode: 500 },
+    error: { name: "Error", message: "boom", stack: "Error: boom\n    at a" },
+    ...over,
+  });
+  const recentOld = (i: number) =>
+    occ({ id: `o${i}`, timestamp: NOW - 60_000 * (i + 1), worker: { scriptVersion: { id: "ver-0", tag: "old" } } });
+
+  const scenarios: { name: string; args: string[]; route: Route; code: number }[] = [
+    {
+      name: "clean(다른 태그 occurrence만)",
+      args: [],
+      route: fullRoute({ tagEvents: [infoEvent], issuePages: [[{ id: "i1" }]], occurrences: { i1: [[recentOld(0)]] } }),
+      code: EXIT.OK,
+    },
+    { name: "태그 error로 재발", args: [], route: fullRoute({ errors: [errEvent()], tagEvents: [errEvent()] }), code: EXIT.RECURRED },
+    {
+      name: "태그 occurrence로 재발",
+      args: [],
+      route: fullRoute({ tagEvents: [infoEvent], issuePages: [[{ id: "i1" }]], occurrences: { i1: [[occ({})]] } }),
+      code: EXIT.RECURRED,
+    },
+    {
+      name: "버전 모르는 error는 unattributed",
+      args: ["--skip-issues"],
+      route: fullRoute({
+        errors: [{ timestamp: Date.parse("2026-10-03T11:30:00Z"), source: { level: "error", event: "api.unhandled" } }],
+        tagEvents: [infoEvent],
+      }),
+      code: EXIT.FAILED,
+    },
+    {
+      name: "--event warn 재발",
+      args: ["--event", "timer.modify.conflict_exhausted"],
+      route: fullRoute({
+        errors: [rawEvent({ level: "warn", event: "timer.modify.conflict_exhausted", versionTag: TAG })],
+        tagEvents: [infoEvent],
+      }),
+      code: EXIT.RECURRED,
+    },
+    {
+      name: "--expect-event 없음",
+      args: ["--skip-issues", "--expect-event", "timer.modify.succeeded"],
+      route: fullRoute({ tagEvents: [infoEvent] }),
+      code: EXIT.FAILED,
+    },
+    { name: "태그 로그 0건", args: [], route: fullRoute({}), code: EXIT.FAILED },
+    {
+      name: "--issue 하나만",
+      args: ["--issue", "i9"],
+      route: fullRoute({ tagEvents: [infoEvent], occurrences: { i9: [[recentOld(0)]] } }),
+      code: EXIT.OK,
+    },
+    {
+      name: "versionId로 귀속",
+      args: ["--skip-issues"],
+      route: fullRoute({ errors: [errEvent({ versionTag: undefined, versionId: "ver-1" })], tagEvents: [infoEvent] }),
+      code: EXIT.RECURRED,
+    },
+    {
+      name: "Issue 목록 여러 쪽",
+      args: [],
+      route: fullRoute({ tagEvents: [infoEvent], issuePages: [[{ id: "i1" }], [{ id: "i2" }]], occurrences: { i2: [[occ({})]] } }),
+      code: EXIT.RECURRED,
+    },
+    {
+      name: "occurrence가 페이지 한도에서 잘림",
+      args: ["--issue", "i1"],
+      route: fullRoute({ tagEvents: [infoEvent], occurrences: { i1: Array.from({ length: 7 }, (_, i) => [recentOld(i)]) } }),
+      code: EXIT.FAILED,
+    },
+    {
+      name: "occurrence 여러 쪽을 넘겨 since에 닿음",
+      args: ["--issue", "i1"],
+      route: fullRoute({
+        tagEvents: [infoEvent],
+        occurrences: {
+          i1: [[recentOld(0)], [occ({ id: "o2", timestamp: "2026-10-03T11:00:00Z" })], [occ({ id: "o3", timestamp: "2026-09-01T00:00:00Z" })]],
+        },
+      }),
+      code: EXIT.RECURRED,
+    },
+    {
+      name: "error 후보 2000건 잘림",
+      args: ["--skip-issues"],
+      route: fullRoute({
+        errors: Array.from({ length: MAX_LIMIT }, () => errEvent({ versionTag: "000000000000", versionId: "ver-0" })),
+        tagEvents: [infoEvent],
+      }),
+      code: EXIT.FAILED,
+    },
+  ];
+
+  it.each(scenarios)("플러그인 경로와 토큰 경로가 같은 판정을 낸다: $name", async ({ args, route, code }) => {
+    const network = await exec(["verify", "--tag", TAG, ...WINDOW, ...args], route);
+    const { judged, calls } = await viaPlugin(["--tag", TAG, ...WINDOW, ...args], route);
+    expect(network.code).toBe(code);
+    expect(judged.code).toBe(code);
+    expect(judged.fetch).not.toHaveBeenCalled();
+    expect(withoutInputNote(judged.out[0])).toEqual(JSON.parse(network.out[0]));
+    expect(judged.out.slice(1)).toEqual(network.out.slice(1));
+    expect(judged.err[0]).toBe(network.err[0]);
+    expect(JSON.parse(judged.out[0]).notes.some((n: string) => n.startsWith(INPUT_NOTE))).toBe(true);
+    // 플러그인 코드는 조회용 엔드포인트만 부른다
+    for (const c of calls) {
+      expect(c.path.startsWith(`/client/v4/accounts/${ACCT}/workers/observability/`)).toBe(true);
+      const readOnly =
+        (c.method === "POST" && c.path.endsWith("/telemetry/query") && (c.body as { dry: boolean }).dry === true) ||
+        (c.method === "GET" && (c.path.endsWith("/issues") || /\/issues\/[^/]+\/occurrences$/.test(c.path)));
+      expect(readOnly).toBe(true);
+    }
+  });
+
+  it("--json 판정 객체도 토큰 경로와 같다", async () => {
+    const route = fullRoute({ errors: [errEvent()], tagEvents: [errEvent()], issuePages: [[]] });
+    const network = await exec(["verify", "--tag", TAG, ...WINDOW, "--json"], route);
+    const { judged } = await viaPlugin(["--tag", TAG, ...WINDOW, "--json"], route);
+    expect(judged.code).toBe(EXIT.RECURRED);
+    const a = JSON.parse(judged.out.join("\n"));
+    a.notes = a.notes.filter((n: string) => !n.startsWith(INPUT_NOTE));
+    expect(a).toEqual(JSON.parse(network.out.join("\n")));
+  });
+
+  it("evaluateVerify는 토큰 경로가 모은 묶음과 플러그인이 모은 묶음에 같은 판정을 낸다", async () => {
+    const route = fullRoute({ tagEvents: [infoEvent], issuePages: [[{ id: "i1" }]], occurrences: { i1: [[occ({})]] } });
+    const { fetch } = mockFetch(route);
+    const client = createClient({ fetch: fetch as unknown as typeof globalThis.fetch, accountId: ACCT, token: TOKEN });
+    const opts = { tag: TAG, from: Date.parse(SINCE), to: NOW };
+    const fromNetwork = evaluateVerify(await fetchVerifyBundle(client, opts), opts, { strict: true });
+    const { bundle } = await runPluginCode(buildPluginCode(opts), route);
+    const fromPlugin = evaluateVerify(bundle, opts, { strict: true });
+    expect(fromPlugin.report).toEqual(fromNetwork.report);
+    expect(fromPlugin.result.verdict).toBe("recurred");
+  });
+
+  describe("파일 입력은 근거가 애매하면 2로 기운다", () => {
+    const args = ["--tag", TAG, ...WINDOW];
+    async function judge(bundle: unknown, extra: string[] = []) {
+      return execOffline(["verify", "--input", "b.json", ...args, ...extra], { "b.json": JSON.stringify(bundle) });
+    }
+    async function pluginBundle(route: Route, extra: string[] = []) {
+      return (await viaPlugin([...args, ...extra], route)).bundle;
+    }
+
+    it("occurrence 다음 쪽이 파일에 없으면 truncated(2). 이미 찾은 재발은 1", async () => {
+      const route = fullRoute({ tagEvents: [infoEvent], occurrences: { i1: [[recentOld(0)], [recentOld(1)]] } });
+      const bundle = await pluginBundle(route, ["--issue", "i1"]);
+      bundle.occurrences.i1 = bundle.occurrences.i1.slice(0, 1);
+      const r = await judge(bundle, ["--issue", "i1"]);
+      expect(r.code).toBe(EXIT.FAILED);
+      expect(JSON.parse(r.out[0])).toMatchObject({ reason: "truncated" });
+      expect(JSON.parse(r.out[0]).truncated.join("\n")).toContain("i1");
+
+      const withError = await pluginBundle(
+        fullRoute({ errors: [errEvent()], tagEvents: [infoEvent], occurrences: { i1: [[recentOld(0)], [recentOld(1)]] } }),
+        ["--issue", "i1"]
+      );
+      withError.occurrences.i1 = withError.occurrences.i1.slice(0, 1);
+      expect((await judge(withError, ["--issue", "i1"])).code).toBe(EXIT.RECURRED);
+    });
+
+    it("Issue의 occurrence 기록이 통째로 없으면 truncated(2)", async () => {
+      const bundle = await pluginBundle(fullRoute({ tagEvents: [infoEvent], issuePages: [[{ id: "i1" }]], occurrences: { i1: [[]] } }));
+      delete bundle.occurrences.i1;
+      const r = await judge(bundle);
+      expect(r.code).toBe(EXIT.FAILED);
+      expect(JSON.parse(r.out[0]).reason).toBe("truncated");
+    });
+
+    it("active Issue 목록 다음 쪽이 없거나, total_pages 없이 Issue가 있으면 truncated(2)", async () => {
+      const two = await pluginBundle(fullRoute({ tagEvents: [infoEvent], issuePages: [[{ id: "i1" }], [{ id: "i2" }]] }));
+      two.issuePages = two.issuePages.slice(0, 1);
+      expect(JSON.parse((await judge(two)).out[0]).reason).toBe("truncated");
+
+      const noMeta = await pluginBundle(fullRoute({ tagEvents: [infoEvent], issuePages: [[{ id: "i1" }]] }));
+      delete noMeta.issuePages[0].response.result_info;
+      const r = await judge(noMeta);
+      expect(r.code).toBe(EXIT.FAILED);
+      expect(JSON.parse(r.out[0]).reason).toBe("truncated");
+
+      // Issue가 없는 쪽은 메타데이터 없이도 끝이다
+      const empty = await pluginBundle(fullRoute({ tagEvents: [infoEvent], issuePages: [[]] }));
+      delete empty.issuePages[0].response.result_info;
+      expect((await judge(empty)).code).toBe(EXIT.OK);
+    });
+
+    it("occurrence 쪽에 cursor 정보(result_info.cursors)가 없으면 끝까지 봤는지 몰라 truncated(2)", async () => {
+      const bundle = await pluginBundle(fullRoute({ tagEvents: [infoEvent], occurrences: { i1: [[recentOld(0)]] } }), ["--issue", "i1"]);
+      delete bundle.occurrences.i1[0].response.result_info;
+      const r = await judge(bundle, ["--issue", "i1"]);
+      expect(r.code).toBe(EXIT.FAILED);
+      expect(JSON.parse(r.out[0]).reason).toBe("truncated");
+    });
+
+    it("기록된 응답이 실패(403·success:false)면 2", async () => {
+      const bundle = await pluginBundle(fullRoute({ tagEvents: [infoEvent], issuePages: [[]] }));
+      bundle.issuePages[0].response = {
+        success: false,
+        status: 403,
+        result: null,
+        errors: [{ code: 10000, message: "Authentication error" }],
+      };
+      const r = await judge(bundle);
+      expect(r.code).toBe(EXIT.FAILED);
+      expect(r.out).toEqual([]);
+      expect(r.err.join("\n")).toContain("실패한 응답");
+    });
+
+    it("기록된 쿼리가 verify가 보낼 쿼리와 다르면(limit·서비스 필터·기간·dry) 2, 키 순서는 상관없다", async () => {
+      const base = await pluginBundle(fullRoute({ tagEvents: [infoEvent] }), ["--skip-issues"]);
+      const mutate = [
+        (b: Record<string, any>) => (b.candidateQuery.request.limit = 100),
+        (b: Record<string, any>) => (b.tagQuery.request.parameters.filters = b.tagQuery.request.parameters.filters.slice(1)),
+        (b: Record<string, any>) => (b.tagQuery.request.timeframe.from += 1),
+        (b: Record<string, any>) => (b.tagQuery.request.dry = false),
+      ];
+      for (const m of mutate) {
+        const b = JSON.parse(JSON.stringify(base));
+        m(b);
+        const r = await judge(b, ["--skip-issues"]);
+        expect(r.code).toBe(EXIT.FAILED);
+        expect(r.err.join("\n")).toContain("verify가 보낼 요청과 다르다");
+      }
+      // 다른 태그로 받은 파일
+      const other = await execOffline(["verify", "--input", "b.json", "--tag", "111111111111", ...WINDOW, "--skip-issues"], {
+        "b.json": JSON.stringify(base),
+      });
+      expect(other.code).toBe(EXIT.FAILED);
+      const reordered = JSON.parse(JSON.stringify(base));
+      const { queryId, ...rest } = reordered.tagQuery.request;
+      reordered.tagQuery.request = { ...rest, queryId };
+      expect((await judge(reordered, ["--skip-issues"])).code).toBe(EXIT.OK);
+    });
+
+    it("events 배열을 찾을 수 없는 응답이면 0건으로 보지 않고 2", async () => {
+      const bundle = await pluginBundle(fullRoute({ tagEvents: [infoEvent] }), ["--skip-issues"]);
+      bundle.candidateQuery.response.result = null;
+      const r = await judge(bundle, ["--skip-issues"]);
+      expect(r.code).toBe(EXIT.FAILED);
+      expect(r.out).toEqual([]);
+    });
+
+    it.each([
+      ["JSON이 아님", "{not json"],
+      ["객체가 아님", "[]"],
+      ["format 없음", JSON.stringify({ tagQuery: {}, candidateQuery: {} })],
+      ["tagQuery 없음", JSON.stringify({ format: VERIFY_INPUT_FORMAT })],
+    ])("입력 파일이 %s이면 2", async (_name, text) => {
+      const r = await execOffline(["verify", "--input", "b.json", ...args], { "b.json": text });
+      expect(r.code).toBe(EXIT.FAILED);
+      expect(r.out).toEqual([]);
+      expect(r.err.join("\n")).toContain("입력");
+    });
+
+    it("파일을 읽지 못하면 2", async () => {
+      const r = await execOffline(["verify", "--input", "missing.json", ...args]);
+      expect(r.code).toBe(EXIT.FAILED);
+      expect(r.err.join("\n")).toContain("입력");
+    });
+
+    it("--input에서는 --since·--until을 ISO 시각으로 둘 다 받는다(상대 기간은 판정 시점마다 달라진다)", async () => {
+      const bundle = await pluginBundle(fullRoute({ tagEvents: [infoEvent] }), ["--skip-issues"]);
+      const files = { "b.json": JSON.stringify(bundle) };
+      for (const w of [["--since", "3d", "--until", UNTIL], ["--since", SINCE], ["--until", UNTIL], []]) {
+        const r = await execOffline(["verify", "--input", "b.json", "--tag", TAG, ...w, "--skip-issues"], files);
+        expect(r.code).toBe(EXIT.FAILED);
+        expect(r.err.join("\n")).toContain("ISO");
+      }
+    });
+  });
+
+  describe("--print-plugin-code", () => {
+    it("토큰 없이 코드를 내고, 이어서 실행할 --input 명령을 ISO 기간으로 채워 안내한다", async () => {
+      const r = await execOffline([
+        "verify",
+        "--tag",
+        TAG,
+        "--since",
+        "1h",
+        "--event",
+        "auth.login.failed",
+        "--expect-event",
+        "auth.login.succeeded",
+        "--print-plugin-code",
+      ]);
+      expect(r.code).toBe(EXIT.OK);
+      expect(r.fetch).not.toHaveBeenCalled();
+      expect(r.out.join("\n").startsWith("async () =>")).toBe(true);
+      expect(r.err.join("\n")).toContain(
+        `verify --input <파일> --tag ${TAG} --since ${new Date(NOW - 3_600_000).toISOString()} --until ${UNTIL} --event auth.login.failed --expect-event auth.login.succeeded`
+      );
+    });
+
+    it("출력에 토큰·계정 ID를 넣지 않는다(sandbox의 accountId를 쓴다)", async () => {
+      const acct = "1".repeat(32);
+      const r = await execOffline(["verify", "--tag", TAG, "--print-plugin-code"], {}, { CF_OBS_TOKEN: TOKEN, CLOUDFLARE_ACCOUNT_ID: acct });
+      const text = [...r.out, ...r.err].join("\n");
+      expect(r.code).toBe(EXIT.OK);
+      expect(text).not.toContain(TOKEN);
+      expect(text).not.toContain(DEFAULT_ACCOUNT_ID);
+      expect(text).not.toContain(acct);
+      expect(text).toContain("accountId");
+    });
+
+    it("--json을 안내 명령에 옮긴다", async () => {
+      const r = await execOffline(["verify", "--tag", TAG, ...WINDOW, "--json", "--print-plugin-code"]);
+      expect(r.code).toBe(EXIT.OK);
+      const guide = r.err.find((l) => l.includes("verify --input"));
+      expect(guide).toMatch(/ --json(\s|$)/);
+    });
+
+    it("telemetry 응답에서 판정에 쓰는 이벤트 배열만 남긴다(run의 계정·사용자 ID, series·fields는 버린다)", async () => {
+      const acct = "2".repeat(32);
+      const user = "3".repeat(32);
+      const base = fullRoute({ tagEvents: [infoEvent] });
+      const route: Route = (url, init) => {
+        if (!url.pathname.endsWith("/telemetry/query")) return base(url, init);
+        const res = base(url, init) as { body: { result: { events: Record<string, unknown> } } };
+        const result = res.body.result;
+        return ok({
+          run: { accountId: acct, workspaceId: acct, userId: user },
+          events: { ...result.events, series: [{ time: 1, data: [] }], fields: [{ key: "event" }] },
+        });
+      };
+      const network = await exec(["verify", "--tag", TAG, ...WINDOW, "--skip-issues"], route);
+      const { judged, bundle } = await viaPlugin(["--tag", TAG, ...WINDOW, "--skip-issues"], route);
+      const text = JSON.stringify(bundle);
+      expect(text).not.toContain(acct);
+      expect(text).not.toContain(user);
+      expect(text).not.toContain("series");
+      expect(text).not.toContain("fields");
+      expect(judged.code).toBe(network.code);
+      expect(withoutInputNote(judged.out[0])).toEqual(JSON.parse(network.out[0]));
+    });
+
+    it("--until이 미래면 --until을 짚어 2", async () => {
+      const r = await execOffline(["verify", "--input", "b.json", "--tag", TAG, "--since", SINCE, "--until", "2099-01-01T00:00:00.000Z"]);
+      expect(r.code).toBe(EXIT.FAILED);
+      expect(r.err.join("\n")).toContain("--until이 미래다");
+      expect(r.err.join("\n")).not.toContain("--since가 미래다");
+    });
+
+    it("--input과 함께 쓰면 2", async () => {
+      const r = await execOffline(["verify", "--tag", TAG, ...WINDOW, "--input", "b.json", "--print-plugin-code"]);
+      expect(r.code).toBe(EXIT.FAILED);
+    });
+
+    it("둘 다 없는 verify는 여전히 토큰이 없으면 fetch 없이 2", async () => {
+      const r = await execOffline(["verify", "--tag", TAG]);
+      expect(r.code).toBe(EXIT.FAILED);
+      expect(r.fetch).not.toHaveBeenCalled();
+      expect(r.err.join("\n")).toContain("CF_OBS_TOKEN");
+    });
+  });
+
+  describe("slimEvent·slimOccurrence", () => {
+    const events: [string, Record<string, unknown>][] = [
+      ["source 객체", errEvent()],
+      ["source JSON 문자열", { timestamp: NOW, source: JSON.stringify({ level: "error", event: "a.b", versionTag: TAG, stack: "s" }) }],
+      [
+        "최상위에 펼쳐진 앱 필드",
+        {
+          timestamp: "2026-10-03T01:28:07.881Z",
+          event: "auth.oauth_state_invalid",
+          level: "warn",
+          versionTag: "aaaaaaaaaaaa",
+          versionId: "11111111-1111-4111-8111-111111111111",
+          reason: "missing_cookie",
+          stack: "Error\n    at x",
+          $workers: { scriptVersion: { id: "11111111-1111-4111-8111-111111111111" }, event: { request: { path: "/api/x" } } },
+          $metadata: { id: "evt", requestId: "runtime", service: SERVICE, level: "warn", message: "auth.oauth_state_invalid" },
+        },
+      ],
+      [
+        "$metadata만 있는 런타임 예외",
+        {
+          timestamp: NOW,
+          $metadata: { level: "error", message: "Uncaught TypeError", error: "boom", requestId: "r" },
+          $workers: { scriptVersion: { id: "v", tag: "t1" }, requestId: "w" },
+        },
+      ],
+      ["source에 stack만", { timestamp: NOW, source: { stack: "Error\n at a" }, level: "error", $metadata: { level: "error" } }],
+    ];
+
+    it.each(events)("slimEvent는 verify가 읽는 필드를 바꾸지 않는다: %s", (_name, raw) => {
+      expect(normalizeEvent(slimEvent(raw))).toEqual(normalizeEvent(raw));
+    });
+
+    it("slimEvent는 stack 본문과 $workers.event 같은 큰 필드를 덜어 낸다", () => {
+      const slim = slimEvent({
+        ...errEvent(),
+        $workers: { scriptVersion: { id: "v" }, event: { request: { url: "https://example.test/x?q=1" } } },
+      });
+      expect(JSON.stringify(slim)).not.toContain("at a");
+      expect(JSON.stringify(slim)).not.toContain("example.test");
+    });
+
+    it("slimEvent는 JSON 문자열 source의 stack도 덜어 내고 객체로 넣는다", () => {
+      const raw = { timestamp: NOW, source: JSON.stringify(errEvent().source) };
+      const slim = slimEvent(raw);
+      expect(JSON.stringify(slim)).not.toContain("at a");
+      expect(slim.source).toMatchObject({ event: "api.unhandled", stack: "" });
+      expect(normalizeEvent(slim)).toEqual(normalizeEvent(raw));
+    });
+
+    it("slimEvent는 해석할 수 없는 문자열 source를 300자로 자른다(verify는 이 source를 읽지 않는다)", () => {
+      const raw = { timestamp: NOW, level: "error", event: "a.b", source: `not json ${"x".repeat(1000)}` };
+      const slim = slimEvent(raw);
+      expect((slim.source as string).length).toBeLessThanOrEqual(301);
+      expect(normalizeEvent(slim)).toEqual(normalizeEvent(raw));
+    });
+
+    it("플러그인 코드도 JSON 문자열 source의 stack을 덜어 낸다", async () => {
+      const stringSource = { ...errEvent(), source: JSON.stringify(errEvent().source) };
+      const route = fullRoute({ tagEvents: [stringSource], issuePages: [[]], occurrences: {} });
+      const { bundle } = await runPluginCode(buildPluginCode({ tag: TAG, from: Date.parse(SINCE), to: NOW }), route);
+      expect(JSON.stringify(bundle)).not.toContain("at a");
+      expect(JSON.stringify(bundle)).toContain("no such table");
+    });
+
+    it.each([
+      ["worker.scriptVersion", occ({})],
+      [
+        "최상위 scriptVersion",
+        { id: "o", occurredAt: NOW, scriptVersion: { id: "v", tag: TAG }, invocation: { timestamp: NOW, rayId: "r", extra: "x" } },
+      ],
+      ["버전 없음", { id: "o", createdAt: "2026-10-03T00:00:00Z", worker: "weird", error: "plain" }],
+    ])("slimOccurrence는 verify가 읽는 필드를 바꾸지 않는다: %s", (_name, raw) => {
+      expect(normalizeOccurrence(slimOccurrence(raw))).toEqual(normalizeOccurrence(raw as Record<string, unknown>));
+      expect(JSON.stringify(slimOccurrence(raw))).not.toContain("at a");
+    });
+
+    it("InputError는 Error다", () => {
+      expect(new InputError("x")).toBeInstanceOf(Error);
+    });
   });
 });
