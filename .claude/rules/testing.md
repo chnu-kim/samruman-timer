@@ -13,6 +13,7 @@ paths:
 - `src/lib/__tests__/*.test.ts` — lib 단위 테스트
 - `src/__tests__/api/*.test.ts` — 라우트 핸들러 단위 테스트
 - `src/__tests__/proxy.test.ts` — `src/middleware.ts`
+- `src/__tests__/observability-catalog.test.ts` — `logger` 호출과 `docs/OBSERVABILITY.md` 이벤트 카탈로그의 일관성(소스 정적 스캔)
 - `src/__tests__/*-page.test.tsx` — 페이지 컴포넌트 (`projects-page`, `project-detail-page`, `timer-detail-page`, `overlay-page`)
 - `src/components/*/__tests__/*.test.tsx`, `src/hooks/__tests__/*.test.tsx` — 컴포넌트·훅 테스트
 - `scripts/__tests__/*.test.ts` — `scripts/lib/*.mjs`(배포 태그, obs CLI) 단위 테스트. fetch는 주입한 목으로 대신하고 실제 API는 부르지 않는다
