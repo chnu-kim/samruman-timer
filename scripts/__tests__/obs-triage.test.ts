@@ -514,6 +514,13 @@ describe("플러그인 조회 코드는 Issue 행을 판정에 쓰는 필드로 
   });
 });
 
+describe("slimIssue 값 보존", () => {
+  it("숫자로 된 문자열 count는 그대로 두고 글자만 [?]로 바꾼다", () => {
+    expect(slimIssue({ id: "i1", count: "12" })).toEqual({ id: "i1", count: "12" });
+    expect(slimIssue({ id: "i1", count: "d12" })).toEqual({ id: "i1", count: "[?]" });
+  });
+});
+
 describe("triage가 받지 않는 공통 옵션", () => {
   it.each([["--limit", "50"], ["--path", "/api/x"]])("%s를 주면 조용히 무시하지 않고 인자 오류 2", async (flag, value) => {
     const r = await exec(["triage", flag, value], { route: route({}) });
