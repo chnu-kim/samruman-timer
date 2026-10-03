@@ -37,13 +37,14 @@ paths:
 
 ## 운영 로그
 
-규칙의 근거와 이벤트 목록은 `docs/ARCHITECTURE.md` "운영 로그·관측" 절에 있다.
+규칙의 근거, 이벤트 카탈로그, 조회·조사 절차는 `docs/OBSERVABILITY.md`에 있다. 구성과 무료 한도는 `docs/ARCHITECTURE.md` "운영 로그·관측".
 
 - `console.*`을 직접 쓰지 않고 `logger.{info,warn,error}(event, fields)`(`src/lib/logger.ts`)를 쓴다. Workers Logs가 JSON 필드로 검색하려면 한 줄 JSON이어야 한다.
-- 이벤트 키는 영어 dot 표기(`auth.refresh.rejected`)로 쓴다. 새 이벤트를 만들면 ARCHITECTURE의 이벤트 목록에 추가한다.
+- 이벤트 키는 영어 dot 표기(`auth.refresh.rejected`)로 쓴다. 새 이벤트를 만들면 OBSERVABILITY의 이벤트 카탈로그(표와 이벤트별 판단·조사)에 추가한다. 프로덕션에서 조사할 때 그 문서가 유일한 참고이기 때문이다.
 - `requestId`(`request.headers.get("x-request-id")`)를 넣는다. invocation log를 꺼 두었으므로 error 로그에는 `method`와 `path`(`nextUrl.pathname`, 쿼리스트링 제외)도 넣는다.
 - 예외는 `...errorFields(err)`로 펼친다. 메시지 길이를 묶고 `schema_drift`·`timeout`을 분류해 준다.
 - 금지: 토큰·토큰 해시·쿠키·nickname·chzzkUserId·actorName·쿼리스트링·외부 응답 본문. 허용: 내부 userId·timerId·projectId·familyId.
+- `versionId`·`versionTag`는 logger가 붙이는 예약 키다. fields로 넣어도 무시된다.
 - lib 함수는 로깅하지 않고 실패 사유를 반환값으로 돌려준다(`rotateRefreshToken`의 `reason`처럼). 로깅은 라우트·미들웨어가 한다.
 - 정상 흐름이면서 양이 많은 경우(비로그인 401 등)는 남기지 않는다. 무료 로그 한도를 함께 쓴다.
 
