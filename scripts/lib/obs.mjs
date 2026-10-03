@@ -434,7 +434,7 @@ function permissionHint(status) {
   if (status === 401) {
     return "토큰이 유효하지 않다(401). CF_OBS_TOKEN 값과 만료 여부를 확인한다. docs/OBSERVABILITY.md \"1회성 설정\"";
   }
-  return "토큰 권한이 부족하다(403). 계정·Worker 범위를 확인하고, Metadata Read-Only로 로그 쿼리(telemetry/query)가 막히면 API 레퍼런스가 요구하는 \"Workers Observability\" Write(Edit) 권한을 추가한다. Issues만 막히면 verify에 --skip-issues. docs/OBSERVABILITY.md \"1회성 설정\"";
+  return "토큰 권한이 부족하다(403). 계정·Worker 범위를 확인하고, Metadata Read-Only로 로그 쿼리(telemetry/query)가 막히면 API 레퍼런스가 요구하는 legacy 권한 \"Workers Observability\" Edit를 추가한다(Workers 역할 Editor는 배포·시크릿까지 열리므로 고르지 않는다). Issues만 막히면 verify에 --skip-issues. docs/OBSERVABILITY.md \"1회성 설정\"";
 }
 
 /** fetch를 감싸 CF 봉투의 실패와 401/403을 사람이 읽을 메시지로 바꾼다 */

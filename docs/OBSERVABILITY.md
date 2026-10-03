@@ -206,7 +206,9 @@ API 응답의 정확한 모양은 확인되지 않은 채로 만들었다. 정�
 1. Cloudflare 대시보드 → My Profile(또는 Manage Account) → API Tokens → Create Token → Custom token
 2. 권한: 두 문서가 서로 다르게 말하므로 좁은 쪽부터 시도한다(2026-10 기준)
    - 1순위: Workers 역할 "Metadata Read-Only", 범위는 이 계정의 `samrumantimer` Worker로 한정. 역할 문서(developers.cloudflare.com/workers/authorization/workers/)는 이 역할로 "metrics, logs, and traces"를 볼 수 있다고 쓴다
-   - 2순위: API 레퍼런스는 로그 쿼리(`POST .../workers/observability/telemetry/query`)가 받는 권한으로 "Workers Observability Write"만 적는다. 1순위 토큰으로 아래 확인이 403이면 이 권한(대시보드 이름은 "Workers Observability" Edit)을 추가한다. 이 권한은 저장된 쿼리·공유 링크·내보내기 목적지·Issue 상태와 자동화를 바꿀 수 있지만 Worker 코드 배포·시크릿에는 닿지 않는다. CLI(`obs.mjs`)는 POST를 쿼리 실행에만 쓰고 그 밖의 쓰기 요청은 보내지 않는다. 그래도 노출 시 영향이 커지므로 Routine용 토큰과 로컬 토큰을 분리하고, 노출되면 즉시 roll한다
+   - 2순위: API 레퍼런스는 로그 쿼리(`POST .../workers/observability/telemetry/query`)가 받는 권한으로 "Workers Observability Write"만 적는다. 1순위 토큰으로 아래 확인이 403이면 legacy 권한 "Workers Observability" Edit를 추가한다. 이 권한으로 저장된 쿼리·내보내기 목적지 같은 Observability 설정도 바꿀 수 있다(같은 Write를 요구하는 엔드포인트). Issue 상태·자동화까지 바뀌는지, 그리고 Worker 단위로 좁힐 수 있는지는 확인되지 않았다. 계정 전체에 걸린다고 보고 다룬다
+     - **Workers 역할 "Editor"는 고르지 않는다.** 역할 문서의 legacy 대응표에서 "Workers Observability Edit"는 Workers 범위 `Editor`에 대응하는데, `Editor`는 배포와 시크릿 변경까지 할 수 있다. 조회 토큰이 노출됐을 때 배포까지 넘어가면 안 되기 때문이다. 2순위 권한이 배포·시크릿에 닿지 않는지는 문서로 확인되지 않았으므로, 토큰 화면에서 고른 권한 목록에 Workers Scripts 편집·배포 계열이 없는지 직접 본다
+     - CLI(`obs.mjs`)는 POST를 쿼리 실행에만 쓰고 그 밖의 쓰기 요청은 보내지 않는다. 그래도 토큰 자체가 넓어지므로 Routine용 토큰과 로컬 토큰을 분리하고, 노출되면 즉시 roll한다
 3. 확인(스모크 테스트. 결과에 따라 이 단락을 고친다):
    - `node scripts/obs.mjs errors --since 1h` → 0으로 끝나면 로그 쿼리 권한이 있다. 403이면 위 2순위 권한을 추가한다. 이 확인이 통과하기 전에는 verify 결과(`insufficient` 포함)를 근거로 쓰지 않는다
    - `node scripts/obs.mjs issues` → 403이면 이 토큰으로 Issues API가 열리지 않는 것이다. 같은 방식으로 권한을 넓히거나, verify에 `--skip-issues`를 쓴다
