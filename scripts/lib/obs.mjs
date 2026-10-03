@@ -1260,7 +1260,9 @@ function classifyIssues(issues, fromMs) {
     const lastMs = Date.parse(String(i.lastSeen ?? ""));
     const entry = {
       type: "issue",
-      id: safeValue(i.id),
+      // ID는 Cloudflare가 정하는 값이라 외부 입력이 아니다. 형식이 실측되지 않아(2026-10 active Issue 0건) 모양으로 가리지 않는다.
+      // 가리면 issue <id>로 이어 갈 수 없다
+      id: String(i.id).slice(0, 128),
       ...(i.status !== undefined ? { status: safeValue(i.status) } : {}),
       ...(i.errorName !== undefined ? { errorName: safeValue(i.errorName) } : {}),
       ...(typeof i.count === "number" ? { count: i.count } : {}),

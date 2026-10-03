@@ -13,7 +13,7 @@ argument-hint: "[<Issue ID> | <requestId> | verify <tag> | (없음)]"
 ## 인자별 시작점
 
 - 없음: `obs.mjs triage --since 24h`로 시작한다(토큰이 없으면 `--print-plugin-code` → execute → `--input`, 순서는 아래 "재발 판정"의 플러그인 경로와 같다). 정상/비정상은 triage의 exit code와 칸(`abnormal`·`unknown`·`normal`)을 그대로 쓰고, 카탈로그 문장을 다시 해석해 판정을 바꾸지 않는다. 규칙은 카탈로그 기준을 수치로 옮긴 `scripts/lib/obs-rules.mjs`에 있고, 실행마다 판단이 흔들리지 않게 하려는 것이다
-  - exit 1: `abnormal` 항목마다 카탈로그의 조사 명령으로 "원인"에 들어간다(이벤트면 `obs.mjs events <event> --since 24h`, Issue면 아래 Issue ID 경로). `severity: "debt"`(예: `env.weak_jwt_secret`)는 긴급하지 않은 부채라 보고만 한다
+  - exit 1: `abnormal` 항목마다 카탈로그의 조사 명령으로 "원인"에 들어간다(이벤트면 `obs.mjs events <event> --since 24h`, Issue면 아래 Issue ID 경로). `(앱 이벤트 아님)` 묶음(앱 logger를 거치지 않은 런타임 예외)은 이벤트 이름으로 찾을 수 없으므로 `obs.mjs errors --since 24h`와 `obs.mjs issues`로 이어 간다. `severity: "debt"`(예: `env.weak_jwt_secret`)는 긴급하지 않은 부채라 보고만 한다
   - exit 0: 조사할 것이 없다고 보고하고 끝낸다. 보고에 기간과 건수(`counts`)를 적는다
   - exit 2: `reason`을 보고한다. `truncated`면 `--since`를 좁혀 다시 본다. `unknown`이면 그 항목(규칙 없는 warn 등)을 사람이 판단하도록 넘기고, 기준이 정해지면 카탈로그와 규칙표에 함께 넣는 것을 제안한다. 2를 "정상"으로 보고하지 않는다
   - triage는 info 로그와 비율 기준(`auth.refresh.rejected` 급증 등)을 보지 않는다. 사람이 함께 있으면 `obs.mjs summary --since 24h`로 추세를 덧붙인다

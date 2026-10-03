@@ -246,6 +246,8 @@ verify와 같은 절차다. `node scripts/obs.mjs triage --since 24h --print-plu
   - `unknown`: 규칙에 없는 warn 이벤트, 규칙이 예상하지 못한 값(목록 밖 `reason`)의 warn
   - `normal`: 규칙이 있고 모든 조건이 임계 미만. 근거로 조건별 건수(`checks`)를 싣는다
 - active Issue: `lastSeen`이 기간 안이거나 알 수 없으면 `abnormal`, 기간 전이면 `normal`(재발하지 않는 Issue, resolve 후보)
+- 이어 갈 조사: 이벤트 항목은 위 카탈로그의 조사 명령(`events <event>`), Issue 항목은 `issue <id>`. `(앱 이벤트 아님)` 묶음은 이벤트 이름으로 찾을 수 없으므로 `errors --since 24h`와 `issues`로 본다
+- 미확인(2026-10-03): active Issue가 0건이라 Issue 응답의 ID 형식과 `lastObserved`·`updated` 중 무엇이 오는지 실측하지 못했다. `updated`만 온다면 상태 변경만으로도 기간 안으로 보여 `abnormal`이 될 수 있다(fail closed). Issue가 생기면 한 번 실측해 "응답 모양"에 적는다
 
 | exit | verdict | 조건 |
 |------|---------|------|
