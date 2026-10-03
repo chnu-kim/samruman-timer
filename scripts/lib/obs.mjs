@@ -1086,12 +1086,45 @@ const SLIM_OCCURRENCE_SOURCE = `function slimOccurrence(raw) {
   if ("worker" in raw) out.worker = only(raw.worker, ["scriptVersion"]);
   if ("invocation" in raw) out.invocation = only(raw.invocation, ["id", "timestamp", "method", "path", "statusCode", "rayId"]);
   if ("error" in raw) out.error = only(raw.error, ["name", "message"]);
+  // 오류 메시지는 verify 출력(occurrence 항목)에 나가는 값이라 남기되, normalizeOccurrence처럼 300자에서 자른다
+  if (isObj(out.error) && typeof out.error.message === "string" && out.error.message.length > 300) {
+    out.error.message = out.error.message.slice(0, 300) + "\u2026";
+  }
+  return out;
+}`;
+
+const SLIM_ISSUE_SOURCE = `function slimIssue(raw) {
+  const isObj = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+  if (!isObj(raw)) return null;
+  // 빈 값(undefined·null·"")은 그대로 둔다. normalizeIssue의 ?? 연쇄와 safeValue가 원문과 같은 결과를 내게 하려는 것이다
+  const empty = (v) => v === undefined || v === null || v === "";
+  // status·errorName: 판정이 safeValue로 거르는 값. 통과하지 못할 값은 미리 "[?]"로 바꾼다(safeValue 결과가 같다)
+  const token = (v) => (empty(v) ? v : /^[A-Za-z0-9_.:-]{1,64}$/.test(String(v)) ? v : "[?]");
+  // count: 숫자만 판정에 쓰인다. 글자는 "[?]"(문자열이라 ?? 연쇄를 멈추고 판정에서 빠진다), 그 밖의 모양은 false(같은 뜻)
+  const count = (v) => (empty(v) || typeof v === "number" ? v : typeof v === "string" ? (/^\d{1,15}$/.test(v) ? v : "[?]") : false);
+  // 시각: 숫자(epoch)는 그대로, 문자열은 시각으로 읽힐 때만. 읽히지 않으면 원문과 같이 "lastSeen을 알 수 없다"가 된다
+  const time = (v) =>
+    empty(v) || typeof v === "number" ? v : typeof v === "string" ? (v.length <= 64 && !Number.isNaN(Date.parse(v)) ? v : "[?]") : false;
+  const out = {};
+  const put = (k, f) => {
+    if (k in raw) out[k] = f(raw[k]);
+  };
+  // ID는 Cloudflare가 정하는 값이다. 다음 조회(occurrence)와 issue <id>로 이어 가야 해서 원문 그대로 둔다
+  put("id", (v) => (typeof v === "string" || typeof v === "number" ? v : false));
+  put("issueId", (v) => (typeof v === "string" || typeof v === "number" ? v : false));
+  put("status", token);
+  put("errorName", token);
+  for (const k of ["count", "occurrenceCount", "occurrences", "eventCount"]) put(k, count);
+  for (const k of ["firstObserved", "created", "firstSeen", "first_seen", "createdAt"]) put(k, time);
+  for (const k of ["lastObserved", "updated", "lastSeen", "last_seen", "updatedAt"]) put(k, time);
+  if (isObj(raw.error) && "name" in raw.error) out.error = { name: token(raw.error.name) };
   return out;
 }`;
 
 /**
- * verify·triage 조회 코드가 함께 쓰는 앞부분: 엔드포인트 기준 경로, slimEvent, 실패를 응답 모양으로 바꾸는 call,
- * telemetry 쿼리를 보내고 { request, response }로 기록하는 query. sandbox의 accountId·cloudflare만 참조한다
+ * verify·triage 조회 코드가 함께 쓰는 앞부분: 엔드포인트 기준 경로, slimEvent·slimIssue, 실패를 응답 모양으로 바꾸는 call,
+ * telemetry 쿼리를 보내고 { request, response }로 기록하는 query, active Issue 목록 한 쪽을 받는 issuePage.
+ * sandbox의 accountId·cloudflare만 참조한다
  */
 const PLUGIN_PRELUDE = `  const base = "/accounts/" + accountId + "/workers/observability";
   const slimEvent = ${SLIM_EVENT_SOURCE.replace(/\n/g, "\n  ")};
@@ -1110,12 +1143,28 @@ const PLUGIN_PRELUDE = `  const base = "/accounts/" + accountId + "/workers/obse
     else if (r && Array.isArray(r.events)) res.result = { events: r.events.map(slimEvent) };
     else if (r && typeof r === "object") delete r.run;
     return { request: body, response: res };
+  };
+  const slimIssue = ${SLIM_ISSUE_SOURCE.replace(/\n/g, "\n  ")};
+  const issuePage = async (q) => {
+    const res = await call("GET", "/issues", { query: q });
+    // Issue 행에는 title·error.message처럼 외부 입력이 섞일 수 있는 자유 텍스트가 있다. 판정이 읽는 필드만 대화로 돌려보낸다.
+    // result_info(쪽 정보)는 그대로 둔다. 배열이 다른 경로(issues·items·data)에 있어도 같이 줄이고 나머지 키는 버린다
+    const r = res && res.result;
+    if (Array.isArray(r)) res.result = r.map(slimIssue);
+    else if (r && typeof r === "object") {
+      const kept = {};
+      for (const k of ["issues", "items", "data"]) if (Array.isArray(r[k])) kept[k] = r[k].map(slimIssue);
+      res.result = kept;
+    }
+    return { request: { query: q }, response: res };
   };`;
 
 /** 이벤트에서 verify가 읽지 않는 큰 필드를 덜어 낸다(플러그인 코드에 들어가는 것과 같은 소스) */
 export const slimEvent = new Function(`return (${SLIM_EVENT_SOURCE});`)();
 /** occurrence에서 verify가 읽지 않는 큰 필드를 덜어 낸다(플러그인 코드에 들어가는 것과 같은 소스) */
 export const slimOccurrence = new Function(`return (${SLIM_OCCURRENCE_SOURCE});`)();
+/** Issue 목록 행에서 판정(readIssuePage·classifyIssues)이 읽는 필드만 남긴다(플러그인 코드에 들어가는 것과 같은 소스) */
+export const slimIssue = new Function(`return (${SLIM_ISSUE_SOURCE});`)();
 
 /**
  * execute 도구의 code로 그대로 넘길 async 함수 소스를 만든다. 계정 ID는 넣지 않고 sandbox의 accountId를 쓴다.
@@ -1159,9 +1208,9 @@ ${PLUGIN_PRELUDE}
     ids = [];
     out.issuePages = [];
     for (let page = 1; page <= plan.maxPages; page++) {
-      const q = { ...plan.issueListQuery, page };
-      const res = await call("GET", "/issues", { query: q });
-      out.issuePages.push({ request: { query: q }, response: res });
+      const entry = await issuePage({ ...plan.issueListQuery, page });
+      out.issuePages.push(entry);
+      const res = entry.response;
       const list = res && Array.isArray(res.result) ? res.result : [];
       for (const i of list) if (i && (i.id ?? i.issueId)) ids.push(i.id ?? i.issueId);
       const total = Number(res && res.result_info && res.result_info.total_pages);
@@ -1452,9 +1501,9 @@ ${PLUGIN_PRELUDE}
   if (!plan.issues) return out;
   out.issuePages = [];
   for (let page = 1; page <= plan.maxPages; page++) {
-    const q = { ...plan.issueListQuery, page };
-    const res = await call("GET", "/issues", { query: q });
-    out.issuePages.push({ request: { query: q }, response: res });
+    const entry = await issuePage({ ...plan.issueListQuery, page });
+    out.issuePages.push(entry);
+    const res = entry.response;
     const list = res && Array.isArray(res.result) ? res.result : [];
     const total = Number(res && res.result_info && res.result_info.total_pages);
     if (!res || res.success === false || list.length === 0 || !(page < total)) break;

@@ -6,6 +6,8 @@ import {
   evaluateTriage,
   fetchTriageBundle,
   createClient,
+  slimIssue,
+  issueListQuery,
   TRIAGE_INPUT_FORMAT,
   MAX_LIMIT,
   EXIT,
@@ -430,6 +432,73 @@ describe("severity: debt는 보고만 하고 exit code를 올리지 않는다", 
     const withAbnormal = await exec(["triage"], { route: route({ warns: [weak()], errors: [error("api.unhandled")] }) });
     expect(withAbnormal.code).toBe(EXIT.RECURRED);
     expect(summary(withAbnormal)).toMatchObject({ abnormal: 1, debt: 1 });
+  });
+});
+
+describe("플러그인 조회 코드는 Issue 행을 판정에 쓰는 필드로 줄인다", () => {
+  // title·error.message·그 밖의 필드는 외부 입력이 섞일 수 있는 자유 텍스트라 execute 결과(대화)로 돌려보내지 않는다
+  const noisy = (over: Record<string, unknown>) => ({
+    id: "i-noisy",
+    status: "active",
+    title: "TypeError: SENTINEL title",
+    name: "SENTINEL name",
+    message: "SENTINEL message",
+    error: { name: "TypeError", message: "SENTINEL error message", stack: "Error: SENTINEL\n at a" },
+    count: 3,
+    firstObserved: Date.parse("2026-10-01T10:00:00Z"),
+    lastObserved: Date.parse("2026-10-03T10:00:00Z"),
+    meta: { note: "SENTINEL meta" },
+    ...over,
+  });
+
+  it("title·오류 메시지·모르는 필드를 싣지 않고 ID·status·시각·count·errorName·result_info는 남긴다. 판정은 토큰 경로와 같다", async () => {
+    const r = route({
+      issuePages: [
+        [noisy({}), noisy({ id: "i-old", lastObserved: Date.parse("2026-09-30T10:00:00Z") })],
+        [noisy({ id: "i-weird", status: "SENTINEL status with spaces", error: { name: "SENTINEL bad name" }, lastObserved: "SENTINEL date" })],
+      ],
+    });
+    const network = await exec(["triage", ...WINDOW, "--json"], { route: r });
+    const { judged, bundle } = await viaPlugin([...WINDOW, "--json"], r);
+    expect(JSON.stringify(bundle)).not.toContain("SENTINEL");
+    const first = bundle.issuePages[0].response;
+    expect(first.result_info).toMatchObject({ page: 1, total_pages: 2 });
+    expect(first.result[0]).toEqual({
+      id: "i-noisy",
+      status: "active",
+      error: { name: "TypeError" },
+      count: 3,
+      firstObserved: Date.parse("2026-10-01T10:00:00Z"),
+      lastObserved: Date.parse("2026-10-03T10:00:00Z"),
+    });
+    expect(judged.code).toBe(network.code);
+    const a = full(judged);
+    a.notes = a.notes.filter((n: string) => !n.startsWith(INPUT_NOTE));
+    expect(a).toEqual(full(network));
+    expect(a.abnormal.map((x: { id: string }) => x.id).sort()).toEqual(["i-noisy", "i-weird"]);
+  });
+
+  it.each([
+    ["기본", noisy({})],
+    ["다른 이름의 필드(issueId, occurrenceCount, updated)", { issueId: "i2", occurrenceCount: 5, updated: "2026-10-03T09:00:00Z", errorName: "RangeError" }],
+    ["문자열 count와 숫자 count가 함께", { id: "i3", count: "7", occurrences: 9, lastSeen: "2026-10-03T09:00:00Z" }],
+    ["글자 count", { id: "i4", count: "SENTINEL many", eventCount: 2 }],
+    ["객체 count·status·errorName", { id: "i5", count: { n: 1 }, status: { s: "SENTINEL" }, errorName: ["SENTINEL bad"] }],
+    ["빈 값", { id: "i6", status: "", errorName: null, error: { name: "" }, lastObserved: "" }],
+    ["숫자 status", { id: "i7", status: 1, lastObserved: 1 }],
+    ["error가 문자열", { id: "i8", error: "SENTINEL plain", errorName: "Error" }],
+  ])("slimIssue는 판정을 바꾸지 않는다: %s", (_name, raw) => {
+    const opts = { from: Date.parse(SINCE), to: NOW };
+    const bundle = (rows: unknown[]) => ({
+      format: TRIAGE_INPUT_FORMAT,
+      ...Object.fromEntries(
+        Object.entries(buildTriageQueries(opts)).map(([k, request]) => [k, { request, response: { success: true, result: { events: { events: [] } } } }])
+      ),
+      issuePages: [{ request: { query: issueListQuery(1) }, response: { success: true, result: rows, result_info: { page: 1, total_pages: 1 } } }],
+    });
+    const slim = slimIssue(raw);
+    expect(JSON.stringify(slim)).not.toContain("SENTINEL");
+    expect(evaluateTriage(bundle([slim]), opts, { strict: true })).toEqual(evaluateTriage(bundle([raw]), opts, { strict: true }));
   });
 });
 

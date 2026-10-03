@@ -1089,6 +1089,32 @@ describe("verify --input (플러그인 조회 결과로 판정)", () => {
     expect(fromPlugin.result.verdict).toBe("recurred");
   });
 
+  it("Issue 목록은 판정에 쓰는 필드만, occurrence 오류 메시지는 출력과 같은 길이(300자)까지만 싣는다", async () => {
+    const issueRow = {
+      id: "i1",
+      status: "active",
+      title: "TypeError: SENTINEL title",
+      error: { name: "TypeError", message: "SENTINEL error message" },
+      lastObserved: NOW - 1000,
+      meta: { note: "SENTINEL meta" },
+    };
+    const long = `${"x".repeat(300)}SENTINEL-tail`;
+    const route = fullRoute({
+      tagEvents: [infoEvent],
+      issuePages: [[issueRow]],
+      occurrences: { i1: [[occ({ error: { name: "Error", message: long, stack: "Error\n    at a" } })]] },
+    });
+    const network = await exec(["verify", "--tag", TAG, ...WINDOW, "--json"], route);
+    const { judged, bundle } = await viaPlugin(["--tag", TAG, ...WINDOW, "--json"], route);
+    expect(JSON.stringify(bundle)).not.toContain("SENTINEL");
+    expect(bundle.issuePages[0].response.result).toEqual([{ id: "i1", status: "active", error: { name: "TypeError" }, lastObserved: NOW - 1000 }]);
+    expect(bundle.issuePages[0].response.result_info).toMatchObject({ total_pages: 1 });
+    expect(judged.code).toBe(EXIT.RECURRED);
+    const a = JSON.parse(judged.out.join("\n"));
+    a.notes = a.notes.filter((n: string) => !n.startsWith(INPUT_NOTE));
+    expect(a).toEqual(JSON.parse(network.out.join("\n")));
+  });
+
   describe("파일 입력은 근거가 애매하면 2로 기운다", () => {
     const args = ["--tag", TAG, ...WINDOW];
     async function judge(bundle: unknown, extra: string[] = []) {

@@ -227,7 +227,7 @@ Claude Code에 Cloudflare 플러그인이 연결돼 있으면 그 `execute` 도�
   occurrences: { "<issueId>": [ { request: { query: { per_page: 100, cursor? } }, response }, ... ] } }    // Issues를 볼 때만
 ```
 
-응답의 이벤트·occurrence는 `slimEvent`·`slimOccurrence`로 stack 본문, `$workers.event` 같은 verify가 읽지 않는 필드를 덜어 낸 것이다(결과가 대화로 돌아오므로). `telemetry/query` 응답은 `result`에서 이벤트 배열만 남기고 `run`(계정·사용자 ID)·`events.series`(빈 버킷)·`events.fields`는 버린다. 그래도 태그 로그가 많으면 결과가 크다. `--since`를 배포 시각으로 좁힌다.
+응답의 이벤트·occurrence·Issue 행은 `slimEvent`·`slimOccurrence`·`slimIssue`로 판정이 읽지 않는 필드를 덜어 낸 것이다(결과가 대화로 돌아오므로). 이벤트·occurrence에서는 stack 본문, `$workers.event` 같은 큰 필드를 덜어 내고, occurrence의 `error.message`는 verify 출력에 나가는 값이라 남기되 출력과 같은 300자에서 자른다. Issue 목록 행은 ID·`status`·시각(`lastObserved` 등)·건수·`error.name`(`errorName`)만 남긴다. `title`·`error.message`처럼 외부 입력이 섞일 수 있는 자유 텍스트와 모르는 필드는 싣지 않고, `status`·`errorName`은 판정의 `safeValue`를 통과하지 못할 값을 미리 `[?]`로, 시각으로 읽히지 않는 시각과 숫자가 아닌 건수도 `[?]`로 바꾼다(판정 결과는 원문과 같다). `result_info`(쪽 정보)는 그대로 둔다. `telemetry/query` 응답은 `result`에서 이벤트 배열만 남기고 `run`(계정·사용자 ID)·`events.series`(빈 버킷)·`events.fields`는 버린다. 그래도 태그 로그가 많으면 결과가 크다. `--since`를 배포 시각으로 좁힌다.
 
 판정은 토큰 경로와 같은 함수(`evaluateVerify`)가 한다. 파일은 누가 어떻게 모았는지 코드가 보지 못하므로 근거가 애매한 곳을 더 좁게 본다:
 
@@ -248,7 +248,7 @@ verify와 같은 절차다. `node scripts/obs.mjs triage --since 24h --print-plu
   issuePages: [ { request: { query: { service, status: "active", perPage: 100, page } }, response }, ... ] } // --skip-issues면 없음
 ```
 
-입력 오류·`truncated`의 기준(요청 대조, 실패 응답, 배열 없음, 다음 쪽 기록 없음, `total_pages` 없음)과 ISO 기간 요구는 verify `--input`과 같다.
+Issue 목록 행은 verify와 같은 `slimIssue`로 판정이 읽는 필드만 남긴다(`title`·`error.message`는 싣지 않는다). 입력 오류·`truncated`의 기준(요청 대조, 실패 응답, 배열 없음, 다음 쪽 기록 없음, `total_pages` 없음)과 ISO 기간 요구는 verify `--input`과 같다.
 
 ### triage 판정
 
