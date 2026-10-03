@@ -547,7 +547,7 @@ export const USAGE = `사용: node scripts/obs.mjs <명령> [옵션]
 
 공통 옵션
   --json      응답 원문(JSON)을 출력한다. verify·triage는 판정 결과 객체
-  --limit N   최대 건수(기본 100, 최대 2000)
+  --limit N   최대 건수(기본 100, 최대 2000). triage는 받지 않는다(--limit·--path를 주면 인자 오류)
   --since     기간(15m, 1h, 3d) 또는 ISO 시각
   --until     끝 시각(기간 또는 ISO, 기본 지금). occurrence 시각 앞뒤로 앱 로그를 찾을 때 쓴다
 
@@ -678,11 +678,14 @@ export const occurrenceQuery = (cursor) => (cursor === undefined ? { per_page: 1
 
 /**
  * active Issue 목록 한 쪽을 읽는다. next: 다음 쪽을 불러야 한다.
- * strict(파일 입력): Issue가 있는데 total_pages가 없으면 마지막 쪽인지 알 수 없다(unknown). 조회 경로는 기존대로 마지막 쪽으로 본다
+ * closed(파일 입력, triage): Issue 배열이 없으면 0건으로 보지 않고 오류, Issue가 있는데 total_pages가 없으면 마지막 쪽인지
+ * 알 수 없다(unknown). 오류는 strict(파일 입력)면 InputError, 아니면 ApiError(응답 모양 변화).
+ * verify 조회 경로는 기존대로 배열이 없으면 0건, total_pages가 없으면 마지막 쪽으로 본다
  */
-function readIssuePage(body, page, strict = false) {
-  if (strict && findArray(unwrap(body), ISSUE_PATHS) === undefined) {
-    throw new InputError(`active Issue 목록 ${page}쪽: 응답에서 Issue 배열을 찾지 못했다`);
+function readIssuePage(body, page, strict = false, closed = strict) {
+  if (closed && findArray(unwrap(body), ISSUE_PATHS) === undefined) {
+    const message = `active Issue 목록 ${page}쪽: 응답에서 Issue 배열을 찾지 못했다`;
+    throw strict ? new InputError(message) : new ApiError(`${message}(응답 모양이 예상과 다르다)`);
   }
   const issues = extractIssues(body);
   const normalized = issues.map(normalizeIssue);
@@ -692,7 +695,7 @@ function readIssuePage(body, page, strict = false) {
   }
   const totalPages = Number(body?.result_info?.total_pages);
   const next = Number.isFinite(totalPages) && page < totalPages && issues.length > 0;
-  const unknown = strict && issues.length > 0 && !Number.isFinite(totalPages);
+  const unknown = closed && issues.length > 0 && !Number.isFinite(totalPages);
   return { ids, issues: normalized, next, unknown };
 }
 
@@ -802,7 +805,12 @@ function judgeOccurrencePages(id, pages, fromMs, maxPages, strict = false) {
  * active Issue 목록 쪽들을 따라가 ID·Issue(정규화)와 잘림 여부를 낸다.
  * command는 기록된 요청이 다를 때 오류 메시지에 쓰고, narrow는 잘렸을 때 좁히는 방법 안내다
  */
-function judgeIssuePages(pages, maxPages, strict = false, { command = "verify", narrow = "--issue <id>로 좁힌다" } = {}) {
+function judgeIssuePages(
+  pages,
+  maxPages,
+  strict = false,
+  { command = "verify", narrow = "--issue <id>로 좁힌다", closed = strict } = {}
+) {
   const ids = [];
   const issues = [];
   for (let page = 1; page <= maxPages; page++) {
@@ -816,7 +824,7 @@ function judgeIssuePages(pages, maxPages, strict = false, { command = "verify", 
     }
     const expected = issueListQuery(page);
     const body = recorded(pages[page - 1], `active Issue 목록 ${page}쪽`, (req) => sameQuery(req?.query, expected), command);
-    const step = readIssuePage(body, page, strict);
+    const step = readIssuePage(body, page, strict, closed);
     ids.push(...step.ids);
     issues.push(...step.issues);
     if (step.unknown) {
@@ -1298,8 +1306,10 @@ export function evaluateTriage(bundle, opts, { strict = false } = {}) {
   const read = (entry, request, level) => {
     const label = `${level} 로그 조회(${level}Query)`;
     const body = recorded(entry, label, (req) => sameJson(req, request), "triage");
-    if (strict && findArray(unwrap(body), EVENT_PATHS) === undefined) {
-      throw new InputError(`${label}: 응답에서 이벤트 배열을 찾지 못했다`);
+    // triage는 exit 0이면 조사를 끝내는 명령이라 조회 경로에서도 배열이 없는 응답(모양 변화)을 0건으로 보지 않는다
+    if (findArray(unwrap(body), EVENT_PATHS) === undefined) {
+      const message = `${label}: 응답에서 이벤트 배열을 찾지 못했다`;
+      throw strict ? new InputError(message) : new ApiError(`${message}(응답 모양이 예상과 다르다)`);
     }
     const raw = extractEvents(body);
     if (raw.length >= MAX_LIMIT) truncated.push(`${level} 로그가 ${MAX_LIMIT}건에서 잘렸다. --since를 좁힌다`);
@@ -1312,7 +1322,10 @@ export function evaluateTriage(bundle, opts, { strict = false } = {}) {
   const errorEvents = read(bundle.errorQuery, errorQuery, "error");
   const warnEvents = read(bundle.warnQuery, warnQuery, "warn");
   const classified = classifyEvents([...errorEvents, ...warnEvents]);
-  const abnormal = classified.abnormal.sort(byLevelThenCount);
+  // severity: debt(긴급하지 않은 부채)는 abnormal과 따로 둔다. exit code를 올리면 부채가 남은 동안 매 실행이 1이 되어
+  // 실제 장애와 구분되지 않고, truncated·unknown(2)도 가려진다
+  const debt = classified.abnormal.filter((x) => x.severity === "debt").sort(byLevelThenCount);
+  const abnormal = classified.abnormal.filter((x) => x.severity !== "debt").sort(byLevelThenCount);
   const normal = classified.normal.sort(byLevelThenCount);
   const unknown = classified.unknown.sort(byLevelThenCount);
 
@@ -1323,6 +1336,7 @@ export function evaluateTriage(bundle, opts, { strict = false } = {}) {
     const listed = judgeIssuePages(Array.isArray(bundle.issuePages) ? bundle.issuePages : [], VERIFY_MAX_PAGES, strict, {
       command: "triage",
       narrow: "issues 명령으로 목록을 본다",
+      closed: true,
     });
     if (listed.truncated) truncated.push(listed.why);
     activeIssues = listed.issues.length;
@@ -1362,6 +1376,7 @@ export function evaluateTriage(bundle, opts, { strict = false } = {}) {
       ...(activeIssues !== undefined ? { activeIssues } : {}),
     },
     abnormal,
+    debt,
     normal,
     unknown,
     ...(truncated.length > 0 ? { truncated } : {}),
@@ -1375,10 +1390,13 @@ function printTriage(report, { json }, io) {
     io.out(JSON.stringify(report, null, 2));
     return report.exitCode;
   }
-  const { abnormal, normal, unknown, ...rest } = report;
-  io.out(JSON.stringify({ ...rest, abnormal: abnormal.length, normal: normal.length, unknown: unknown.length }));
+  const { abnormal, debt, normal, unknown, ...rest } = report;
+  io.out(
+    JSON.stringify({ ...rest, abnormal: abnormal.length, debt: debt.length, normal: normal.length, unknown: unknown.length })
+  );
   jsonl(io.out, abnormal.map((x) => ({ abnormal: x })));
   jsonl(io.out, unknown.map((x) => ({ unknown: x })));
+  jsonl(io.out, debt.map((x) => ({ debt: x })));
   jsonl(io.out, normal.map((x) => ({ normal: x })));
   const message = {
     abnormal: `비정상 ${abnormal.length}건. 항목마다 카탈로그(docs/OBSERVABILITY.md "이벤트별 판단과 조사")의 조사 명령으로 이어 간다`,
@@ -1389,6 +1407,9 @@ function printTriage(report, { json }, io) {
     normal: `정상: 비정상 기준에 걸린 것이 없다(정상 ${normal.length}건)`,
   }[report.verdict];
   io.err(`# ${message}`);
+  if (debt.length > 0) {
+    io.err(`# 부채 ${debt.length}건(severity: debt, 긴급하지 않아 exit code에 넣지 않았다): ${debt.map((x) => x.event).join(", ")}`);
+  }
   for (const n of report.notes) io.err(`# ${n}`);
   return report.exitCode;
 }
@@ -1609,6 +1630,10 @@ export async function run(argv, deps) {
         return await cmdVerify(client, verifyOpts, io);
       }
       case "triage": {
+        // 판정 근거가 바뀌므로 조용히 무시하지 않는다(로그는 항상 level별 2000건, 경로 필터 없음)
+        for (const f of ["limit", "path"]) {
+          if (flags[f] !== undefined) throw new UsageError(`triage는 --${f}를 받지 않는다(항상 level별 ${MAX_LIMIT}건, 경로 필터 없음)`);
+        }
         const inputPath = flags.input;
         const printCode = flags["print-plugin-code"] === true;
         if (inputPath !== undefined && printCode) {

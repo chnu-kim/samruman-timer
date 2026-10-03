@@ -381,3 +381,63 @@ describe("triage --input (플러그인 조회 결과로 판정)", () => {
     });
   });
 });
+
+describe("조회 경로도 근거가 애매하면 0으로 끝내지 않는다", () => {
+  it("telemetry 응답에 이벤트 배열이 없으면(응답 모양 변화) 0건으로 보지 않고 2", async () => {
+    const base = route({});
+    const r = await exec(["triage", "--skip-issues"], {
+      route: (url, init) =>
+        url.pathname.endsWith("/telemetry/query") ? { body: { success: true, errors: [], messages: [], result: { foo: { bar: 1 } } } } : base(url, init),
+    });
+    expect(r.code).toBe(EXIT.FAILED);
+    expect(r.err.join("\n")).toContain("이벤트 배열을 찾지 못했다");
+  });
+
+  it("active Issue 목록 응답에 total_pages가 없으면 다음 쪽이 있는지 몰라 truncated(2)", async () => {
+    const base = route({});
+    const r = await exec(["triage"], {
+      route: (url, init) =>
+        url.pathname.endsWith("/issues")
+          ? { body: { success: true, errors: [], messages: [], result: [{ id: "i1", lastObserved: Date.parse("2026-09-30T10:00:00Z") }] } }
+          : base(url, init),
+    });
+    expect(r.code).toBe(EXIT.FAILED);
+    expect(summary(r)).toMatchObject({ verdict: "insufficient", reason: "truncated" });
+    expect(summary(r).truncated.join("\n")).toContain("total_pages");
+  });
+});
+
+describe("severity: debt는 보고만 하고 exit code를 올리지 않는다", () => {
+  const weak = () => warn("env.weak_jwt_secret", { variable: "JWT_SECRET", minBytes: 32 });
+
+  it("debt만 있으면 0(normal)이고 debt 칸에 남는다", async () => {
+    const r = await exec(["triage", "--json"], { route: route({ warns: [weak()] }) });
+    expect(r.code).toBe(EXIT.OK);
+    const rep = full(r);
+    expect(rep).toMatchObject({ verdict: "normal", exitCode: 0, abnormal: [] });
+    expect(rep.debt).toHaveLength(1);
+    expect(rep.debt[0]).toMatchObject({ event: "env.weak_jwt_secret", severity: "debt" });
+    const plain = await exec(["triage"], { route: route({ warns: [weak()] }) });
+    expect(summary(plain)).toMatchObject({ verdict: "normal", debt: 1, abnormal: 0 });
+    expect(plain.out.slice(1).map((l) => JSON.parse(l))).toContainEqual({ debt: expect.objectContaining({ event: "env.weak_jwt_secret" }) });
+    expect(plain.err.join("\n")).toContain("부채");
+  });
+
+  it("debt가 unknown·truncated를 가리지 않는다(2), 실제 비정상이 함께 있으면 1", async () => {
+    const withUnknown = await exec(["triage"], { route: route({ warns: [weak(), warn("brand.new_warning")] }) });
+    expect(withUnknown.code).toBe(EXIT.FAILED);
+    expect(summary(withUnknown)).toMatchObject({ verdict: "insufficient", reason: "unknown" });
+    const withAbnormal = await exec(["triage"], { route: route({ warns: [weak()], errors: [error("api.unhandled")] }) });
+    expect(withAbnormal.code).toBe(EXIT.RECURRED);
+    expect(summary(withAbnormal)).toMatchObject({ abnormal: 1, debt: 1 });
+  });
+});
+
+describe("triage가 받지 않는 공통 옵션", () => {
+  it.each([["--limit", "50"], ["--path", "/api/x"]])("%s를 주면 조용히 무시하지 않고 인자 오류 2", async (flag, value) => {
+    const r = await exec(["triage", flag, value], { route: route({}) });
+    expect(r.code).toBe(EXIT.FAILED);
+    expect(r.err.join("\n")).toContain(flag);
+    expect(r.calls).toHaveLength(0);
+  });
+});
