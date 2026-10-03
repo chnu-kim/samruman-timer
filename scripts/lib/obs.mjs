@@ -170,19 +170,21 @@ function parseSource(source) {
   return {};
 }
 
+/** 이벤트 최상위에 오는 플랫폼 필드. `$`로 시작하지 않아도 앱 필드가 아니다 */
+const TOP_LEVEL_PLATFORM_KEYS = new Set(["source", "dataset"]);
+
 /**
- * 앱 로그 필드. API가 JSON 로그를 `source`에 담아 주면 그것만 쓰고, 없거나 비어 있으면 최상위에 펼쳐진 것으로 본다
- * (2026-10 대시보드 JSON 실측: event·versionTag·reason 등이 최상위). `source`가 있을 때 최상위를 섞지 않는 것은
- * 그 모양에서는 최상위에 `dataset` 같은 플랫폼 필드가 있기 때문이다. `$`로 시작하는 키는 늘 플랫폼 필드다
+ * 앱 로그 필드. API가 JSON 로그를 `source`에 담아 주면 그것만 쓰고, 없거나 비어 있으면(null·`{}`·해석 불가 문자열)
+ * 최상위에 펼쳐진 것으로 본다(2026-10 대시보드 JSON 실측: event·versionTag·reason 등이 최상위).
+ * 최상위를 읽을 때는 `$`로 시작하는 키와 `dataset` 같은 플랫폼 필드를 뺀다
  */
 function appFields(raw) {
-  // source가 null·빈 객체·해석 불가 문자열이면 없는 것으로 보고 최상위로 넘어간다
   const fromSource = parseSource(raw.source);
   if (Object.keys(fromSource).length > 0) return fromSource;
   /** @type {Record<string, unknown>} */
   const top = {};
   for (const [k, v] of Object.entries(raw)) {
-    if (k === "source" || k.startsWith("$")) continue;
+    if (k.startsWith("$") || TOP_LEVEL_PLATFORM_KEYS.has(k)) continue;
     top[k] = v;
   }
   return top;

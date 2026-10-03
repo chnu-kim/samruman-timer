@@ -227,6 +227,12 @@ describe("응답 정규화", () => {
     expect(e).not.toHaveProperty("source");
   });
 
+  it.each([{}, "plain text log"])("source가 %j여도 최상위 플랫폼 필드(dataset)는 앱 필드로 섞지 않는다", (source) => {
+    const e = normalizeEvent({ dataset: "cloudflare-workers", timestamp: NOW, source, $metadata: { level: "info", message: "x" } });
+    expect(e).not.toHaveProperty("dataset");
+    expect(e).toMatchObject({ level: "info", event: "x" });
+  });
+
   it("source가 있으면 최상위 플랫폼 필드(dataset 등)를 앱 필드로 섞지 않는다", () => {
     const e = normalizeEvent({
       dataset: "cloudflare-workers",
