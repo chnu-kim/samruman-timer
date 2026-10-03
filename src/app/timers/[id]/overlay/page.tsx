@@ -110,8 +110,8 @@ export default function TimerOverlayPage() {
       if (!json?.data) throw new TypeError("응답에 data가 없습니다");
       data = json.data;
     } catch {
-      // 200인데 JSON이 아니면 Cloudflare 한도 초과 안내 같은 HTML 페이지다
-      warnOnce("invalid", "[오버레이] 서버 응답을 해석하지 못했습니다. 요청 한도를 넘었을 수 있습니다.");
+      // 200인데 JSON이 아니면 프록시·캐시가 끼워 넣은 엉뚱한 페이지처럼 곧 바뀌지 않을 응답으로 보고 긴 백오프를 건다
+      warnOnce("invalid", "[오버레이] 서버 응답을 해석하지 못했습니다. 잠시 후 다시 시도합니다.");
       return "rate_limited";
     }
 

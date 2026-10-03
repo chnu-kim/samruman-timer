@@ -10,7 +10,7 @@ export const SHORT_BACKOFF_MAX_MS = 60_000;
 
 /**
  * - not_found: 404. 타이머가 삭제됐거나 URL이 틀렸다
- * - rate_limited: 429, 또는 200인데 JSON이 아닌 응답(한도 초과 안내 페이지 등. 판정은 page.tsx)
+ * - rate_limited: 429, 또는 200인데 JSON이 아닌 응답(판정은 page.tsx)
  * - server: 5xx와 그 밖의 실패 응답. 프록시·CDN의 HTML 502/503/504는 곧 회복되는 경우가 많아 본문 형식과 무관하게 여기로 둔다
  * - network: fetch 자체가 실패
  */
