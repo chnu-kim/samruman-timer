@@ -128,7 +128,7 @@ refresh 쿠키 없이 보호 라우트를 부른 401은 정상 흐름이고 양�
 
 **`health.schema_ahead`** (warn) — 원격 D1의 마지막 적용 마이그레이션이 코드가 기대하는 것보다 번호가 크다(`ahead`). "원격 마이그레이션 먼저, 배포 나중" 롤아웃 사이에도 생기는 상태라 응답은 200이고 프로브 알림은 가지 않는다. 그래서 배포 뒤에도 이어지는 경우를 알림 없이 놓치지 않도록 info인 `health.check`와 나눠 warn으로 남긴다.
 - 정상: 배포 직전 짧은 구간에만(프로브 기준 1~2건). 배포하면 사라진다.
-- 비정상: 24h에 3건 이상(몇 시간째 지속). 원인은 둘 중 하나다. `EXPECTED_LATEST_MIGRATION` 갱신을 빠뜨렸거나(테스트가 `migrations/`와 대조하므로 보통 CI에서 걸린다), 아직 머지되지 않은 브랜치의 마이그레이션이 원격에 적용됐다(작업 트리에 그 파일이 있는 채로 `pnpm db:migrate:remote`를 돌린 경우). 후자는 그 브랜치가 머지되기 전까지 다른 배포의 코드가 모르는 스키마가 원격에 있다는 뜻이다.
+- 비정상: 24h에 3건 이상(몇 시간째 지속). 원인은 둘 중 하나다. `EXPECTED_LATEST_MIGRATION` 갱신을 빠뜨렸거나(`src/lib/__tests__/health.test.ts`가 `migrations/`와 대조하므로 로컬 `pnpm test`에서 걸린다. 테스트를 돌리는 CI는 없어서, 테스트를 건너뛰고 배포하면 이 이벤트로만 보인다), 아직 머지되지 않은 브랜치의 마이그레이션이 원격에 적용됐다(작업 트리에 그 파일이 있는 채로 `pnpm db:migrate:remote`를 돌린 경우). 후자는 그 브랜치가 머지되기 전까지 다른 배포의 코드가 모르는 스키마가 원격에 있다는 뜻이다.
 - 조사: `node scripts/obs.mjs events health.schema_ahead --since 24h`로 `actual`을 보고, `npx wrangler d1 migrations list samrumantimer-db --remote`의 적용 목록을 main의 `migrations/`(`git ls-tree --name-only origin/main migrations/`)와 대조한다. main에 없는 파일이 원격에 적용돼 있으면 후자, 있으면 상수 갱신 누락이다.
 - 코드: `src/app/api/health/route.ts`, `src/lib/health.ts`(`compareSchema`).
 
