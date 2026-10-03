@@ -199,6 +199,14 @@ describe("proxy: x-request-id 응답 헤더", () => {
     expect(res.headers.get("x-middleware-request-x-request-id")).toBe(id);
   });
 
+  it("GET /api/health는 쿠키 없이 통과하고 x-request-id가 라우트로 전달된다", async () => {
+    const res = await proxy(makeRequest("GET", "/api/health"));
+    expect(res.status).toBe(200);
+    const id = res.headers.get("x-request-id");
+    expect(id).toMatch(UUID_RE);
+    expect(res.headers.get("x-middleware-request-x-request-id")).toBe(id);
+  });
+
   it("클라이언트가 보낸 x-request-id는 새 값으로 덮어쓴다", async () => {
     const res = await proxy(
       makeRequest("GET", "/api/projects", { headers: { "x-request-id": "forged-id" } })
