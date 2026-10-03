@@ -12,48 +12,47 @@
 - 로그인 시 "새 프로젝트" 버튼 표시
 - 반응형: 모바일 1열, 태블릿 2열, 데스크톱 3열
 
-### 2. 프로젝트 상세 (`/projects/[id]`)
+### 2. 프로젝트 상세 = 타이머 콘솔 (`/projects/[id]`)
 
-- 프로젝트 정보 헤더 (이름, 설명, 소유자)
-- 프로젝트당 타이머 1개 — 해당 타이머의 상태를 바로 표시
-  - 타이머 카드: 제목, 잔여 시간, 상태 뱃지
-  - 상태 뱃지 색상: SCHEDULED(보라, '예약됨'), RUNNING(초록, '실행 중'), EXPIRED(빨강, '만료')
-  - 잔여 시간은 클라이언트에서 1초마다 갱신 표시
-  - 카드 전체가 타이머 상세(`/timers/[id]`)로 가는 링크이다
-- 소유자인 경우 타이머가 없을 때 "타이머 만들기" 버튼 표시
-- 헤더에 링크 복사 아이콘 버튼. 소유자에게는 통계(타이머가 있을 때)·프로젝트 삭제 버튼도 보인다. 이름·설명은 소유자가 인라인 편집(`EditableText`)
-- 목표 섹션: '진행 중' / '종료' 탭으로 나눈 `GoalCard` 목록, 소유자는 '새 목표' 버튼(타이머가 있어야 활성) → '새 목표 설정' 대화상자(`GoalForm`, `FormDialog`). 타이머도 목표도 없으면 섹션을 숨긴다
+핵심 페이지. 프로젝트와 타이머가 1:1이라 이 화면 하나에서 방송 중 조작을 한다. 방송 화면에 띄우는 카운트다운은 별도의 오버레이 페이지(`/timers/[id]/overlay`)이고, 이 화면에서 오버레이 설정과 URL 복사를 한다. 화면의 이름은 프로젝트 이름 하나다(타이머 제목은 오버레이의 '타이틀 표시'에만 쓰인다).
 
-### 3. 타이머 상세 (`/timers/[id]`)
+#### 헤더
+- 프로젝트 이름·설명. 소유자는 인라인 편집(`EditableText`). 시청자에게는 소유자 닉네임을 함께 보여 준다
+- 소유자: `OBS 오버레이`(→ `OverlaySettings` 모달)·`통계`(`/timers/[id]/stats`) 글자 버튼(타이머가 있을 때)과 더보기 버튼(`MoreMenu`: 링크 복사, 타이머 삭제, 프로젝트 삭제)
+- 시청자: 링크 복사 아이콘 버튼만
+- 더보기는 `aria-expanded` disclosure 패턴이다(`role="menu"` 아님). Escape·바깥 클릭으로 닫히고 포커스는 트리거로 돌아간다
+- 타이머만 삭제하면 화면에 남아 '타이머 없음' 상태가 되고 목표 기록은 그대로 보인다
 
-핵심 페이지. 방송 화면에 띄우는 카운트다운은 별도의 오버레이 페이지(`/timers/[id]/overlay`)이고, 이 화면에서 오버레이 설정과 URL 복사를 한다. 다음 섹션으로 구성:
+#### 타이머가 없을 때
+- '아직 타이머가 없습니다'와 소유자에게 "타이머 만들기" 버튼(`CreateTimerForm`, 오버레이 제목을 프로젝트 이름으로 미리 채운다)
+- 목표가 남아 있으면 그 아래 목표 섹션을 보여 준다. 타이머도 목표도 없으면 숨긴다
 
-#### 카운트다운 디스플레이
-- 큰 숫자로 잔여 시간 표시: `HH:MM:SS` 또는 `Dd HH:MM:SS`
-- 만료 시 `00:00:00` + 만료 뱃지. 예약 시작 전(SCHEDULED)에는 시작 예정 시각을 표시한다
-- 1초마다 클라이언트에서 갱신
+#### 타이머가 있을 때 (`TimerConsole`)
+화면 순서: 카운트다운 → 시간 조작 | 목표 → 최근 변경 | 잔여 시간 추이. 넓은 화면(lg 이상)에서 `|` 양쪽이 3:2로 나란히, 그보다 좁으면 세로로 쌓인다. 시간 조작 카드와 목표를 첫 화면에 함께 두는 것이 목적이다.
+
+- 카운트다운: 큰 숫자 `HH:MM:SS` + 상태 뱃지(SCHEDULED 보라 '예약됨', RUNNING 초록 '실행 중', EXPIRED 빨강 '만료'). 실행 중에는 '종료 예정' 시각을, 예약 상태에는 시작 예정 시각을 보여 준다. 생성 시각부터 잰 경과는 다시 시작한 타이머에서 실제 진행 시간과 어긋나 보여 주지 않는다. 0에 닿으면 다음 폴링을 기다리지 않고 뱃지를 '만료'로 바꾼다
+- 동기화: 상세 API를 RUNNING 5초·그 외 15초로 폴링한다(폴링은 콘솔 한 곳에서만). 다른 기기의 조작이나 상태 전이를 감지하면 기록·그래프·목표를 다시 불러온다
+- 목표: 시간 조작 옆 카드. '진행 중' / '종료' 탭으로 나눈 `GoalCard` 목록, 소유자는 '새 목표' 버튼 → '새 목표 설정' 대화상자(`GoalForm`, `FormDialog`). 여기서 시간을 바꾸면 곧바로 목표를 다시 불러온다. 시청자에게는 목표가 있을 때만 보인다
 
 #### 시간 조작 (소유자만)
-- 프리셋 버튼: `+1시간`, `+5시간`, `+10시간` (직접 입력 값에 누적). '빠른 적용' 모드에서는 누르는 즉시 적용된다. 모바일(md 미만)에는 모드와 무관하게 즉시 적용되는 `+1h`/`+5h`/`+10h` 하단 고정 바가 있다
-- 직접 입력: 시/분/초 입력 필드 + ADD/SUBTRACT 선택
-- 시청자 닉네임 입력 필드 (확인 버튼으로 적용할 때 필수, 빠른 적용은 기본 닉네임으로 대체 가능, 최대 50자, placeholder: "시간 변경을 요청한 시청자", 기본 닉네임이 있으면 "기본: …" — 시간 변경을 요청한 시청자)
-- "추가 확인" / "차감 확인" 버튼 (변경량 표시)
-- 추가/차감 방향은 페이지가 상태 하나로 소유하고, 세그먼트·프리셋 라벨·키보드 단축키가 공유한다. 빠른 적용 모드에서 차감을 고르면 프리셋 라벨이 `-1시간`처럼 바뀌고, 차감 확인 버튼은 `danger` 스타일이다.
-- 키보드 단축키 (소유자, RUNNING/EXPIRED, 입력 필드 밖에서만. 삭제 확인 창·오버레이 설정 모달이 열려 있으면 전부 꺼지고, 도움말이 열려 있으면 숫자키와 X만 꺼진다)
+- 시청자 닉네임과 추가/차감 세그먼트는 md 이상에서 한 줄. 닉네임은 확인 버튼으로 적용할 때 필수, 최대 50자, placeholder "시간 변경을 요청한 시청자"(기본 닉네임이 있으면 "기본: …"). 최근 닉네임 칩, 기본 닉네임 설정·해제
+- 프리셋 버튼 `+1시간`, `+5시간`, `+10시간`은 시/분/초 입력값에 더하기만 한다. 적용은 "추가 확인" / "차감 확인" 버튼(변경량 표시, 차감은 `danger` 스타일)
+- 즉시 적용은 두 곳뿐이다: 모바일(md 미만) 하단 고정 바(`+1h`/`+5h`/`+10h`, 차감이면 `-1h`처럼 바뀌고 기록될 닉네임을 항상 표시)와 숫자 단축키. 예전의 '빠른 적용' 모드 토글은 일반 모드와 차이가 직관적이지 않아 없앴다
+- 추가/차감 방향은 콘솔이 상태 하나로 소유하고, 세그먼트·하단 바 라벨·키보드 단축키가 공유한다
+- 키보드 단축키 (소유자, RUNNING/EXPIRED, 입력 필드 밖에서만. 화면에 모달(`dialog[open]` 또는 `aria-modal="true"`)이 열려 있으면 숫자키와 X는 꺼진다. 목표 폼·삭제 확인·오버레이 설정 위에서 뒤쪽 타이머가 바뀌지 않게 하기 위해서다)
 
   | 키 | 동작 |
   |---|---|
   | `1` / `5` / `0` | 기본 닉네임으로 1/5/10시간을 선택한 방향(추가·차감)으로 즉시 적용 |
   | `X` | 추가/차감 전환 |
   | `R` | 수동 새로고침 |
-  | `G` | 그래프 모드 전환 |
   | `?` | 단축키 도움말 |
 
-  X·R·G는 한국어 IME가 켜져 있어도 동작하도록 문자 대신 `e.code`(`KeyX`/`KeyR`/`KeyG`)로 판별한다. 모든 단축키는 Cmd/Ctrl/Alt 조합을 무시해 브라우저 단축키(Cmd+1 탭 전환, Cmd+R 새로고침)를 막지 않는다. Tab은 포커스 이동에 쓰므로 단축키로 쓰지 않는다. 목록은 `SHORTCUT_HELP`(`src/hooks/useKeyboardShortcuts.ts`)와 맞춘다.
+  X·R은 한국어 IME가 켜져 있어도 동작하도록 문자 대신 `e.code`(`KeyX`/`KeyR`)로 판별한다. 모든 단축키는 Cmd/Ctrl/Alt 조합을 무시해 브라우저 단축키(Cmd+1 탭 전환, Cmd+R 새로고침)를 막지 않는다. Tab은 포커스 이동에 쓰므로 단축키로 쓰지 않는다. 목록은 `SHORTCUT_HELP`(`src/hooks/useKeyboardShortcuts.ts`)와 맞춘다.
 
-#### 로그 리스트
-- 데스크톱(md 이상)은 테이블: 시각, 액션, 시청자, 변경량, 변경 전/후. 모바일은 카드 목록
-- 최근 순 정렬
+#### 변경 기록
+- 기본은 '최근 변경' 5건. '전체 기록'으로 펼치면 '변경 기록'(20건 단위 페이지네이션)과 액션 타입 필터(토글 여러 개 동시 선택, `aria-pressed`, '초기화')가 생긴다
+- 각 행: 액션 뱃지, 시청자, 변경량, 시각, 변경 전 → 후. 최근 순
 - 액션 타입별 색상 뱃지 (텍스트 병행)
   - CREATE(생성): 파랑
   - ADD(추가): 초록
@@ -62,20 +61,21 @@
   - REOPEN(재시작): 노랑(amber)
   - ACTIVATE(활성화): 청록
   - DELETE(삭제): 짙은 회색
-- 페이지네이션 (하단)
-- 액션 타입 필터: 토글 버튼 여러 개를 동시에 선택(`aria-pressed`), '초기화' 버튼
-
-#### 소유자 도구
-- 헤더 아이콘 버튼: 통계(`/timers/[id]/stats`), 링크 복사, 타이머 삭제. 통계·삭제는 소유자에게만 보인다
-- 'OBS 오버레이 설정' 버튼 → `OverlaySettings` 모달
 
 #### 그래프
-- 모드 선택 탭: 잔여 시간 추이 | 누적 변경량 | 이벤트 빈도
-- Recharts로 구현
+- 잔여 시간 추이(`RemainingChart`) 하나. 누적 변경량은 통계 화면에 있고, 이벤트 빈도는 통계의 시간대별 이벤트 횟수와 겹쳐 없앴다
+
+#### OBS 오버레이 설정 (`OverlaySettings`)
+- '타이틀 표시'를 켜면 '표시할 제목'(타이머 제목, 1~100자)을 고칠 수 있다. 다른 설정과 같은 저장 버튼으로 저장되고 저장 전 변경·닫기 경고에 포함된다. 제목은 오버레이가 폴링으로 다시 읽으므로 URL을 다시 붙여넣지 않아도 반영된다
+
+### 3. 타이머 주소 (`/timers/[id]`)
+
+타이머를 조회해 상위 프로젝트(`/projects/[projectId]`)로 `router.replace`한다. 타이머 조작을 프로젝트 화면으로 합친 뒤에도 예전에 공유한 타이머 주소가 계속 열리게 하기 위해서다. 없는 타이머면 안내(`ErrorState`)를, 일시적 오류면 다시 시도 버튼을 보여 준다. 오버레이(`/timers/[id]/overlay`)와 통계(`/timers/[id]/stats`)는 타이머 주소에 그대로 있다.
 
 ### 4. 타이머 통계 (`/timers/[id]/stats`)
 
-- 요약 카드(`StatsCardGrid`), 상위 후원자(`DonorRankingTable`), 시간대별 이벤트 횟수(`HourlyActivityChart`), 일별 활동 최근 30일(`DailyActivityChart`)
+- 요약 카드(`StatsCardGrid`), 상위 후원자(`DonorRankingTable`), 누적 변경량(`CumulativeChart`, 불러오지 못하면 이 섹션만 숨긴다), 시간대별 이벤트 횟수(`HourlyActivityChart`), 일별 활동 최근 30일(`DailyActivityChart`)
+- 제목은 프로젝트 이름 기준(「프로젝트 이름 통계」), 복귀 링크는 프로젝트 화면
 
 ### 5. 오버레이 (`/timers/[id]/overlay`)
 
@@ -118,41 +118,36 @@ RootLayout (ThemeProvider, ToastProvider, SessionExpiredHandler)
 │   ├── CreateProjectForm
 │   └── ProjectCard[]
 │
-├── ProjectDetailPage (/projects/[id])
-│   ├── CreateTimerForm (FormDialog)
-│   ├── 타이머 카드 (타이머 화면 링크, 프로젝트당 1개)
-│   │   ├── CountdownDisplay (large)
-│   │   └── Badge
-│   └── GoalSection
-│       ├── GoalForm (FormDialog)
-│       └── GoalCard[] (GoalProgressBar)
+├── ProjectDetailPage (/projects/[id])  — 조작 콘솔
+│   ├── 헤더 (EditableText, OBS 오버레이·통계 버튼, MoreMenu)
+│   ├── CreateTimerForm (FormDialog, 타이머가 없을 때)
+│   ├── OverlaySettings (모달, 표시할 제목 포함)
+│   └── TimerConsole
+│       ├── CountdownDisplay (large) + Badge
+│       ├── TimerControls (소유자)
+│       ├── GoalSection (aside)
+│       │   ├── GoalForm (FormDialog)
+│       │   └── GoalCard[] (GoalProgressBar)
+│       ├── 변경 기록 (최근 5건 / 펼치면 필터·Pagination)
+│       └── RemainingChart (LineChart)
 │
-├── TimerDetailPage (/timers/[id])
-│   ├── CountdownDisplay (large)
-│   ├── Badge
-│   ├── TimerControls
-│   ├── OverlaySettings (모달)
-│   ├── 변경 기록 (테이블/카드, 액션 필터, Pagination)
-│   └── 그래프
-│       ├── GraphModeSelector
-│       ├── RemainingChart (LineChart)
-│       ├── CumulativeChart (AreaChart)
-│       └── FrequencyChart (BarChart)
+├── TimerRedirectPage (/timers/[id])  — 상위 프로젝트로 replace
 │
 ├── TimerStatsPage (/timers/[id]/stats)
 │   ├── StatsCardGrid (StatsCard[])
 │   ├── DonorRankingTable
+│   ├── CumulativeChart (AreaChart)
 │   ├── HourlyActivityChart
 │   └── DailyActivityChart
 │
 └── Footer
 ```
 
-공용 UI는 `src/components/ui/`(Badge, Button, Input, Pagination, ConfirmDialog, FormDialog, EditableText, ErrorState, Skeleton, Spinner, Toast, ThemeToggle, Icons)에 있다.
+공용 UI는 `src/components/ui/`(Badge, Button, Input, Pagination, ConfirmDialog, FormDialog, EditableText, ErrorState, MoreMenu, Skeleton, Spinner, Toast, ThemeToggle, Icons)에 있다.
 
 ## Recharts 그래프 설계
 
-### 모드 1: 잔여 시간 추이 (LineChart)
+### 잔여 시간 추이 (LineChart, 콘솔)
 
 ```tsx
 <LineChart data={points}>
@@ -168,7 +163,7 @@ RootLayout (ThemeProvider, ToastProvider, SessionExpiredHandler)
 - stepAfter 보간: 이벤트 시점에 값이 변하고, 자연 감소는 직선으로 표현
 - 포인트: 각 로그 이벤트 시점
 
-### 모드 2: 누적 변경량 (AreaChart)
+### 누적 변경량 (AreaChart, 통계 화면)
 
 ```tsx
 <AreaChart data={points}>
@@ -183,21 +178,7 @@ RootLayout (ThemeProvider, ToastProvider, SessionExpiredHandler)
 - 누적 추가량 (초록 영역)과 누적 차감량 (빨강 영역)을 겹쳐 표시
 - 시간에 따른 총 투입량 대비 차감량 시각화
 
-### 모드 3: 이벤트 빈도 (BarChart)
-
-```tsx
-<BarChart data={buckets}>
-  <XAxis dataKey="hour" />
-  <YAxis label="이벤트 수" />
-  <Tooltip />
-  <Bar dataKey="adds" fill="green" stackId="a" />
-  <Bar dataKey="subtracts" fill="red" stackId="a" />
-</BarChart>
-```
-
-- 시간대별(1시간 단위) 이벤트 횟수
-- ADD와 SUBTRACT를 스택 바로 구분
-- 활발한 시간대 파악에 유용
+그래프 API(`/api/timers/[id]/graph`)는 `mode=frequency`(시간대별 이벤트 횟수)도 계속 지원하지만, 화면에서는 통계의 `HourlyActivityChart`가 같은 정보를 보여 주므로 쓰지 않는다.
 
 ## 반응형 디자인
 
@@ -205,7 +186,7 @@ RootLayout (ThemeProvider, ToastProvider, SessionExpiredHandler)
 |---------------|---------|
 | < 640px (모바일) | 단일 열, 카운트다운 축소, 그래프는 컨테이너 폭에 맞춰 축소(ResponsiveContainer, 가로 스크롤 없음) |
 | 640-1024px (태블릿) | 2열 그리드, 그래프 전체 폭 |
-| > 1024px (데스크톱) | 3열 그리드, 타이머 상세 사이드바 레이아웃 가능 |
+| > 1024px (데스크톱) | 3열 그리드, 콘솔의 시간 조작·목표와 기록·그래프를 3:2로 나란히 |
 
 ## 접근성 고려사항
 

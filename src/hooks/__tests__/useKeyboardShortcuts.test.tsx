@@ -14,12 +14,11 @@ function setup(enabled = true) {
   const onPreset = vi.fn();
   const onToggleAction = vi.fn();
   const onRefresh = vi.fn();
-  const onToggleGraph = vi.fn();
   const hook = renderHook(
-    ({ enabled }) => useKeyboardShortcuts({ enabled, onPreset, onToggleAction, onRefresh, onToggleGraph }),
+    ({ enabled }) => useKeyboardShortcuts({ enabled, onPreset, onToggleAction, onRefresh }),
     { initialProps: { enabled } },
   );
-  return { hook, onPreset, onToggleAction, onRefresh, onToggleGraph };
+  return { hook, onPreset, onToggleAction, onRefresh };
 }
 
 describe("useKeyboardShortcuts", () => {
@@ -75,31 +74,26 @@ describe("useKeyboardShortcuts", () => {
     expect(events.every((event) => !event.defaultPrevented)).toBe(true);
   });
 
-  it("Cmd/Ctrl/Alt 조합의 R, G, ?는 가로채지 않는다", () => {
-    const { hook, onRefresh, onToggleGraph } = setup();
+  it("Cmd/Ctrl/Alt 조합의 R, ?는 가로채지 않는다", () => {
+    const { hook, onRefresh } = setup();
     const events = [
       press({ key: "r", code: "KeyR", metaKey: true }),
       press({ key: "r", code: "KeyR", ctrlKey: true }),
       press({ key: "R", code: "KeyR", metaKey: true, shiftKey: true }),
-      press({ key: "g", code: "KeyG", ctrlKey: true }),
       press({ key: "?", code: "Slash", metaKey: true, shiftKey: true }),
     ];
     expect(onRefresh).not.toHaveBeenCalled();
-    expect(onToggleGraph).not.toHaveBeenCalled();
     expect(hook.result.current.showHelp).toBe(false);
     expect(events.every((event) => !event.defaultPrevented)).toBe(true);
   });
 
-  it("R과 G는 대소문자와 한국어 IME에 상관없이 키 위치로 동작한다", () => {
-    const { onRefresh, onToggleGraph } = setup();
+  it("R은 대소문자와 한국어 IME에 상관없이 키 위치로 동작한다", () => {
+    const { onRefresh } = setup();
     press({ key: "r", code: "KeyR" });
     press({ key: "R", code: "KeyR", shiftKey: true });
     press({ key: "ㄱ", code: "KeyR" });
     press({ key: "Process", code: "KeyR" });
-    press({ key: "g", code: "KeyG" });
-    press({ key: "ㅎ", code: "KeyG" });
     expect(onRefresh).toHaveBeenCalledTimes(4);
-    expect(onToggleGraph).toHaveBeenCalledTimes(2);
   });
 
   it("입력 필드에 포커스가 있으면 무시한다", () => {
@@ -143,6 +137,50 @@ describe("useKeyboardShortcuts", () => {
 
     press({ key: "1", code: "Digit1" });
     expect(onPreset).toHaveBeenCalledWith(3600);
+  });
+
+  it("화면에 열린 모달이 있으면 프리셋과 전환을 무시한다", () => {
+    const { onPreset, onToggleAction } = setup();
+    const dialog = document.createElement("dialog");
+    dialog.setAttribute("open", "");
+    document.body.appendChild(dialog);
+    try {
+      press({ key: "1", code: "Digit1" });
+      press({ key: "x", code: "KeyX" });
+      expect(onPreset).not.toHaveBeenCalled();
+      expect(onToggleAction).not.toHaveBeenCalled();
+    } finally {
+      dialog.remove();
+    }
+    press({ key: "1", code: "Digit1" });
+    expect(onPreset).toHaveBeenCalledWith(3600);
+  });
+
+  it("닫힌 <dialog aria-modal>은 모달로 치지 않는다", () => {
+    const { onPreset } = setup();
+    const dialog = document.createElement("dialog");
+    dialog.setAttribute("aria-modal", "true");
+    document.body.appendChild(dialog);
+    try {
+      press({ key: "1", code: "Digit1" });
+      expect(onPreset).toHaveBeenCalledWith(3600);
+    } finally {
+      dialog.remove();
+    }
+  });
+
+  it("<dialog>가 아닌 aria-modal 모달이 있으면 프리셋을 무시한다", () => {
+    const { onPreset } = setup();
+    const modal = document.createElement("div");
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    document.body.appendChild(modal);
+    try {
+      press({ key: "1", code: "Digit1" });
+      expect(onPreset).not.toHaveBeenCalled();
+    } finally {
+      modal.remove();
+    }
   });
 
   it("도움말 목록에 Tab이 없고 X가 있다", () => {

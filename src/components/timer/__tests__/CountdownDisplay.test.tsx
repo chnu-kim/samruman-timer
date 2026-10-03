@@ -176,21 +176,8 @@ describe("CountdownDisplay 서브텍스트", () => {
     vi.useRealTimers();
   });
 
-  // UX-49: 경과 시간은 시각처럼 읽히지 않게 단위를 붙인다
-  it("경과 시간을 '72시간 2분 경과'처럼 단위로 표시한다", () => {
-    const createdAt = new Date(Date.now() - (72 * 3600 + 2 * 60 + 53) * 1000).toISOString();
-    render(
-      <CountdownDisplay remainingSeconds={3600} status="RUNNING" createdAt={createdAt} size="large" />,
-    );
-    expect(screen.getByText(/종료 예정/)).toHaveTextContent("(72시간 2분 경과)");
-    expect(screen.getByText(/종료 예정/)).not.toHaveTextContent("72:02:53");
-  });
-
-  it("경과가 1분 미만이면 경과를 생략한다", () => {
-    const createdAt = new Date(Date.now() - 30 * 1000).toISOString();
-    render(
-      <CountdownDisplay remainingSeconds={3600} status="RUNNING" createdAt={createdAt} size="large" />,
-    );
+  it("실행 중에는 생성 시각부터 잰 경과를 붙이지 않고 종료 예정 시각만 보여 준다", () => {
+    render(<CountdownDisplay remainingSeconds={3600} status="RUNNING" size="large" />);
     expect(screen.getByText(/종료 예정/)).not.toHaveTextContent("경과");
   });
 

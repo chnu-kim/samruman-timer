@@ -74,7 +74,6 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   const [error, setError] = useState("");
   const [recentActors, setRecentActors] = useState<string[]>([]);
   const [defaultActor, setDefaultActor] = useState("");
-  const [quickMode, setQuickMode] = useState(false);
   // 실패 시 입력을 되돌릴 때, 요청 중에 새로 입력한 값을 덮어쓰지 않도록 최신 입력을 들고 있는다
   const inputsRef = useRef({ hours, minutes, seconds });
   inputsRef.current = { hours, minutes, seconds };
@@ -96,7 +95,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   }, []);
 
   const totalSeconds = hours * 3600 + minutes * 60 + seconds;
-  // 즉시 적용(빠른 적용 모드, 하단 바)이 기록할 닉네임. 표시와 제출이 어긋나지 않도록 한 곳에서 정한다
+  // 즉시 적용(모바일 하단 바)이 기록할 닉네임. 표시와 제출이 어긋나지 않도록 한 곳에서 정한다
   const quickActor = actorName.trim() || defaultActor;
   function addPreset(presetSeconds: number) {
     const current = hours * 3600 + minutes * 60 + seconds;
@@ -178,11 +177,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
     }
   }
 
-  function handlePresetClick(presetSeconds: number) {
-    addPreset(presetSeconds);
-  }
-
-  // 빠른 적용 모드: 프리셋 탭 한 번으로 즉시 적용
+  // 모바일 하단 바: 프리셋 탭 한 번으로 즉시 적용
   async function handleQuickApply(presetSeconds: number) {
     if (!quickActor) {
       setError("닉네임을 먼저 입력해주세요.");
@@ -252,156 +247,138 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
           만료된 타이머입니다. 시간을 추가하면 타이머가 다시 시작됩니다.
         </p>
       )}
-      {/* 시청자 닉네임 */}
-      <div>
-        <Input
-          label="시청자 닉네임"
-          value={actorName}
-          onChange={(e) => setActorName(e.target.value)}
-          required
-          maxLength={50}
-          placeholder={defaultActor ? `기본: ${defaultActor}` : "시간 변경을 요청한 시청자"}
-        />
-        {/* 최근 닉네임 칩 */}
-        {recentActors.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-2">
-            {recentActors.map((name) => {
-              const isDefault = name === defaultActor;
-              const isSelected = name === actorName;
-              return (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => setActorName(name)}
-                  className={cn(
-                    "rounded-full border px-3 py-2 text-xs cursor-pointer transition-colors",
-                    isDefault
-                      ? "border-accent text-accent hover:bg-accent/10"
-                      : "border-border text-muted-foreground hover:bg-accent/10 hover:text-foreground",
-                    isSelected && "bg-accent/10",
-                  )}
-                >
-                  {isDefault && <span className="mr-0.5">★</span>}
-                  {name}
-                </button>
-              );
-            })}
+      {/* 시청자 닉네임과 추가/차감은 넓은 화면에서 한 줄에 두어 조작 카드 높이를 줄인다 */}
+      <div className="flex flex-col gap-5 md:grid md:grid-cols-[minmax(0,1fr)_14rem] md:gap-4">
+        <div>
+          <Input
+            label="시청자 닉네임"
+            value={actorName}
+            onChange={(e) => setActorName(e.target.value)}
+            required
+            maxLength={50}
+            placeholder={defaultActor ? `기본: ${defaultActor}` : "시간 변경을 요청한 시청자"}
+          />
+          {/* 최근 닉네임 칩 */}
+          {recentActors.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {recentActors.map((name) => {
+                const isDefault = name === defaultActor;
+                const isSelected = name === actorName;
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => setActorName(name)}
+                    className={cn(
+                      "rounded-full border px-3 py-2 text-xs cursor-pointer transition-colors",
+                      isDefault
+                        ? "border-accent text-accent hover:bg-accent/10"
+                        : "border-border text-muted-foreground hover:bg-accent/10 hover:text-foreground",
+                      isSelected && "bg-accent/10",
+                    )}
+                  >
+                    {isDefault && <span className="mr-0.5">★</span>}
+                    {name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {/* 버튼 터치 영역(px-2)만 넓히고 글자는 칩과 왼쪽 정렬을 맞춘다 */}
+          <div className="mt-1.5 -ml-2 flex items-center gap-2">
+            {actorName.trim() && actorName.trim() !== defaultActor && (
+              <button
+                type="button"
+                onClick={handleSetDefault}
+                className="min-h-11 px-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                기본 닉네임으로 설정
+              </button>
+            )}
+            {defaultActor && (
+              <button
+                type="button"
+                onClick={handleClearDefault}
+                className="min-h-11 px-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                기본 닉네임 해제
+              </button>
+            )}
           </div>
-        )}
-        {/* 버튼 터치 영역(px-2)만 넓히고 글자는 칩과 왼쪽 정렬을 맞춘다 */}
-        <div className="mt-1.5 -ml-2 flex items-center gap-2">
-          {actorName.trim() && actorName.trim() !== defaultActor && (
-            <button
-              type="button"
-              onClick={handleSetDefault}
-              className="min-h-11 px-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              기본 닉네임으로 설정
-            </button>
-          )}
-          {defaultActor && (
-            <button
-              type="button"
-              onClick={handleClearDefault}
-              className="min-h-11 px-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              기본 닉네임 해제
-            </button>
-          )}
         </div>
-      </div>
 
-      {/* 추가/차감 토글 */}
-      <div>
-        <span id={actionGroupLabelId} className="mb-1.5 block text-sm font-medium text-foreground">변경 유형</span>
-        <div
-          className="relative grid grid-cols-2 rounded-xl border border-border bg-muted p-1"
-          role="radiogroup"
-          aria-labelledby={actionGroupLabelId}
-        >
-          {/* 슬라이딩 인디케이터 */}
+        {/* 추가/차감 토글 */}
+        <div>
+          <span id={actionGroupLabelId} className="mb-1.5 block text-sm font-medium text-foreground">변경 유형</span>
           <div
-            className={cn(
-              "absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-lg bg-foreground shadow-sm transition-transform duration-200 ease-out pointer-events-none",
-              selectedAction === "SUBTRACT" && "translate-x-[calc(100%+8px)]",
-            )}
-          />
-          <span
-            ref={addRadioRef}
-            role="radio"
-            aria-checked={selectedAction === "ADD"}
-            tabIndex={selectedAction === "ADD" ? 0 : -1}
-            onClick={() => onActionChange("ADD")}
-            onKeyDown={(e) => handleActionKeyDown(e, "ADD")}
-            className={cn(
-              "relative z-10 flex items-center justify-center rounded-lg py-2.5 text-sm font-medium transition-colors duration-200 select-none cursor-pointer",
-              selectedAction === "ADD"
-                ? "text-background"
-                : "text-muted-foreground",
-            )}
+            className="relative grid grid-cols-2 rounded-xl border border-border bg-muted p-1"
+            role="radiogroup"
+            aria-labelledby={actionGroupLabelId}
           >
-            추가
-          </span>
-          <span
-            ref={subtractRadioRef}
-            role="radio"
-            aria-checked={selectedAction === "SUBTRACT"}
-            tabIndex={selectedAction === "SUBTRACT" ? 0 : -1}
-            onClick={() => onActionChange("SUBTRACT")}
-            onKeyDown={(e) => handleActionKeyDown(e, "SUBTRACT")}
-            className={cn(
-              "relative z-10 flex items-center justify-center rounded-lg py-2.5 text-sm font-medium transition-colors duration-200 select-none cursor-pointer",
-              selectedAction === "SUBTRACT"
-                ? "text-background"
-                : "text-muted-foreground",
-            )}
-          >
-            차감
-          </span>
+            {/* 슬라이딩 인디케이터 */}
+            <div
+              className={cn(
+                "absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-lg bg-foreground shadow-sm transition-transform duration-200 ease-out pointer-events-none",
+                selectedAction === "SUBTRACT" && "translate-x-[calc(100%+8px)]",
+              )}
+            />
+            <span
+              ref={addRadioRef}
+              role="radio"
+              aria-checked={selectedAction === "ADD"}
+              tabIndex={selectedAction === "ADD" ? 0 : -1}
+              onClick={() => onActionChange("ADD")}
+              onKeyDown={(e) => handleActionKeyDown(e, "ADD")}
+              className={cn(
+                "relative z-10 flex items-center justify-center rounded-lg py-2.5 text-sm font-medium transition-colors duration-200 select-none cursor-pointer",
+                selectedAction === "ADD"
+                  ? "text-background"
+                  : "text-muted-foreground",
+              )}
+            >
+              추가
+            </span>
+            <span
+              ref={subtractRadioRef}
+              role="radio"
+              aria-checked={selectedAction === "SUBTRACT"}
+              tabIndex={selectedAction === "SUBTRACT" ? 0 : -1}
+              onClick={() => onActionChange("SUBTRACT")}
+              onKeyDown={(e) => handleActionKeyDown(e, "SUBTRACT")}
+              className={cn(
+                "relative z-10 flex items-center justify-center rounded-lg py-2.5 text-sm font-medium transition-colors duration-200 select-none cursor-pointer",
+                selectedAction === "SUBTRACT"
+                  ? "text-background"
+                  : "text-muted-foreground",
+              )}
+            >
+              차감
+            </span>
+          </div>
         </div>
-      </div>
-
-      {/* 빠른 적용 모드 토글 */}
-      <div>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={quickMode}
-            onChange={(e) => setQuickMode(e.target.checked)}
-            className="w-4 h-4 accent-accent rounded"
-          />
-          <span className="text-sm font-medium">빠른 적용 모드</span>
-          <span className="text-xs text-muted-foreground">프리셋 탭 한 번으로 즉시 적용</span>
-        </label>
       </div>
 
       {/* 시간 입력 */}
       <div>
         <span className="text-sm font-medium text-foreground">시간</span>
 
-        {/* 빠른 입력 프리셋 */}
-        <div className="mt-1.5 flex flex-wrap gap-1.5">
-          {PRESETS.map((preset) => (
-            <button
-              key={preset.label}
-              type="button"
-              onClick={() => quickMode ? handleQuickApply(preset.seconds) : handlePresetClick(preset.seconds)}
-              className={cn(
-                "rounded-md border px-3 py-2 min-h-[48px] min-w-[48px] text-sm font-medium transition-colors disabled:opacity-50",
-                quickMode
-                  ? "border-accent text-accent hover:bg-accent hover:text-accent-foreground"
-                  : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground",
-              )}
-            >
-              {/* 빠른 적용은 확인 없이 바로 반영되므로 라벨 부호가 실제 방향을 따른다 */}
-              {quickMode && selectedAction === "SUBTRACT" ? "-" : "+"}{preset.label}
-            </button>
-          ))}
-        </div>
+        {/* 프리셋은 입력값에 더하기만 하고, 적용은 아래 확인 버튼으로 한다(즉시 적용은 모바일 하단 바와 숫자 단축키) */}
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-2.5">
+          <div className="flex flex-wrap gap-1.5">
+            {PRESETS.map((preset) => (
+              <button
+                key={preset.label}
+                type="button"
+                onClick={() => addPreset(preset.seconds)}
+                className="rounded-md border border-border px-3 py-2 min-h-[48px] min-w-[48px] text-sm font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground disabled:opacity-50"
+              >
+                +{preset.label}
+              </button>
+            ))}
+          </div>
 
-        {/* 직접 입력 */}
-        {!quickMode && (
-          <div className="mt-2.5 flex items-center gap-2">
+          {/* 직접 입력 */}
+          <div className="flex items-center gap-2">
             <Input
               type="number"
               inputMode="numeric"
@@ -440,32 +417,27 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
             />
             <span className="text-sm text-muted-foreground">초</span>
           </div>
-        )}
+        </div>
         {/* 59를 넘기면 59로 잘리므로 범위를 미리 알린다 */}
-        {!quickMode && (
-          <p id={timeHintId} className="mt-1 text-xs text-muted-foreground">
-            분과 초는 0~59까지 입력할 수 있습니다.
-          </p>
-        )}
+        <p id={timeHintId} className="mt-1 text-xs text-muted-foreground">
+          분과 초는 0~59까지 입력할 수 있습니다.
+        </p>
       </div>
 
       {/* 에러 메시지 */}
       {error && <p className="text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>}
 
-      {/* 확인 버튼 (빠른 적용 모드가 아닐 때만) */}
-      {!quickMode && (
-        <Button
-          size="lg"
-          variant={selectedAction === "SUBTRACT" ? "danger" : "primary"}
-          disabled={totalSeconds <= 0}
-          onClick={handleSubmit}
-          className="w-full"
-        >
-          {totalSeconds > 0
-            ? `${selectedAction === "ADD" ? "추가" : "차감"} 확인 (${formatDelta(totalSeconds)})`
-            : "시간을 입력해주세요"}
-        </Button>
-      )}
+      <Button
+        size="lg"
+        variant={selectedAction === "SUBTRACT" ? "danger" : "primary"}
+        disabled={totalSeconds <= 0}
+        onClick={handleSubmit}
+        className="w-full"
+      >
+        {totalSeconds > 0
+          ? `${selectedAction === "ADD" ? "추가" : "차감"} 확인 (${formatDelta(totalSeconds)})`
+          : "시간을 입력해주세요"}
+      </Button>
 
       {/* 모바일 하단 고정 빠른 액션 바 */}
       {/* data-quick-bar: 바가 있을 때 body 하단 여백을 잡는다(globals.css) */}

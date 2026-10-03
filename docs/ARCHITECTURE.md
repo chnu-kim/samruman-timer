@@ -33,11 +33,11 @@ src/
 
     projects/
       page.tsx                          — 프로젝트 목록
-      [id]/page.tsx                     — 프로젝트 상세
+      [id]/page.tsx                     — 프로젝트 상세 = 타이머 조작 콘솔
 
     timers/
       [id]/
-        page.tsx                        — 타이머 상세
+        page.tsx                        — 상위 프로젝트(/projects/[id])로 이동
         stats/page.tsx                  — 타이머 통계
         overlay/page.tsx                — OBS 오버레이 페이지
 
@@ -68,6 +68,7 @@ src/
 
   components/
     timer/                              — 타이머 관련 컴포넌트
+      TimerConsole.tsx                  — 카운트다운·시간 조작·기록·그래프·단축키 (프로젝트 화면에 들어감)
       CountdownDisplay.tsx              — 큰 카운트다운 숫자 표시
       TimerControls.tsx                 — 시간 증감 버튼, 입력 필드
       CreateTimerForm.tsx               — 타이머 생성 폼
@@ -81,9 +82,7 @@ src/
       GoalProgressBar.tsx               — 목표 진행률 바
     graph/                              — 그래프 컴포넌트
       RemainingChart.tsx                — 잔여 시간 추이 (LineChart)
-      CumulativeChart.tsx               — 누적 변경량 (AreaChart)
-      FrequencyChart.tsx                — 이벤트 빈도 (BarChart)
-      GraphModeSelector.tsx             — 그래프 모드 선택 탭
+      CumulativeChart.tsx               — 누적 변경량 (AreaChart, 통계 화면)
     stats/                              — 통계 컴포넌트
       StatsCard.tsx, StatsCardGrid.tsx  — 통계 카드
       DailyActivityChart.tsx            — 일별 활동
