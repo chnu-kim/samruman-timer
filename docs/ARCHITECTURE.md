@@ -24,6 +24,8 @@ src/
     globals.css                         — Tailwind CSS 설정 (토큰·키프레임)
     icon.svg, apple-icon.png            — 파비콘·앱 아이콘
     manifest.ts                         — PWA 매니페스트 (/manifest.webmanifest)
+    robots.ts, sitemap.ts               — /robots.txt, /sitemap.xml (절대 주소는 lib/site.ts의 SITE_URL)
+    opengraph-image.png                 — SNS 미리보기 이미지 1200×630 (icon.svg 도형으로 생성)
 
     (auth)/
       login/page.tsx                    — 로그인 페이지 (next 검증 후 /api/auth/login으로 전달)
@@ -127,6 +129,7 @@ src/
     logger.ts                           — 구조화 로그
     safe-redirect.ts                    — 로그인 후 next 경로 검증 (서버·클라이언트 공용)
     overlay-style.ts                    — 오버레이 색상·배경 값 검증 (서버·클라이언트 공용)
+    site.ts                             — 사이트 절대 주소·이름·설명·title 템플릿 (metadata·robots·sitemap 공용)
     auth-fetch.ts                       — (클라이언트) 401이면 세션 만료 이벤트를 보내는 fetch 래퍼
     session-expired.ts                  — (클라이언트) 세션 만료 이벤트
     timer-sync.ts                       — (클라이언트) 폴링 값과 로컬 카운트다운 동기화
@@ -266,7 +269,16 @@ npx opennextjs-cloudflare build && npx opennextjs-cloudflare deploy
 
 ### 정적 자산 헤더 (`public/_headers`)
 
-`wrangler.toml`에 `run_worker_first`가 없으므로 `.open-next/assets`에 있는 파일(`public/*`, `/_next/static/*`)은 Workers Static Assets가 Worker를 실행하지 않고 바로 응답한다. 그래서 `next.config.ts`의 `headers()`는 이 파일들에 붙지 않는다. `public/*` 응답 헤더는 `public/_headers`로 지정하고, 보안 헤더(nosniff, HSTS, Permissions-Policy 등)는 `next.config.ts`의 `/:path*` 공통 헤더와 맞추고, `src/__tests__/static-headers.test.ts`가 둘이 같은지 확인한다. 반대로 `/manifest.webmanifest`, `/icon.svg`, `/apple-icon.png`는 Next 메타데이터 라우트라 Worker를 거쳐 `next.config.ts` 헤더를 받는다.
+`wrangler.toml`에 `run_worker_first`가 없으므로 `.open-next/assets`에 있는 파일(`public/*`, `/_next/static/*`)은 Workers Static Assets가 Worker를 실행하지 않고 바로 응답한다. 그래서 `next.config.ts`의 `headers()`는 이 파일들에 붙지 않는다. `public/*` 응답 헤더는 `public/_headers`로 지정하고, 보안 헤더(nosniff, HSTS, Permissions-Policy 등)는 `next.config.ts`의 `/:path*` 공통 헤더와 맞추고, `src/__tests__/static-headers.test.ts`가 둘이 같은지 확인한다. 반대로 `/manifest.webmanifest`, `/icon.svg`, `/apple-icon.png`, `/opengraph-image.png`, `/robots.txt`, `/sitemap.xml`은 Next 메타데이터 라우트라 Worker를 거쳐 `next.config.ts` 헤더를 받는다.
+
+## SEO 메타데이터
+
+- 절대 주소는 `src/lib/site.ts`의 `SITE_URL` 상수로 둔다. `BASE_URL`은 프로덕션에서 런타임 시크릿이라, 빌드 때 프리렌더되는 metadata·`robots.txt`·`sitemap.xml`에서 읽으면 `.env`의 localhost가 박힌다. 도메인을 바꾸면 이 상수도 고친다.
+- 루트 `layout.tsx`가 `metadataBase`·title 템플릿(`%s | 삼루먼타이머`)·OpenGraph·Twitter 카드를 정한다. OG 이미지는 정적 `src/app/opengraph-image.png`다(한글 폰트·Workers 번들 문제로 `ImageResponse`를 쓰지 않는다).
+- 페이지가 모두 클라이언트 컴포넌트라 페이지별 title은 각 라우트의 서버 `layout.tsx`에 둔다. 하위 페이지가 있는 layout(`projects`, `timers/[id]`)은 title을 문자열로 두면 그 아래에서 템플릿이 끊기므로 `{ default, template }`으로 다시 선언한다.
+- 색인 제외: 오버레이·OAuth 콜백·통계(소유자 전용)는 layout의 `robots: noindex`로 막는다. `robots.txt`는 `/api/`만 Disallow한다(Disallow하면 크롤러가 noindex 메타를 읽지 못한다).
+- canonical: `/projects`(검색·정렬 쿼리 통합), `/login`(`?next=`·`?error=` 통합), `/projects/<id>`(상위 canonical을 물려받지 않게 자기 주소).
+- sitemap에는 로그인 없이 보이는 `/projects`, `/login`만 둔다.
 
 ## PWA
 
