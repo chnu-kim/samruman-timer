@@ -75,9 +75,11 @@ interface TimerConsoleProps {
   aside?: ReactNode;
   /** 시간이 바뀌었을 때(여기서 조작했거나 다른 기기에서 바뀌었을 때). 목표 진행률처럼 시간에 딸린 데이터를 다시 불러오는 데 쓴다 */
   onTimeChanged?: () => void;
+  /** 다른 탭·기기에서 타이머가 삭제돼 폴링이 404를 받았을 때. 상위 화면이 '타이머 없음' 상태로 바꾼다 */
+  onTimerRemoved?: () => void;
 }
 
-export function TimerConsole({ timerId, isOwner, aside, onTimeChanged }: TimerConsoleProps) {
+export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRemoved }: TimerConsoleProps) {
   const { toast } = useToast();
 
   const [timer, setTimer] = useState<TimerDetailResponse | null>(null);
@@ -100,9 +102,19 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged }: TimerCo
   // 추가/차감 방향. 세그먼트, 프리셋 라벨, 단축키가 이 상태 하나를 공유한다
   const [selectedAction, setSelectedAction] = useState<ModifyAction>("ADD");
 
+  // 상위 화면은 렌더마다 새 콜백을 넘긴다. 첫 로드 effect가 의존하는 fetchTimer의 의존성에 넣으면
+  // 렌더마다 첫 로드를 다시 하므로 ref로 최신 콜백만 읽는다
+  const onTimerRemovedRef = useRef(onTimerRemoved);
+  onTimerRemovedRef.current = onTimerRemoved;
+
   const fetchTimer = useCallback(async () => {
     try {
       const res = await fetch(`/api/timers/${timerId}`);
+      // 목록을 받은 뒤 첫 조회 전에 다른 곳에서 삭제됐을 수 있다. 오류 화면 대신 '타이머 없음'으로 보낸다
+      if (res.status === 404 && onTimerRemovedRef.current) {
+        onTimerRemovedRef.current();
+        return;
+      }
       if (!res.ok) {
         setError(true);
         return;
@@ -191,6 +203,10 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged }: TimerCo
   const pollTimer = useCallback(async () => {
     try {
       const res = await fetch(`/api/timers/${timerId}`);
+      if (res.status === 404) {
+        onTimerRemovedRef.current?.();
+        return;
+      }
       if (!res.ok) return;
       const json = (await res.json()) as ApiSuccessResponse<TimerDetailResponse>;
       const serverData = json.data;

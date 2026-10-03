@@ -141,6 +141,18 @@ describe("프로젝트 콘솔", () => {
     expect(screen.getByRole("link", { name: /통계/ })).toHaveAttribute("href", "/timers/t1/stats");
   });
 
+  // 상위 화면이 렌더마다 새 콜백을 넘겨도 첫 조회를 되풀이하지 않는다
+  it("타이머 상세는 처음에 한 번만 불러온다", async () => {
+    const calls = stubApi({ timers: [timer], goals: [], me: owner });
+    render(<ProjectDetailPage />);
+    await screen.findByRole("heading", { name: "시간 조작" });
+    // 상위 화면 상태를 바꿔 다시 렌더시킨다(목표 폼 열기)
+    fireEvent.click(screen.getByRole("button", { name: /새 목표/ }));
+    await screen.findByRole("heading", { name: "새 목표 설정" });
+    await new Promise((r) => setTimeout(r, 300));
+    expect(calls.filter((c) => c.url === "/api/timers/t1" && c.method === "GET")).toHaveLength(1);
+  });
+
   it("시청자에게는 조작·통계·더보기 메뉴를 보여 주지 않는다", async () => {
     stubApi({ timers: [timer], goals: [] });
     render(<ProjectDetailPage />);
@@ -244,6 +256,49 @@ describe("프로젝트 콘솔", () => {
 
     expect(await screen.findByText("아직 타이머가 없습니다.")).toBeInTheDocument();
     expect(calls.some((c) => c.url === "/api/timers/t1" && c.method === "DELETE")).toBe(true);
+  });
+
+  it("다른 곳에서 타이머가 삭제되면 폴링이 404를 받는 즉시 '타이머 없음' 상태로 바꾼다", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      stubApi({ timers: [timer], goals: [], me: owner });
+      render(<ProjectDetailPage />);
+      await screen.findByRole("heading", { name: "시간 조작" });
+
+      global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/timers/t1") return new Response(null, { status: 404 });
+        if (url === "/api/projects/p1/timers") return jsonResponse([]);
+        if (url === "/api/projects/p1/goals") return jsonResponse([]);
+        return jsonResponse({});
+      }) as typeof fetch;
+      // 만료 타이머는 15초 간격으로 폴링한다
+      await vi.advanceTimersByTimeAsync(15_000);
+
+      expect(await screen.findByText("아직 타이머가 없습니다.")).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "시간 조작" })).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("목록을 받은 뒤 첫 조회 전에 타이머가 삭제됐으면 오류 대신 '타이머 없음' 상태가 된다", async () => {
+    let timersCalls = 0;
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/api/auth/me")) return jsonResponse(owner);
+      // 첫 목록 조회에는 타이머가 있고, 삭제를 알아챈 뒤 다시 부르면 없다
+      if (url === "/api/projects/p1/timers") return jsonResponse(timersCalls++ === 0 ? [timer] : []);
+      if (url === "/api/projects/p1/goals") return jsonResponse([]);
+      if (url === "/api/timers/t1") return new Response(null, { status: 404 });
+      if (url.startsWith("/api/timers/t1/")) return new Response(null, { status: 404 });
+      return jsonResponse(project);
+    }) as typeof fetch;
+    render(<ProjectDetailPage />);
+
+    expect(await screen.findByText("아직 타이머가 없습니다.")).toBeInTheDocument();
+    expect(screen.queryByText("타이머 정보를 불러오지 못했습니다.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /OBS 오버레이/ })).not.toBeInTheDocument();
   });
 
   it("더보기 메뉴는 Escape로 닫히고 포커스가 버튼으로 돌아간다", async () => {

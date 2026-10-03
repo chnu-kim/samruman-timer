@@ -356,6 +356,14 @@ export default function ProjectDetailPage() {
     }
   }
 
+  // 다른 탭·기기에서 타이머를 지우면 콘솔 폴링이 404를 받는다. 지워진 타이머를 계속 조작하게 두지 않는다
+  function handleTimerRemoved() {
+    setTimers([]);
+    toast("타이머가 다른 곳에서 삭제되었습니다", "info");
+    fetchTimers();
+    fetchGoals();
+  }
+
   // 타이머만 지우면 이 화면에 남아 '타이머 없음' 상태와 남은 목표 기록을 보여 준다
   async function handleDeleteTimer() {
     if (!timer) return;
@@ -463,6 +471,7 @@ export default function ProjectDetailPage() {
             timerId={timer.id}
             isOwner={isOwner}
             onTimeChanged={fetchGoals}
+            onTimerRemoved={handleTimerRemoved}
             aside={
               // 시청자에게 빈 목표 영역은 의미가 없으므로 목표가 있을 때만 보여 준다
               isOwner || goals.length > 0
