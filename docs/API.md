@@ -33,6 +33,7 @@
 | 404 | `NOT_FOUND` | 리소스 없음 |
 | 409 | `CONFLICT` | 동시 변경과 계속 겹침 (`POST /api/timers/[id]/modify`) |
 | 500 | `INTERNAL_ERROR` | 서버 오류 |
+| 503 | `SERVICE_UNAVAILABLE` | 원격 D1 스키마가 코드보다 뒤처짐 (`GET /api/health`) |
 
 ---
 
@@ -804,3 +805,25 @@ OBS 오버레이 설정을 저장한다.
   }
 }
 ```
+
+---
+
+## 운영 API
+
+### GET /api/health
+
+서비스가 살아 있고 원격 D1 스키마가 코드와 맞는지 확인한다. 외부 프로브(`.github/workflows/health.yml`)가 매시 부르고, 배포 후 `obs.mjs verify --expect-event health.check`의 "이 버전이 요청을 받았다"는 근거가 된다 (OBSERVABILITY.md `health.check`).
+
+- **인증**: 불필요 (`PROTECTED_ROUTES`에 넣지 않는다. 미들웨어는 거치므로 `x-request-id`가 붙고, 환경변수 검증이 실패하면 `500`)
+- **동작**: D1 조회 한 번(`SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 1`). 원격의 마지막 적용 마이그레이션을 코드 상수 `EXPECTED_LATEST_MIGRATION`(`src/lib/health.ts`)과 비교한다
+  - 같거나 원격이 더 새것(번호가 큼): 정상(200). 원격 마이그레이션을 먼저 적용하고 코드를 배포하는 사이에는 원격이 앞선다. 앞선 경우는 운영 로그에 `health.schema_ahead`(warn)를 따로 남긴다
+  - 원격이 뒤처짐, 번호는 같은데 이름이 다름, 적용 기록 없음: 스키마 드리프트
+- **응답 헤더**: `Cache-Control: no-store` (200·503)
+- **응답**: `200 OK`
+```json
+{ "data": { "ok": true } }
+```
+- **에러**:
+  - `503 SERVICE_UNAVAILABLE`: 스키마 드리프트. 본문은 code·message뿐이고, 마이그레이션 이름은 운영 로그(`health.schema_drift`)에만 남긴다
+  - `500 INTERNAL_ERROR`: D1 조회 예외 (`withErrorHandler`, `api.unhandled`)
+- 공개 경로라 응답에 내부 정보를 넣지 않고 조회를 1회로 묶는다. rate limit은 없다. 요청 한도 소모 공격은 다른 공개 경로와 같은 수준이고, rate limit은 보안 감사 후속 항목으로 따로 다룬다

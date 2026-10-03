@@ -60,7 +60,8 @@ export type ErrorCode =
   | "UNAUTHORIZED"
   | "FORBIDDEN"
   | "NOT_FOUND"
-  | "INTERNAL_ERROR";
+  | "INTERNAL_ERROR"
+  | "SERVICE_UNAVAILABLE";
 
 export interface ApiSuccessResponse<T> {
   data: T;

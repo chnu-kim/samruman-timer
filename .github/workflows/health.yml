@@ -1,0 +1,36 @@
+# 프로덕션 외부 프로브. 매시 /api/health를 불러 Worker가 살아 있고 원격 D1 스키마가 코드와 맞는지 본다.
+# 200이 아니면 job이 실패하고 GitHub이 실패 알림을 보낸다. 판정 기준은 docs/OBSERVABILITY.md "health.check"
+# - schedule은 기본 브랜치(main)에 있을 때만 돈다. 정각은 혼잡해 지연·누락이 잦아 17분에 둔다
+# - 공개 저장소라 Actions 로그도 공개다. 상태 코드와 최소 본문만 찍고 응답 헤더(x-request-id 등)는 찍지 않는다
+name: health
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: health
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: GET /api/health
+        env:
+          # src/lib/site.ts의 SITE_URL과 같아야 한다(src/lib/__tests__/health.test.ts가 확인한다)
+          HEALTH_URL: https://samrumantimer.chanwoos-account.workers.dev/api/health
+        run: |
+          # --retry는 시간 초과·408·429·5xx를 일시 오류로 보고 다시 시도한다(최대 2회). 연결 거부도 재시도한다
+          # 네트워크 오류면 curl이 0이 아닌 값으로 끝나고 http_code는 000이다
+          status=$(curl -sS -o body.json -w '%{http_code}' \
+            --max-time 10 --retry 2 --retry-delay 10 --retry-connrefused \
+            "$HEALTH_URL") || true
+          echo "status: ${status:-000}"
+          # 본문은 { data: { ok } } 또는 { error: { code, message } }뿐이다. 다른 것이 오면 앞부분만 찍는다
+          if [ -f body.json ]; then head -c 300 body.json; echo; fi
+          test "$status" = "200"

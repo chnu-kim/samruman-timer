@@ -14,7 +14,7 @@ argument-hint: "[<Issue ID> | <requestId> | verify <tag> | (없음)]"
 
 - 없음: `obs.mjs issues`, `obs.mjs errors --since 24h`, `obs.mjs summary --since 24h`로 지금 무엇이 비정상인지 고른다. 카탈로그의 정상/비정상 기준으로 거르고, 조사할 것이 없으면 그렇게 보고하고 끝낸다
 - Issue ID(대시보드 Issues의 ID): `obs.mjs issue <id>`로 occurrence의 경로·오류·버전 태그를 본다. occurrence에는 앱 로그의 `requestId`가 없다. 앱 로그(`kind`·`stage`·stack)는 occurrence 시각 앞뒤와 경로로 찾는다: `obs.mjs errors --since <시각-5분> --until <시각+5분> --path <path>`, 거기서 나온 `requestId`로 `obs.mjs request`
-- requestId(사용자가 준 응답 헤더 `x-request-id`): `obs.mjs request <requestId>`. 보관 기간(현재 3일)이 지났으면 0건이다
+- requestId(사용자가 준 응답 헤더 `x-request-id`): `obs.mjs request <requestId>`. 보관 기간(현재 3일, 2026-12-01부터 7일)이 지났으면 0건이다
 - `verify <tag>`: 아래 "재발 판정"으로 바로 간다
 
 ## 원인
@@ -45,10 +45,13 @@ argument-hint: "[<Issue ID> | <requestId> | verify <tag> | (없음)]"
 
 - 대상을 좁힌다. 고친 오류의 `--event`를 주고, Issue에서 시작했다면 `--issue <id>`도 준다. 둘 다 없으면 그 태그의 모든 error와 모든 active Issue가 대상이라, 무관한 오류(CHZZK 일시 장애 등)로 exit 1이 난다
 - `--expect-event`: 수정한 경로가 실제로 실행됐다는 근거(로그인 수정이면 `auth.login.succeeded`). 없으면 `clean`은 "오류가 보이지 않았다"일 뿐이다
+  - 수정한 경로가 성공 로그를 남기지 않으면 `--expect-event health.check`를 준다. 외부 프로브(`.github/workflows/health.yml`)가 매시 남기므로 배포 후 1시간 이상 지나면 태그 로그 0건(`too_few_events`)으로 끝나지 않는다. 다만 "그 버전이 요청을 받았다"까지만 보여 주므로, 보고에 경로 실행 근거는 아니라고 적는다
+  - 태그 로그에 `health.schema_drift`가 있으면 그 버전은 원격 마이그레이션이 빠진 상태다. 재발 판정보다 `npx wrangler d1 migrations list samrumantimer-db --remote` 확인이 먼저다. `--event`로 좁히면 verify의 exit에는 반영되지 않고 `notes`에만 나온다. 따로 볼 때는 `node scripts/obs.mjs events health.schema_drift --since <배포 시각>`
+  - `health.schema_ahead`(warn)는 원격이 코드보다 앞선 상태다. 배포 직전 1~2건은 정상이고, 배포 뒤에도 이어지면(24h 3건 이상) 상수 갱신 누락이나 머지 안 된 브랜치 마이그레이션의 원격 적용이다. 응답이 200이라 프로브 알림이 가지 않으므로 훑을 때 `node scripts/obs.mjs events health.schema_ahead --since 24h`로 따로 본다(OBSERVABILITY.md)
 - exit 0(`clean`): 그 버전에서 대상 오류가 보이지 않았다. `--expect-event`로 경로가 실행된 근거가 있을 때 Issue resolve를 사용자에게 제안한다. 근거가 없으면 그 한계를 함께 적는다
 - exit 1(`recurred`): 출력된 `error`·`occurrence`가 고친 대상(같은 event·kind·path·오류)과 맞는지 먼저 확인한다. 맞으면 "원인"으로 돌아가고, 다른 오류라면 별건으로 보고하고 대상을 좁혀 다시 판정한다
 - exit 2: 조회 실패 또는 근거 부족. `reason`을 본다
-  - `too_few_events`·`expected_event_missing`: 배포 직후·조용한 시간대에 흔하다. `npx wrangler deployments list`로 그 태그가 배포됐는지 확인하고 시간을 두고 다시 본다. `--min-events 0`은 근거 없이 `clean`을 만들 수 있으므로 쓰면 보고에 그렇게 적는다
+  - `too_few_events`·`expected_event_missing`: 배포 직후·조용한 시간대에 흔하다. `--expect-event health.check`인데 1시간이 넘도록 비면 Actions 탭에서 `health` 실행이 멈추거나 실패했는지 본다. `npx wrangler deployments list`로 그 태그가 배포됐는지 확인하고 시간을 두고 다시 본다. `--min-events 0`은 근거 없이 `clean`을 만들 수 있으므로 쓰면 보고에 그렇게 적는다
   - `unattributed`: 버전을 알 수 없는 error·occurrence가 있다. `--json` 원문을 보고 `request`·`issue`로 확인한다
   - `truncated`: 조회가 한도에서 잘렸다. `--since`를 좁힌다
   - Issues가 403이면 `--skip-issues`로 로그만 보되, 그 한계를 보고에 적는다
