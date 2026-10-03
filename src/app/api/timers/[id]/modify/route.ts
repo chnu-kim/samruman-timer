@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDB, withErrorHandler } from "@/lib/db";
+import { logger } from "@/lib/logger";
 import { calculateRemaining, modifyTimer, detectScheduledActivation, EXPIRED_SUBTRACT_MESSAGE, TimerStateError } from "@/lib/timer";
 import type { Timer, ModifyTimerRequest } from "@/types";
 
@@ -139,6 +140,14 @@ export const POST = withErrorHandler(async (
   } catch (err) {
     // 동시 변경으로 다시 읽은 상태가 삭제·만료됐거나 재시도가 모두 겹친 경우
     if (err instanceof TimerStateError) {
+      if (err.code === "CONFLICT") {
+        // 재시도를 모두 소진했다. actorName은 남기지 않는다
+        logger.warn("timer.modify.conflict_exhausted", {
+          requestId: request.headers.get("x-request-id") ?? undefined,
+          timerId: activated.id,
+          action: body.action,
+        });
+      }
       return NextResponse.json(
         { error: { code: err.code, message: err.message } },
         { status: err.status }

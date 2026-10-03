@@ -146,13 +146,45 @@ describe("POST /api/timers/[id]/modify", () => {
     expect(body.data.status).toBe("RUNNING");
   });
 
-  it("동시 변경이 계속 겹치면 409 CONFLICT", async () => {
+  it("동시 변경이 계속 겹치면 409 CONFLICT + conflict_exhausted 경고(actorName 제외)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     db.batch.mockResolvedValue([{ meta: { changes: 0 } }]);
-    const res = await callPost({ action: "ADD", deltaSeconds: 600, actorName: "테스터" });
+    const req = createPostRequest(
+      "/api/timers/timer-1/modify",
+      { action: "ADD", deltaSeconds: 600, actorName: "후원자닉네임" },
+      { "x-user-id": "user-1", "x-request-id": "req-9" }
+    );
+    const res = await POST(req as never, { params: Promise.resolve({ id: "timer-1" }) } as never);
     expect(res.status).toBe(409);
     const body = await parseJson(res);
     expect(body.error.code).toBe("CONFLICT");
     expect(db.batch).toHaveBeenCalledTimes(5);
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    const entry = JSON.parse(String(warn.mock.calls[0][0]));
+    expect(entry).toMatchObject({
+      level: "warn",
+      event: "timer.modify.conflict_exhausted",
+      requestId: "req-9",
+      timerId: "timer-1",
+      action: "ADD",
+    });
+    expect(JSON.stringify(entry)).not.toContain("후원자닉네임");
+    warn.mockRestore();
+  });
+
+  it("재시도 중 타이머가 삭제돼 404가 되면 conflict 경고를 남기지 않는다", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    db.batch.mockResolvedValue([{ meta: { changes: 0 } }]);
+    // 첫 조회는 RUNNING, 재조회는 DELETED
+    db._stmt.first.mockReset();
+    db._stmt.first
+      .mockResolvedValueOnce(TIMER_ROW)
+      .mockResolvedValue({ ...TIMER_ROW, status: "DELETED" });
+    const res = await callPost({ action: "ADD", deltaSeconds: 600, actorName: "테스터" });
+    expect(res.status).toBe(404);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   it("유효한 ADD 요청 → 200 + log 포함", async () => {

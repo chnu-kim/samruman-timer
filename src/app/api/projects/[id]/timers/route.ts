@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDB, generateId, nowISO, withErrorHandler } from "@/lib/db";
+import { logger } from "@/lib/logger";
 import { calculateRemaining, detectScheduledActivation, detectExpiry } from "@/lib/timer";
 import type { CreateTimerRequest, Timer } from "@/types";
 
@@ -205,6 +206,10 @@ export const POST = withErrorHandler(async (
   } catch (err) {
     // 위 COUNT 검사와 INSERT 사이에 다른 요청이 먼저 만든 경우. DB의 부분 UNIQUE 인덱스(0009)가 막는다
     if (err instanceof Error && err.message.includes("UNIQUE constraint failed")) {
+      logger.warn("timer.create.unique_race", {
+        requestId: request.headers.get("x-request-id") ?? undefined,
+        projectId,
+      });
       return NextResponse.json(
         { error: { code: "BAD_REQUEST", message: "프로젝트당 하나의 타이머만 생성할 수 있습니다" } },
         { status: 400 }
