@@ -10,4 +10,4 @@ export const SITE_NAME = "삼루먼타이머";
 export const TITLE_TEMPLATE = `%s | ${SITE_NAME}`;
 
 export const SITE_DESCRIPTION =
-  "치지직(CHZZK) 스트리머를 위한 시간 추가형 타이머. 후원에 맞춰 방송 시간을 늘리고 OBS 오버레이로 시청자에게 보여 줍니다.";
+  "스트리머를 위한 시간 추가형 타이머. 후원에 맞춰 방송 시간을 늘리고 OBS 오버레이로 시청자에게 보여 줍니다.";

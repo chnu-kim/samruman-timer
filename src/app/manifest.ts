@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     id: "/",
     name: "삼루먼타이머",
     short_name: "삼루먼타이머",
-    description: "CHZZK 스트리머를 위한 타이머 관리 서비스",
+    description: "스트리머를 위한 시간 추가형 타이머",
     lang: "ko",
     // "/"는 /projects로 307 리다이렉트하므로 바로 목록에서 시작한다
     start_url: "/projects",
