@@ -173,7 +173,8 @@ node scripts/obs.mjs triage --input <file> --since <ISO> --until <ISO> [--skip-i
 - API(`telemetry/query`, `view: "events"`): 봉투는 `result.events.events[]`다. 이벤트마다 앱 필드(`event`·`level`·`requestId`·`versionTag`·`versionId`·`reason`·`kind` 등)가 `source` 객체에 들어 있고, 최상위에는 `dataset`·`timestamp`·`$metadata`·`$workers`가 있다. 앱 필드는 `event`·`level`처럼 접두 없이 필터 키로 쓴다(`APP_FIELD_PREFIX = ""`)
 - 대시보드에서 복사한 JSON: 앱 필드가 `source` 없이 최상위에 펼쳐진다. 정규화는 두 모양을 모두 받는다
 - 공통: `$metadata.requestId`는 런타임 ID라 앱의 `requestId`와 다르다. `$workers.event.request.path`에는 쿼리스트링이 없다
-- Issues API(`GET .../workers/observability/issues`): 활성 이슈가 없으면 `result`가 빈 배열이다
+- Issues API(`GET .../workers/observability/issues`): 활성 이슈가 없으면 `result`가 빈 배열이다. 플러그인 execute로 받아도 `result_info`(`page`·`per_page`·`count`·`total_count`·`total_pages`)가 그대로 온다(0건이면 `total_pages: 0`)
+- `triage --print-plugin-code` → execute → `triage --input` 경로를 프로덕션 데이터로 한 번 돌려 끝까지 판정되는 것을 확인했다(error 0건, warn 1건 정상, active Issue 0건 → exit 0)
 
 정규화가 이상하면(필드가 비거나 0건인데 대시보드에는 있음) `--json`으로 원문을 보고 `scripts/lib/obs.mjs`의 정규화 함수를 고친다.
 
