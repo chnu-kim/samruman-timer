@@ -183,7 +183,7 @@ API 응답의 정확한 모양은 확인되지 않은 채로 만들었다. 정�
 1. **감지**: `obs.mjs issues`, `obs.mjs errors --since 24h`, `obs.mjs summary --since 24h`. 사용자 신고라면 받은 `x-request-id`로 시작한다
 2. **재현·원인**: `obs.mjs request <requestId>`로 한 요청의 로그를 모으고, 위 카탈로그의 코드 위치와 `kind`별 대응을 따라 원인을 좁힌다. `versionTag`로 어느 배포에서 시작됐는지 보고 `git log <이전 태그>..<태그>`로 의심 변경을 찾는다. 로컬 재현은 `pnpm db:migrate:local` 후 `pnpm dev` 또는 테스트로 한다
 3. **수정 PR**: 실패를 재현하는 테스트를 먼저 쓰고 고친다. `pnpm test`, `pnpm build`를 통과시킨다. PR 본문에 근거와 verify 계획을 적는다. 근거는 위 "PII 규칙"의 공개 저장소 기준(이벤트 이름·`kind`·건수·기간·`versionTag`만, ID·오류 원문 제외)을 따른다
-4. **배포(사람 승인)**: 머지 후 사람이 `pnpm run deploy`를 실행한다. 스크립트가 배포 태그(git short SHA 12자)와, 끝나면 배포 시각과 `--since`를 채운 verify 명령을 출력한다. 스키마 변경이 있으면 원격 마이그레이션을 먼저 적용한다(사람)
+4. **배포(사람 승인)**: 머지 후 사람이 `pnpm run deploy`를 실행한다. 스크립트가 배포 태그(git short SHA 12자)와, 끝나면 배포 시각(deploy 단계 시작 시각. 새 버전은 그 명령이 끝나기 전부터 요청을 받는다)과 `--since`를 채운 verify 명령을 출력한다. 스키마 변경이 있으면 원격 마이그레이션을 먼저 적용한다(사람)
 5. **재발 판정**: 충분한 시간이 지난 뒤 `obs.mjs verify --tag <태그> --since <배포 시각> --event <e> [--issue <id>] [--expect-event <e>]`. 0이면 다음 단계, 1이면 출력이 고친 대상과 맞는지 확인하고 2로 돌아간다, 2면 `reason`(조회 실패·근거 부족)을 해소하고 다시 본다
 6. **정리**: 해당 Issue를 대시보드에서 resolve하고(사람 또는 권한 있는 도구), 카탈로그의 정상/비정상 기준이 틀렸으면 이 문서를 고친다
 

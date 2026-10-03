@@ -646,7 +646,12 @@ async function cmdVerify(client, opts, io) {
   const tagEventCount = tagEvents.length;
   const versionIds = new Set(tagEvents.map((e) => e.versionId).filter((v) => v !== undefined).map(String));
   const tagTimes = tagEvents.map((e) => Date.parse(String(e.timestamp ?? ""))).filter((t) => !Number.isNaN(t));
-  const firstTagTs = tagTimes.length > 0 ? Math.min(...tagTimes) : undefined;
+  // 태그 로그가 한도에서 잘렸으면 가장 이른 로그를 못 봤을 수 있다. 그때는 배포 시점 경계를 쓰지 않는다(버전 모르는 항목을 모두 센다)
+  const tagTruncated = tagEvents.length >= MAX_LIMIT;
+  const firstTagTs = !tagTruncated && tagTimes.length > 0 ? Math.min(...tagTimes) : undefined;
+  if (tagTruncated) {
+    notes.push(`태그 로그가 ${MAX_LIMIT}건에서 잘려 배포 시점을 추정하지 않았다. 버전을 모르는 오류가 있으면 --since를 배포 시각으로 좁힌다`);
+  }
   const expectEventCount = expectEvent ? tagEvents.filter((e) => e.event === expectEvent).length : 0;
   if (expectEvent && tagEventCount >= MAX_LIMIT && expectEventCount === 0) {
     notes.push(`태그 로그가 ${MAX_LIMIT}건에서 잘려 --expect-event를 다 보지 못했을 수 있다`);

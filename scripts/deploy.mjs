@@ -62,7 +62,11 @@ console.log(`배포 태그: ${result.tag}${result.dirty ? " (커밋되지 않은
 console.log("배포 전 확인: npx wrangler d1 migrations list samrumantimer-db --remote (적용 안 된 마이그레이션이 있으면 먼저 적용)");
 
 // shell 없이 실행한다. --tag=값은 opennextjs-cloudflare가 unknown-options-as-args로 wrangler deploy에 넘긴다
+// verify --since에 쓸 배포 시각. 새 버전은 deploy 명령이 끝나기 전부터 요청을 받으므로 deploy 단계 직전에 잡는다.
+// verify는 버전으로 가리므로 조금 이른 시각은 손해가 없다
+let deployStartedAt;
 for (const [cmd, cmdArgs] of deploySteps(result.tag)) {
+  if (cmdArgs[1] === "deploy") deployStartedAt = new Date().toISOString();
   console.log(`$ ${cmd} ${cmdArgs.join(" ")}`);
   if (dryRun) continue;
   const r = spawnSync(cmd, cmdArgs, { stdio: "inherit" });
@@ -75,8 +79,7 @@ for (const [cmd, cmdArgs] of deploySteps(result.tag)) {
 if (dryRun) {
   console.log("--dry-run: 빌드·배포하지 않았다");
 } else {
-  // verify --since에 쓸 배포 시각. 다른 세션에서는 npx wrangler deployments list로 태그·시각을 다시 구한다
-  const deployedAt = new Date().toISOString();
-  console.log(`배포 완료: ${deployedAt} (태그 ${result.tag})`);
-  console.log(`재발 확인: node scripts/obs.mjs verify --tag ${result.tag} --since ${deployedAt} [--event <e>] [--issue <id>] [--expect-event <e>]`);
+  // 다른 세션에서는 npx wrangler deployments list로 태그·시각을 다시 구한다
+  console.log(`배포 완료 (태그 ${result.tag}, deploy 시작 ${deployStartedAt})`);
+  console.log(`재발 확인: node scripts/obs.mjs verify --tag ${result.tag} --since ${deployStartedAt} --event <e> [--issue <id>] [--expect-event <e>]`);
 }

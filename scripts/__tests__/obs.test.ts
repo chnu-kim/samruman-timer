@@ -516,6 +516,19 @@ describe("run verify", () => {
     expect(JSON.parse(r.out[0])).toMatchObject({ reason: "unattributed", unattributedErrors: 1 });
   });
 
+  it("태그 로그가 2000건에서 잘리면 배포 시점을 추정하지 않아, 관측된 첫 태그 로그 이전의 버전 모르는 error도 센다", async () => {
+    const tagged = rawEvent({ level: "info", event: "auth.refresh.rejected", versionTag: TAG, timestamp: "2026-10-03T11:00:00.000Z" });
+    const early = { timestamp: Date.parse("2026-10-02T12:00:00Z"), source: { level: "error", event: "api.unhandled" } };
+    const route = (n: number) =>
+      verifyRoute({ errors: [early], tagEvents: Array.from({ length: n }, () => tagged) });
+    const truncated = await exec(["verify", "--tag", TAG, "--skip-issues"], route(MAX_LIMIT));
+    expect(truncated.code).toBe(EXIT.FAILED);
+    expect(JSON.parse(truncated.out[0])).toMatchObject({ reason: "unattributed", unattributedErrors: 1 });
+    // 잘리지 않았으면 첫 태그 로그 이전 것은 이전 배포로 본다
+    const full = await exec(["verify", "--tag", TAG, "--skip-issues"], route(3));
+    expect(full.code).toBe(EXIT.OK);
+  });
+
   it("다른 태그의 error는 무시한다", async () => {
     const old = errEvent({ versionTag: "000000000000", versionId: "ver-0" });
     const r = await exec(["verify", "--tag", TAG, "--skip-issues"], verifyRoute({ errors: [old], tagEvents: [infoEvent] }));
