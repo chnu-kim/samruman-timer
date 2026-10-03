@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { Header } from "../Header";
 
@@ -47,5 +48,32 @@ describe("Header 로그인 링크", () => {
     const { notPrevented } = clickLogin({ metaKey: true });
     expect(notPrevented).toBe(true);
     expect(location.href).toBe("http://localhost/");
+  });
+});
+
+// /api/auth/me는 보호 라우트라 access 만료 뒤 첫 페이지 로드에서 refresh를 일으킨다.
+// refresh 중 D1 장애면 미들웨어가 500을 주는데, 헤더는 fetch(authFetch 아님)로 부르고 res.ok만 보므로
+// 오류 안내 없이 비로그인 화면(로그인 링크)으로 그린다. 세션 만료 이동도 일어나지 않는다
+describe("Header: /api/auth/me 500", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("500이면 오류 안내 없이 로그인 링크를 보여 준다", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "INTERNAL_ERROR", message: "서버 오류가 발생했습니다" } }), {
+        status: 500,
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const expired = vi.fn();
+    window.addEventListener("session-expired", expired);
+
+    render(<Header />);
+
+    expect(await screen.findByRole("link", { name: "로그인" })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith("/api/auth/me");
+    expect(expired).not.toHaveBeenCalled();
+    window.removeEventListener("session-expired", expired);
   });
 });

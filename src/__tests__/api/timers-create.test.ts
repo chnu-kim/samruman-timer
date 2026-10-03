@@ -96,12 +96,20 @@ describe("POST /api/projects/[id]/timers", () => {
     expect(body.error.message).toContain("미래");
   });
 
-  it("동시 생성으로 DB 유일 제약에 걸리면 400 (500이 아님)", async () => {
+  it("동시 생성으로 DB 유일 제약에 걸리면 400 (500이 아님) + timer.create.unique_race 경고", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     db.batch.mockRejectedValueOnce(new Error("D1_ERROR: UNIQUE constraint failed: timers.project_id: SQLITE_CONSTRAINT"));
-    const res = await callPost({ title: "타이머", initialSeconds: 3600 });
+    const res = await callPost({ title: "타이머", initialSeconds: 3600 }, { "x-request-id": "req-7" });
     expect(res.status).toBe(400);
     const body = await parseJson(res);
     expect(body.error.message).toContain("하나의 타이머");
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(warn.mock.calls[0][0]))).toMatchObject({
+      event: "timer.create.unique_race",
+      requestId: "req-7",
+      projectId: "proj-1",
+    });
+    warn.mockRestore();
   });
 
   it("성공 201 + CREATE 로그 (RUNNING)", async () => {

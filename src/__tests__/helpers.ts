@@ -127,6 +127,11 @@ export function createPutRequestRaw(
 
 // ─── Response Parser ───
 
-export async function parseJson(response: Response) {
+/**
+ * 응답 본문을 JSON으로 읽는다. 테스트는 `body.data.x`·`body.error.code`처럼 바로 단언하므로
+ * Response.json()의 unknown 대신 any로 돌려준다(테스트 파일도 tsc 대상)
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function parseJson(response: Response): Promise<any> {
   return response.json();
 }

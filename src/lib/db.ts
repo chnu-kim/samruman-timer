@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { logger } from "@/lib/logger";
+import { errorFields, logger } from "@/lib/logger";
 
 export async function getDB(): Promise<D1Database> {
   const { env } = await getCloudflareContext();
@@ -15,24 +15,27 @@ export function nowISO(): string {
   return new Date().toISOString();
 }
 
-/**
- * 에러 모니터링 외부 전송 훅.
- * Sentry 등 외부 서비스 연동 시 이 배열에 핸들러를 등록한다.
- *
- * @example
- * // Sentry 연동 시:
- * import * as Sentry from "@sentry/nextjs";
- * errorReporters.push((error, context) => {
- *   Sentry.captureException(error, { extra: context });
- * });
- */
-export const errorReporters: Array<
-  (error: unknown, context: { requestId?: string; url?: string; method?: string }) => void
-> = [];
+/** 첫 인자가 Request처럼 생겼을 때만 로그용 요청 정보를 꺼낸다. 쿼리스트링은 남기지 않는다 */
+function requestContext(arg: unknown): { requestId?: string; method?: string; path?: string } {
+  if (typeof arg !== "object" || arg === null || !("headers" in arg)) return {};
+  const req = arg as Partial<Request>;
+  let path: string | undefined;
+  try {
+    path = typeof req.url === "string" ? new URL(req.url).pathname : undefined;
+  } catch {
+    path = undefined;
+  }
+  return {
+    requestId: req.headers instanceof Headers ? (req.headers.get("x-request-id") ?? undefined) : undefined,
+    method: typeof req.method === "string" ? req.method : undefined,
+    path,
+  };
+}
 
 /**
  * API 라우트 핸들러를 감싸서 예상치 못한 에러 시
  * 내부 정보(쿼리, 스택트레이스)가 클라이언트에 노출되지 않도록 한다.
+ * invocation log를 끈 상태라 method·path를 이 로그에 직접 남긴다.
  */
 export function withErrorHandler<Args extends unknown[]>(
   handler: (...args: Args) => Promise<Response>
@@ -41,24 +44,10 @@ export function withErrorHandler<Args extends unknown[]>(
     try {
       return await handler(...args);
     } catch (error) {
-      const request = args[0];
-      const requestId = request instanceof NextRequest ? request.headers.get("x-request-id") ?? undefined : undefined;
-      const url = request instanceof NextRequest ? request.nextUrl.pathname : undefined;
-      const method = request instanceof NextRequest ? request.method : undefined;
-
-      logger.error("Unhandled API error", {
-        requestId,
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
+      logger.error("api.unhandled", {
+        ...requestContext(args[0]),
+        ...errorFields(error),
       });
-
-      for (const report of errorReporters) {
-        try {
-          report(error, { requestId, url, method });
-        } catch {
-          // 리포터 자체 에러는 무시
-        }
-      }
 
       return NextResponse.json(
         { error: { code: "INTERNAL_ERROR", message: "서버 오류가 발생했습니다" } },

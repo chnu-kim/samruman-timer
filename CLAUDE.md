@@ -7,9 +7,9 @@
 - `pnpm dev` / `pnpm build` / `pnpm start`
 - `pnpm test` — Vitest 전체 실행. 파일 지정: `pnpm test src/__tests__/api/timers-modify.test.ts`
 - `pnpm build-storybook` — 스토리 빌드 검증
-- `pnpm db:migrate:local` / `pnpm db:migrate` — D1 마이그레이션 적용 (원격 적용은 사용자 확인 후)
+- `pnpm db:migrate:local` — 로컬 D1에 마이그레이션 적용. `pnpm db:migrate:remote` — 원격(프로덕션) D1에 적용, 사용자 확인 후에만 실행. `pnpm db:migrate`는 플래그가 없어 wrangler 4에서 로컬에 적용된다
 - `pnpm run deploy` — 프로덕션 배포 (`pnpm deploy`는 pnpm 내장 workspace 명령이라 스크립트가 실행되지 않는다). 사용자가 명시적으로 요청할 때만 실행
-- 배포와 원격 마이그레이션은 별개 명령이라 한쪽만 실행되기 쉽다. 실제로 코드만 배포되고 `0007` 마이그레이션이 빠져 프로덕션 로그인이 깨진 적이 있다. 배포 전이나 프로덕션 오류를 조사할 때는 `npx wrangler d1 migrations list samrumantimer-db --remote`로 원격에 적용 안 된 마이그레이션부터 확인한다. 로그는 `npx wrangler tail samrumantimer`.
+- 배포와 원격 마이그레이션은 별개 명령이라 한쪽만 실행되기 쉽다. 실제로 코드만 배포되고 `0007` 마이그레이션이 빠져 프로덕션 로그인이 깨진 적이 있다. 배포 전이나 프로덕션 오류를 조사할 때는 `npx wrangler d1 migrations list samrumantimer-db --remote`로 원격에 적용 안 된 마이그레이션부터 확인한다. 로그는 대시보드 Workers Logs(보관됨, `docs/ARCHITECTURE.md` "운영 로그·관측")나 `npx wrangler tail samrumantimer`(실시간).
 
 변경을 마무리하기 전에 `pnpm test`와 `pnpm build`를 통과시킨다. UI 컴포넌트를 바꿨다면 `pnpm build-storybook`도.
 
@@ -26,7 +26,7 @@
 
 - `src/app/api/` — API 라우트 (`auth`, `projects`, `timers`)
 - `src/app/timers/[id]/overlay/` — OBS 브라우저 소스용 오버레이 페이지
-- `src/lib/` — 서버 로직 (`timer.ts` 잔여시간·상태전이, `auth.ts`, `chzzk.ts`, `db.ts`, `goal.ts`). `auth-fetch.ts`, `session-expired.ts`, `timer-sync.ts`, `overlay-animation.ts`, `pwa.ts`는 클라이언트용, `safe-redirect.ts`, `overlay-style.ts`, `site.ts`(사이트 절대 주소·SEO 메타 상수)는 서버·클라이언트 공용
+- `src/lib/` — 서버 로직 (`timer.ts` 잔여시간·상태전이, `auth.ts`, `chzzk.ts`, `db.ts`, `goal.ts`). `auth-fetch.ts`, `session-expired.ts`, `timer-sync.ts`, `overlay-animation.ts`, `overlay-mode.ts`, `overlay-polling.ts`, `overlay-recovery.ts`, `pwa.ts`는 클라이언트용, `safe-redirect.ts`, `overlay-style.ts`, `site.ts`(사이트 절대 주소·SEO 메타 상수)는 서버·클라이언트 공용
 - `src/hooks/` — 클라이언트 훅 (`usePolling`, `useKeyboardShortcuts` 등)
 - `src/components/{timer,project,goal,graph,stats,layout,providers,ui}/`
 - `migrations/NNNN_*.sql` — D1 스키마 변경 이력

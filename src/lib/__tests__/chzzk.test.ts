@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { buildAuthorizationUrl, exchangeCode, getUserInfo } from "@/lib/chzzk";
+import { buildAuthorizationUrl, exchangeCode, getUserInfo, ChzzkApiError } from "@/lib/chzzk";
 
 describe("buildAuthorizationUrl", () => {
   beforeEach(() => {
@@ -38,10 +38,7 @@ describe("exchangeCode", () => {
       expiresIn: 3600,
     };
 
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(mockResponse),
-    });
+    global.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(mockResponse), { status: 200 }));
 
     const result = await exchangeCode("auth-code", "random-state");
     expect(result).toEqual(mockResponse);
@@ -65,6 +62,60 @@ describe("exchangeCode", () => {
       "CHZZK token exchange failed: 400"
     );
   });
+
+  it("실패 응답 본문 원문은 메시지에 넣지 않고 JSON code만 붙인다", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: () => Promise.resolve(JSON.stringify({ code: "INVALID_CODE", message: "echo: auth-secret-code" })),
+    });
+
+    const err = await exchangeCode("auth-secret-code", "state").catch((e) => e);
+    expect(err).toBeInstanceOf(ChzzkApiError);
+    expect(err).toMatchObject({ stage: "token", status: 400, timedOut: false });
+    expect(err.message).toBe("CHZZK token exchange failed: 400 (code=INVALID_CODE)");
+    expect(err.message).not.toContain("auth-secret-code");
+  });
+
+  it("JSON이 아닌 본문은 버린다", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 502,
+      text: () => Promise.resolve("<html>upstream nickname=홍길동</html>"),
+    });
+
+    const err = await exchangeCode("c", "s").catch((e) => e);
+    expect(err.message).toBe("CHZZK token exchange failed: 502");
+  });
+
+  it("200인데 JSON이 아닌 본문은 본문 없이 invalid JSON ChzzkApiError로 바뀐다", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response("<!DOCTYPE html><html>proxy nickname=홍길동</html>", {
+        status: 200,
+        headers: { "content-type": "text/html" },
+      })
+    );
+
+    const err = await exchangeCode("c", "s").catch((e) => e);
+    expect(err).toBeInstanceOf(ChzzkApiError);
+    expect(err).toMatchObject({ stage: "token", status: 200, timedOut: false });
+    expect(err.message).toBe("CHZZK token exchange invalid JSON");
+    // SyntaxError(본문 일부를 인용)를 cause로 달지 않는다
+    expect(err.cause).toBeUndefined();
+    expect(String(err.stack)).not.toContain("DOCTYPE");
+    expect(String(err.stack)).not.toContain("홍길동");
+  });
+
+  it("시간 초과는 timedOut=true인 ChzzkApiError로 바뀐다", async () => {
+    global.fetch = vi
+      .fn()
+      .mockRejectedValue(new DOMException("The operation was aborted due to timeout", "TimeoutError"));
+
+    const err = await exchangeCode("c", "s").catch((e) => e);
+    expect(err).toBeInstanceOf(ChzzkApiError);
+    expect(err).toMatchObject({ stage: "token", timedOut: true, status: undefined });
+    expect(err.message).toBe("CHZZK token exchange timed out");
+  });
 });
 
 describe("getUserInfo", () => {
@@ -81,10 +132,7 @@ describe("getUserInfo", () => {
       profileImageUrl: "https://img.example.com/profile.jpg",
     };
 
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(mockUser),
-    });
+    global.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(mockUser), { status: 200 }));
 
     const result = await getUserInfo("access-token");
     expect(result).toEqual(mockUser);
@@ -106,5 +154,24 @@ describe("getUserInfo", () => {
     await expect(getUserInfo("bad-token")).rejects.toThrow(
       "CHZZK user info failed: 401"
     );
+  });
+
+  it("200인데 JSON이 아닌 본문은 stage=user invalid JSON으로 바뀐다", async () => {
+    global.fetch = vi.fn().mockResolvedValue(new Response("<html>nickname=홍길동", { status: 200 }));
+
+    const err = await getUserInfo("t").catch((e) => e);
+    expect(err).toBeInstanceOf(ChzzkApiError);
+    expect(err).toMatchObject({ stage: "user", status: 200 });
+    expect(err.message).toBe("CHZZK user info invalid JSON");
+    expect(err.cause).toBeUndefined();
+  });
+
+  it("네트워크 오류는 stage=user, timedOut=false로 바뀐다", async () => {
+    global.fetch = vi.fn().mockRejectedValue(new TypeError("fetch failed"));
+
+    const err = await getUserInfo("t").catch((e) => e);
+    expect(err).toBeInstanceOf(ChzzkApiError);
+    expect(err).toMatchObject({ stage: "user", timedOut: false });
+    expect(err.message).toBe("CHZZK user info request failed");
   });
 });

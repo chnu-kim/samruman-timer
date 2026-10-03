@@ -8,6 +8,7 @@ import {
   REFRESH_COOKIE_NAME,
 } from "@/lib/auth";
 import { getDB, withErrorHandler } from "@/lib/db";
+import { errorFields, logger } from "@/lib/logger";
 import type { RefreshTokenRow } from "@/types";
 
 export const POST = withErrorHandler(async (request: NextRequest) => {
@@ -36,8 +37,14 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
       if (row) {
         await revokeRefreshTokenFamily(db, row.family_id);
       }
-    } catch {
-      // 폐기 실패해도 로그아웃은 진행
+    } catch (err) {
+      // 폐기 실패해도 로그아웃은 진행한다. family가 살아남으므로 신호를 남긴다
+      logger.error("auth.logout.revoke_failed", {
+        requestId: request.headers.get("x-request-id") ?? undefined,
+        method: request.method,
+        path: request.nextUrl.pathname,
+        ...errorFields(err),
+      });
     }
   }
 
