@@ -34,3 +34,26 @@ export function resolveDeployTag({ sha, porcelain, allowDirty = false }) {
   }
   return { ok: true, tag, dirty };
 }
+
+/**
+ * verify --tag 입력을 배포 태그 형식(SHA_LENGTH자 hex, 선택적 -dirty)으로 맞춘다.
+ * 더 긴 SHA(전체 40자 등)는 앞 SHA_LENGTH자로 자른다. 더 짧은 SHA(`git log --oneline`의 7자 등)는
+ * 어떤 로그의 versionTag와도 맞지 않아 "로그 0건"으로 보이므로 거부하고 바른 명령을 알려 준다.
+ *
+ * @param {unknown} input
+ * @returns {{ ok: true, tag: string } | { ok: false, reason: string }}
+ */
+export function normalizeVerifyTag(input) {
+  const m = typeof input === "string" ? /^([0-9a-f]+)(-dirty)?$/.exec(input.trim().toLowerCase()) : null;
+  if (!m) {
+    return { ok: false, reason: `태그 형식이 아니다: ${JSON.stringify(input)} (git short SHA ${SHA_LENGTH}자, pnpm run deploy 출력)` };
+  }
+  const [, hex, dirty = ""] = m;
+  if (hex.length < SHA_LENGTH || hex.length > 40) {
+    return {
+      ok: false,
+      reason: `배포 태그는 SHA ${SHA_LENGTH}자다(받은 값 ${hex.length}자). git rev-parse --short=${SHA_LENGTH} <commit>으로 구한다`,
+    };
+  }
+  return { ok: true, tag: `${hex.slice(0, SHA_LENGTH)}${dirty}` };
+}

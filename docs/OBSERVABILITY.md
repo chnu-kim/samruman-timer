@@ -156,6 +156,7 @@ API 응답의 정확한 모양은 확인되지 않은 채로 만들었다. 정�
 - 태그 로그 0건은 배포가 안 됐거나, 태그가 틀렸거나, 트래픽이 없다는 뜻이다. 앱 로그는 로그인·거부·오류 때만 남으므로 조용한 시간대에는 정상 배포에서도 0건일 수 있다. `npx wrangler versions list`로 그 태그가 배포됐는지 확인했다면 `--min-events 0`으로 판정할 수 있다
 - `--event`만 주면 Issues는 보지 않는다(Issue와 event를 대응시킬 방법이 없다). 특정 Issue를 함께 보려면 `--issue <id>`
 - Issues 권한이 없는 토큰이면 `--skip-issues`로 로그만 보고 판정한다. 출력의 `notes`에 남는다
+- `--tag`는 배포 태그 형식(SHA 12자, 선택적 `-dirty`)이어야 한다. 전체 SHA는 12자로 자르고, 더 짧은 SHA(`git log --oneline`의 7자)는 어떤 로그와도 맞지 않으므로 거부한다. 커밋에서 구할 때는 `git rev-parse --short=12 <commit>`
 - `--since`는 배포 시각(ISO)으로 주는 것이 가장 정확하다. 태그로 거르므로 더 넓게 줘도 이전 버전의 오류는 섞이지 않는다
 
 ## 폐쇄 루프 절차
@@ -177,6 +178,7 @@ API 응답의 정확한 모양은 확인되지 않은 채로 만들었다. 정�
 - 커밋되지 않은 변경(추적 안 되는 파일 포함)이 있으면 배포를 거부한다. verify가 태그를 커밋에 대응시키는데, dirty 빌드는 어느 커밋과도 맞지 않기 때문이다. 급하면 `--allow-dirty`(태그에 `-dirty`가 붙는다)
 - `pnpm run deploy --dry-run`은 태그와 실행할 명령만 출력한다
 - 원격 마이그레이션은 적용하지 않고 확인 명령(`npx wrangler d1 migrations list samrumantimer-db --remote`)만 안내한다. 두 명령은 별개이므로 스키마 변경이 있으면 둘 다 실행했는지 확인한다
+- 태그는 이 스크립트를 거친 배포에만 붙는다. Workers Builds(GitHub 연동 자동 배포, 2026-10 현재 빌드 토큰 문제로 멈춤)를 복구하면 대시보드의 배포 명령이 `npx wrangler deploy`라 태그가 없다. 그대로면 verify가 늘 `insufficient`이므로, 복구할 때 배포 명령을 `pnpm run deploy`로 바꾸거나 `--tag`를 넘기게 한다
 
 ## 1회성 설정
 

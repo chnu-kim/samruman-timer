@@ -5,7 +5,7 @@
 // 차례로 찾아보는 방어적 파서로 두고, 원문이 필요하면 --json으로 그대로 본다.
 // 쿼리·정규화·판정은 순수 함수로 분리해 테스트한다(scripts/__tests__/obs.test.ts).
 
-import { TAG_PATTERN } from "./version-tag.mjs";
+import { normalizeVerifyTag } from "./version-tag.mjs";
 
 export const SERVICE = "samrumantimer";
 /**
@@ -685,10 +685,12 @@ export async function run(argv, deps) {
       case "issue":
         return await cmdIssue(client, { id: need("id"), limit, json }, io);
       case "verify": {
-        const tag = flags.tag;
-        if (typeof tag !== "string" || !TAG_PATTERN.test(tag)) {
+        if (flags.tag === undefined) {
           throw new UsageError("verify: --tag <배포 태그>가 필요하다(git short SHA 12자, pnpm run deploy가 출력)");
         }
+        const normalized = normalizeVerifyTag(flags.tag);
+        if (!normalized.ok) throw new UsageError(`verify: ${normalized.reason}`);
+        const tag = normalized.tag;
         const minEvents = flags["min-events"] === undefined ? 1 : Number(flags["min-events"]);
         if (!Number.isInteger(minEvents) || minEvents < 0) throw new UsageError("--min-events는 0 이상의 정수다");
         return await cmdVerify(

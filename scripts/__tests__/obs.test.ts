@@ -504,9 +504,20 @@ describe("run verify", () => {
     expect(paths.some((p) => p.endsWith("/issues/i9/occurrences"))).toBe(true);
   });
 
-  it("--tag 형식이 틀리면 fetch 없이 2", async () => {
-    const r = await exec(["verify", "--tag", "abc; rm"], verifyRoute({}));
-    expect(r.code).toBe(EXIT.FAILED);
-    expect(r.fetch).not.toHaveBeenCalled();
+  it("--tag 형식이 틀리거나 7자 SHA면 fetch 없이 2", async () => {
+    for (const tag of ["abc; rm", "abcdef0"]) {
+      const r = await exec(["verify", "--tag", tag], verifyRoute({}));
+      expect(r.code).toBe(EXIT.FAILED);
+      expect(r.fetch).not.toHaveBeenCalled();
+    }
+    const short = await exec(["verify", "--tag", "abcdef0"], verifyRoute({}));
+    expect(short.err.join("\n")).toContain("git rev-parse --short=12");
+  });
+
+  it("전체 SHA를 주면 12자로 잘라 질의한다", async () => {
+    const r = await exec(["verify", "--tag", `${TAG}0123456789abcdef01234567`, "--skip-issues"], verifyRoute({ tagEvents: [infoEvent] }));
+    expect(r.code).toBe(EXIT.OK);
+    const errQuery = r.calls[0].body as { parameters: { filters: unknown[] } };
+    expect(errQuery.parameters.filters).toContainEqual(eq("versionTag", TAG));
   });
 });
