@@ -29,6 +29,8 @@ export const metadata: Metadata = {
   // 이미지는 같은 폴더의 opengraph-image.png를 Next가 openGraph·twitter 양쪽에 자동으로 넣는다
   openGraph: { type: "website", siteName: SITE_NAME, locale: "ko_KR", title: SITE_NAME, description: SITE_DESCRIPTION },
   twitter: { card: "summary_large_image", title: SITE_NAME, description: SITE_DESCRIPTION },
+  // Google Search Console 소유 확인(URL 접두어 속성, HTML 태그 방식). 지우면 확인이 풀린다
+  verification: { google: "ZbXP9JYUxSawvIe6XhCJGO-4udLKAjP2xDmY535fJmg" },
   // iOS 홈 화면 앱 이름·상태 표시줄. iOS 16.4 이전 Safari는 매니페스트 display를 읽지 않으므로
   // apple-mobile-web-app-capable도 함께 출력한다(Next는 capable을 mobile-web-app-capable로만 내보낸다)
   appleWebApp: { capable: true, title: "삼루먼타이머", statusBarStyle: "default" },
