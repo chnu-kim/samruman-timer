@@ -122,7 +122,7 @@ refresh 쿠키 없이 보호 라우트를 부른 401은 정상 흐름이고 양�
 
 **`health.check`** (info) — 헬스체크 정상 응답(200). 외부 프로브(`.github/workflows/health.yml`)가 매시 17분에 부르므로 배포된 버전마다 한 시간에 한 건쯤 남는다. 다른 앱 로그는 로그인·거부·오류 때만 남아 조용한 날에는 태그 로그가 0건이라, verify의 "이 버전이 요청을 받았다"는 근거(`--expect-event health.check`)로 쓴다.
 - 정상: 한 시간에 1건 안팎(cron 지연으로 비거나 몰릴 수 있다. 수동 실행·사람의 호출도 섞인다). `schemaState=ahead`는 원격 마이그레이션을 먼저 적용하고 코드를 아직 배포하지 않은 상태라 배포하면 사라진다.
-- 비정상: 몇 시간째 0건. 프로브가 멈췄거나(아래 "외부 프로브"의 60일 비활성화·cron 지연) Worker가 응답하지 않는다. Actions 탭의 `health` 실행 기록을 먼저 본다. `ahead`가 배포 뒤에도 남으면 `EXPECTED_LATEST_MIGRATION` 갱신을 빠뜨린 것이다.
+- 비정상: 몇 시간째 0건. 프로브가 멈췄거나(아래 "외부 프로브"의 60일 비활성화·cron 지연) Worker가 응답하지 않는다. Actions 탭의 `health` 실행 기록을 먼저 본다. `ahead`가 배포 뒤에도 남으면 원인은 둘 중 하나다. `EXPECTED_LATEST_MIGRATION` 갱신을 빠뜨렸거나, 아직 머지되지 않은 브랜치의 마이그레이션이 원격에 적용됐다(작업 트리에 그 파일이 있는 채로 `pnpm db:migrate:remote`를 돌린 경우). `npx wrangler d1 migrations list samrumantimer-db --remote`의 적용 목록을 main의 `migrations/`와 대조해 가린다. 프로브는 200이라 알림이 가지 않으므로 이 상태는 `obs.mjs events health.check`의 `schemaState`로만 보인다.
 - 코드: `src/app/api/health/route.ts`, `src/lib/health.ts`(`EXPECTED_LATEST_MIGRATION`, `compareSchema`).
 
 **`health.schema_drift`** (error) — 원격 D1의 마지막 적용 마이그레이션(`d1_migrations`)이 코드가 기대하는 것보다 뒤처졌다(`behind`), 번호가 같은데 이름이 다르다(`mismatch`), 또는 적용 기록이 없다(`missing`). 응답은 503 `SERVICE_UNAVAILABLE`이고 외부 프로브 job이 실패해 GitHub 알림이 간다. 사용자가 새 스키마를 쓰는 경로를 밟기 전에(`api.unhandled` `kind=schema_drift`보다 먼저) 잡으려는 것이다.
@@ -210,6 +210,7 @@ Claude Code에 Cloudflare 플러그인이 연결돼 있으면 그 `execute` 도�
 - `--event`도 `--issue`도 없으면 그 태그의 모든 error와 모든 active Issue가 대상이다. 고친 것과 무관한 오류로 1이 날 수 있으므로, 고친 대상으로 좁히고 1이면 출력된 항목이 대상과 맞는지 먼저 본다
 - `clean`은 "대상 오류가 보이지 않았다"이지 "수정한 경로가 실행됐다"가 아니다. 앱 로그는 로그인·거부·오류 때만 남아 트래픽 근거가 약하다. 수정한 경로에서 남는 이벤트(로그인 수정이면 `auth.login.succeeded`)를 `--expect-event`로 주면 그 이벤트가 태그 로그에 있어야 0이 된다. 수정한 경로가 따로 로그를 남기지 않으면 `--expect-event health.check`로 최소한 그 버전이 요청을 받았다는 근거를 둔다(외부 프로브가 매시 남긴다. 경로 실행의 근거는 아니다). `--min-events 0`은 근거 없이 0을 만들 수 있으므로 쓰면 보고에 그렇게 적고, Issue resolve는 경로가 실행된 근거가 따로 있을 때 한다
 - 태그 로그 0건은 배포가 안 됐거나, 태그가 틀렸거나, 트래픽이 없다는 뜻이다. `npx wrangler deployments list`로 그 태그가 배포됐는지 확인한다
+- 태그 로그에 `health.schema_drift`가 있으면 `--event`와 무관하게 `notes`에 건수를 적는다. 판정은 바꾸지 않는다(대상 오류의 재발 여부와 별개의 문제라서다). `--event` 없이 돌리면 error라 재발 후보에도 들어간다
 - `--event`만 주면 Issues는 보지 않는다(Issue와 event를 대응시킬 방법이 없다). 특정 Issue를 함께 보려면 `--issue <id>`
 - occurrence는 API가 최신순으로 준다(OpenAPI 설명 "newest first"). `result_info.cursors.after`로 넘기며 `--since`보다 오래된 행에서 멈춘다. 페이지 한도(5쪽)를 다 쓰고도 `--since`에 닿지 못하면 `truncated`다
 - Issues 권한이 없는 토큰이면 `--skip-issues`로 로그만 보고 판정한다. 출력의 `notes`에 남는다
@@ -224,7 +225,7 @@ Claude Code에 Cloudflare 플러그인이 연결돼 있으면 그 `execute` 도�
 2. **재현·원인**: `obs.mjs request <requestId>`로 한 요청의 로그를 모으고, 위 카탈로그의 코드 위치와 `kind`별 대응을 따라 원인을 좁힌다. `versionTag`로 어느 배포에서 시작됐는지 보고 `git log <이전 태그>..<태그>`로 의심 변경을 찾는다. 로컬 재현은 `pnpm db:migrate:local` 후 `pnpm dev` 또는 테스트로 한다
 3. **수정 PR**: 실패를 재현하는 테스트를 먼저 쓰고 고친다. `pnpm test`, `pnpm build`를 통과시킨다. PR 본문에 근거와 verify 계획을 적는다. 근거는 위 "PII 규칙"의 공개 저장소 기준(이벤트 이름·`kind`·건수·기간·`versionTag`만, ID·오류 원문 제외)을 따른다
 4. **배포(사람 승인)**: 머지 후 사람이 `pnpm run deploy`를 실행한다. 스크립트가 배포 태그(git short SHA 12자)와, 끝나면 배포 시각(deploy 단계 시작 시각. 새 버전은 그 명령이 끝나기 전부터 요청을 받는다)과 `--since`를 채운 verify 명령을 출력한다. 스키마 변경이 있으면 원격 마이그레이션을 먼저 적용한다(사람)
-5. **재발 판정**: 충분한 시간이 지난 뒤(외부 프로브가 한 번 이상 돈 뒤, 배포 후 1시간 이상) `obs.mjs verify --tag <태그> --since <배포 시각> --event <e> [--issue <id>] --expect-event <e>`. `--expect-event`는 수정한 경로의 성공 이벤트가 있으면 그것을, 없으면 `health.check`를 준다. 다만 `health.check`는 버전이 살아 있다는 근거일 뿐 수정한 경로가 실행됐다는 근거가 아니므로 보고에 그렇게 적는다. `health.schema_drift`가 있으면 그 버전은 원격 마이그레이션이 빠졌다는 뜻이라 먼저 해소한다. 0이면 다음 단계, 1이면 출력이 고친 대상과 맞는지 확인하고 2로 돌아간다, 2면 `reason`(조회 실패·근거 부족)을 해소하고 다시 본다
+5. **재발 판정**: 충분한 시간이 지난 뒤(외부 프로브가 한 번 이상 돈 뒤, 배포 후 1시간 이상) `obs.mjs verify --tag <태그> --since <배포 시각> --event <e> [--issue <id>] --expect-event <e>`. `--expect-event`는 수정한 경로의 성공 이벤트가 있으면 그것을, 없으면 `health.check`를 준다. 다만 `health.check`는 버전이 살아 있다는 근거일 뿐 수정한 경로가 실행됐다는 근거가 아니므로 보고에 그렇게 적는다. `health.schema_drift`가 있으면 그 버전은 원격 마이그레이션이 빠졌다는 뜻이라 먼저 해소한다. `--event`로 좁히면 이 이벤트는 재발 후보에서 빠지므로 판정(exit)에는 반영되지 않고 verify 출력의 `notes`에만 나온다. 따로 볼 때는 `obs.mjs events health.schema_drift --since <배포 시각>`. 0이면 다음 단계, 1이면 출력이 고친 대상과 맞는지 확인하고 2로 돌아간다, 2면 `reason`(조회 실패·근거 부족)을 해소하고 다시 본다
 6. **정리**: 해당 Issue를 대시보드에서 resolve하고(사람 또는 권한 있는 도구), 카탈로그의 정상/비정상 기준이 틀렸으면 이 문서를 고친다
 
 ### 배포 태그
