@@ -816,7 +816,7 @@ OBS 오버레이 설정을 저장한다.
 
 - **인증**: 불필요 (`PROTECTED_ROUTES`에 넣지 않는다. 미들웨어는 거치므로 `x-request-id`가 붙고, 환경변수 검증이 실패하면 `500`)
 - **동작**: D1 조회 한 번(`SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 1`). 원격의 마지막 적용 마이그레이션을 코드 상수 `EXPECTED_LATEST_MIGRATION`(`src/lib/health.ts`)과 비교한다
-  - 같거나 원격이 더 새것(번호가 큼): 정상. 원격 마이그레이션을 먼저 적용하고 코드를 배포하는 사이에는 원격이 앞선다
+  - 같거나 원격이 더 새것(번호가 큼): 정상(200). 원격 마이그레이션을 먼저 적용하고 코드를 배포하는 사이에는 원격이 앞선다. 앞선 경우는 운영 로그에 `health.schema_ahead`(warn)를 따로 남긴다
   - 원격이 뒤처짐, 번호는 같은데 이름이 다름, 적용 기록 없음: 스키마 드리프트
 - **응답 헤더**: `Cache-Control: no-store` (200·503)
 - **응답**: `200 OK`
