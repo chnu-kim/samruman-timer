@@ -121,6 +121,15 @@ describe("오버레이 색상 쿼리 검증 (보안 감사 F03)", () => {
     expect(document.getElementById("overlay-style")?.textContent).not.toContain("url(");
   });
 
+  it("타이머를 그리는 데 성공하면 렌더 오류 reload 상한을 되돌린다", async () => {
+    window.sessionStorage.setItem("overlay-reload-count", "2");
+    stubTimer("RUNNING", 600);
+    render(<TimerOverlayPage />);
+    await screen.findByRole("timer");
+
+    expect(window.sessionStorage.getItem("overlay-reload-count")).toBeNull();
+  });
+
   it("유효한 #rrggbb bg는 적용한다", async () => {
     search = `bg=${encodeURIComponent("#112233")}`;
     stubTimer("RUNNING", 600);
@@ -137,5 +146,156 @@ describe("오버레이 색상 쿼리 검증 (보안 감사 F03)", () => {
 
     const timer = await screen.findByRole("timer");
     expect(timer.style.color).toMatch(/#ffffff|rgb\(255, 255, 255\)/);
+  });
+});
+
+describe("오버레이 폴링 백오프", () => {
+  const okResponse = (remainingSeconds = 600) => ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      data: {
+        id: "abc",
+        projectId: "p1",
+        title: "테스트 타이머",
+        description: null,
+        remainingSeconds,
+        status: "RUNNING",
+        scheduledStartAt: null,
+        createdBy: { id: "u1", nickname: "스트리머" },
+        projectOwnerId: "u1",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    }),
+  });
+  const notFound = () => ({ ok: false, status: 404, json: async () => ({}) });
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("404가 반복되면 간격이 두 배씩 늘고, 성공하면 5초로 돌아온다", async () => {
+    let respond: () => unknown = notFound;
+    const fetchMock = vi.fn(async () => respond());
+    vi.stubGlobal("fetch", fetchMock);
+    render(<TimerOverlayPage />);
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // 실패 1회 → 10초 뒤, 2회 → 20초 뒤, 3회 → 40초 뒤
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(19_999);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    respond = okResponse;
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+
+    // 성공 뒤에는 다시 5초 간격
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
+  it("404는 최대 5분 간격까지만 늘어난다", async () => {
+    const fetchMock = vi.fn(async () => notFound());
+    vi.stubGlobal("fetch", fetchMock);
+    render(<TimerOverlayPage />);
+
+    // 10+20+40+80+160초 뒤 여섯 번째 요청, 그다음부터는 5분 간격
+    await vi.advanceTimersByTimeAsync(310_000);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+    await vi.advanceTimersByTimeAsync(299_999);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchMock).toHaveBeenCalledTimes(7);
+  });
+
+  it("네트워크 오류는 최대 60초 간격이고 경고는 한 번만 남긴다", async () => {
+    const warn = vi.mocked(console.warn);
+    const fetchMock = vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<TimerOverlayPage />);
+
+    // 10+20+40초 뒤 네 번째, 그다음부터는 60초 간격
+    await vi.advanceTimersByTimeAsync(70_000);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain("연결하지 못했습니다");
+  });
+
+  it("200인데 JSON이 아닌 응답(한도 초과 안내 페이지)은 긴 백오프 대상이다", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new SyntaxError("Unexpected token <");
+      },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<TimerOverlayPage />);
+
+    // 60초 상한이었다면 310초 동안 9번 요청한다. 5분 상한이면 6번
+    await vi.advanceTimersByTimeAsync(310_000);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+    expect(console.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("원인이 바뀔 때마다 경고를 한 번씩 남기고, 성공하면 다음 실패를 다시 경고한다", async () => {
+    const warn = vi.mocked(console.warn);
+    const responses: Array<() => unknown> = [
+      notFound,
+      notFound,
+      () => ({ ok: false, status: 503, json: async () => ({}) }),
+      okResponse,
+      notFound,
+    ];
+    const fetchMock = vi.fn(async () => (responses.shift() ?? okResponse)());
+    vi.stubGlobal("fetch", fetchMock);
+    render(<TimerOverlayPage />);
+
+    await vi.advanceTimersByTimeAsync(0); // 404 → 경고
+    await vi.advanceTimersByTimeAsync(10_000); // 404 → 중복 억제
+    await vi.advanceTimersByTimeAsync(20_000); // 503 → 경고
+    await vi.advanceTimersByTimeAsync(40_000); // 성공
+    await vi.advanceTimersByTimeAsync(5_000); // 404 → 다시 경고
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(warn).toHaveBeenCalledTimes(3);
+    expect(warn.mock.calls[1][0]).toContain("HTTP 503");
+  });
+
+  it("언마운트하면 예약된 폴링이 남지 않고, 응답 대기 중 언마운트돼도 다음 요청을 예약하지 않는다", async () => {
+    let resolveFetch: (v: unknown) => void = () => {};
+    const fetchMock = vi.fn(() => new Promise((resolve) => (resolveFetch = resolve)));
+    vi.stubGlobal("fetch", fetchMock);
+    const { unmount } = render(<TimerOverlayPage />);
+
+    await vi.advanceTimersByTimeAsync(0);
+    unmount();
+    resolveFetch(notFound());
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

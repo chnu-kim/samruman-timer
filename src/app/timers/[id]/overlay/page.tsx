@@ -7,6 +7,9 @@ import { formatTime } from "@/components/timer/CountdownDisplay";
 import { detectTimerChange, isStaleResponse, type TimerSnapshot } from "@/lib/overlay-animation";
 import { formatDateTime } from "@/lib/utils";
 import { isOverlayBackground, isOverlayColor } from "@/lib/overlay-style";
+import { applyOverlayMode } from "@/lib/overlay-mode";
+import { classifyFailedResponse, nextPollDelay, type PollOutcome } from "@/lib/overlay-polling";
+import { clearRecovery } from "@/lib/overlay-recovery";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import type { ApiSuccessResponse, TimerDetailResponse } from "@/types";
 
@@ -54,8 +57,13 @@ export default function TimerOverlayPage() {
   const [floatingText, setFloatingText] = useState<string | null>(null);
   const [floatingKey, setFloatingKey] = useState(0);
   const prevTimerRef = useRef<TimerSnapshot | null>(null);
-  // 폴링마다 같은 경고가 쌓이지 않게 마지막으로 경고한 상태 코드를 기억한다
-  const warnedStatusRef = useRef<number | null>(null);
+  // 폴링마다 같은 경고가 쌓이지 않게 마지막으로 경고한 원인(상태 코드·네트워크·해석 실패)을 기억한다
+  const warnedRef = useRef<number | "network" | "invalid" | null>(null);
+  const warnOnce = useCallback((key: number | "network" | "invalid", message: string) => {
+    if (warnedRef.current === key) return;
+    warnedRef.current = key;
+    console.warn(message);
+  }, []);
   useDocumentTitle(timer ? `OBS 오버레이 · ${timer.title}` : null);
 
   useEffect(() => {
@@ -63,68 +71,83 @@ export default function TimerOverlayPage() {
   }, []);
 
   // 오버레이 모드: 헤더/푸터 숨기고 body 배경 투명 처리
+  useEffect(() => applyOverlayMode(bg), [bg]);
+
+  // 데이터를 그리는 데 성공했으면 렌더 오류 복구 상태(reset 횟수·reload 상한)를 되돌린다
   useEffect(() => {
-    // bg는 문자열 보간 없이 CSSOM으로만 넣는다
-    document.body.style.setProperty("background", bg, "important");
-    document.body.classList.add("overlay-mode");
-    const style = document.createElement("style");
-    style.id = "overlay-style";
-    style.textContent = `
-      .overlay-mode header, .overlay-mode footer, .overlay-mode main {
-        display: none !important;
+    if (timer) clearRecovery();
+  }, [timer]);
+
+  const fetchTimer = useCallback(async (): Promise<PollOutcome> => {
+    let res: Response;
+    try {
+      res = await fetch(`/api/timers/${timerId}`);
+    } catch {
+      warnOnce("network", "[오버레이] 서버에 연결하지 못했습니다. 잠시 후 다시 시도합니다.");
+      return "network";
+    }
+
+    if (!res.ok) {
+      const outcome = classifyFailedResponse(res);
+      // 방송 화면에 오류 문구를 띄우면 시청자에게 그대로 보이므로 화면에는 아무것도 그리지 않고 콘솔에만 남긴다
+      warnOnce(
+        res.status,
+        res.status === 404
+          ? `[오버레이] 타이머 ${timerId}를 찾을 수 없습니다. 삭제되었거나 URL이 잘못되었습니다.`
+          : `[오버레이] 타이머를 불러오지 못했습니다 (HTTP ${res.status}).`,
+      );
+      return outcome;
+    }
+
+    let data: TimerDetailResponse;
+    try {
+      const json = (await res.json()) as ApiSuccessResponse<TimerDetailResponse>;
+      data = json.data;
+    } catch {
+      // 200인데 JSON이 아니면 Cloudflare 한도 초과 안내 같은 HTML 페이지다
+      warnOnce("invalid", "[오버레이] 서버 응답을 해석하지 못했습니다. 요청 한도를 넘었을 수 있습니다.");
+      return "rate_limited";
+    }
+
+    warnedRef.current = null;
+    const now = Date.now();
+    if (isStaleResponse(prevTimerRef.current, data)) return "ok";
+
+    // 변경 감지: updatedAt이 바뀌었으면 수동 조작 발생
+    if (animation && prevTimerRef.current) {
+      const change = detectTimerChange(prevTimerRef.current, data, now);
+      if (change) {
+        setFloatingText(change.floatingText);
+        setFloatingKey((k) => k + 1);
+        setAnimClass(change.animClass);
       }
-    `;
-    document.head.appendChild(style);
+    }
+
+    prevTimerRef.current = { remainingSeconds: data.remainingSeconds, updatedAt: data.updatedAt, fetchedAt: now, status: data.status };
+    setTimer(data);
+    setDisplayed(data.remainingSeconds);
+    return "ok";
+  }, [timerId, animation, warnOnce]);
+
+  // 폴링: 성공하면 5초, 연속 실패하면 원인별 상한까지 간격을 두 배씩 늘린다(overlay-polling.ts)
+  useEffect(() => {
+    let cancelled = false;
+    let handle: ReturnType<typeof setTimeout> | undefined;
+    let failures = 0;
+
+    const tick = async () => {
+      const outcome = await fetchTimer();
+      // 응답을 기다리는 사이 언마운트됐으면 다음 폴링을 예약하지 않는다
+      if (cancelled) return;
+      failures = outcome === "ok" ? 0 : failures + 1;
+      handle = setTimeout(tick, nextPollDelay(outcome, failures));
+    };
+    tick();
 
     return () => {
-      document.body.classList.remove("overlay-mode");
-      document.body.style.removeProperty("background");
-      document.getElementById("overlay-style")?.remove();
+      cancelled = true;
+      clearTimeout(handle);
     };
-  }, [bg]);
-
-  const fetchTimer = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/timers/${timerId}`);
-      if (res.ok) {
-        const json = (await res.json()) as ApiSuccessResponse<TimerDetailResponse>;
-        const data = json.data;
-        const now = Date.now();
-        if (isStaleResponse(prevTimerRef.current, data)) return;
-
-        // 변경 감지: updatedAt이 바뀌었으면 수동 조작 발생
-        if (animation && prevTimerRef.current) {
-          const change = detectTimerChange(prevTimerRef.current, data, now);
-          if (change) {
-            setFloatingText(change.floatingText);
-            setFloatingKey((k) => k + 1);
-            setAnimClass(change.animClass);
-          }
-        }
-
-        prevTimerRef.current = { remainingSeconds: data.remainingSeconds, updatedAt: data.updatedAt, fetchedAt: now, status: data.status };
-        setTimer(data);
-        setDisplayed(data.remainingSeconds);
-        warnedStatusRef.current = null;
-      } else if (warnedStatusRef.current !== res.status) {
-        // 방송 화면에 오류 문구를 띄우면 시청자에게 그대로 보이므로 화면에는 아무것도 그리지 않고 콘솔에만 남긴다
-        warnedStatusRef.current = res.status;
-        console.warn(
-          res.status === 404
-            ? `[오버레이] 타이머 ${timerId}를 찾을 수 없습니다. 삭제되었거나 URL이 잘못되었습니다.`
-            : `[오버레이] 타이머를 불러오지 못했습니다 (HTTP ${res.status}).`,
-        );
-      }
-    } catch {
-      // ignore
-    }
-  }, [timerId, animation]);
-
-  // 5초 폴링
-  useEffect(() => {
-    fetchTimer();
-    const interval = setInterval(fetchTimer, 5_000);
-    return () => clearInterval(interval);
   }, [fetchTimer]);
 
   // RUNNING 상태에서 클라이언트 1초 카운트다운 (Date.now 기반)
