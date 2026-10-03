@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>오프라인 · 삼루먼타이머</title>
+<!-- 서비스워커가 페이지 이동이 네트워크 오류로 실패할 때 보여 주는 정적 페이지.
+     레이아웃·Tailwind를 쓸 수 없어 색은 src/app/globals.css 토큰 값을 그대로 옮겨 둔다.
+     SW가 원래 주소(같은 출처)로 내주므로 앱에서 고른 테마(localStorage 'theme')를 layout.tsx와 같은 스크립트로 반영한다. -->
+<script>(function(){try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.add('light');}catch(e){}})();</script>
+<style>
+  :root { --background: #ffffff; --foreground: #171717; --muted-foreground: #6b6b6b; --accent: #4f46e5; --accent-foreground: #ffffff; }
+  @media (prefers-color-scheme: dark) {
+    :root:not(.light) { --background: #0a0a0a; --foreground: #ededed; --muted-foreground: #a3a3a3; --accent: #818cf8; --accent-foreground: #0a0a0a; }
+  }
+  html.dark { --background: #0a0a0a; --foreground: #ededed; --muted-foreground: #a3a3a3; --accent: #818cf8; --accent-foreground: #0a0a0a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 16px;
+    background: var(--background); color: var(--foreground);
+    font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; }
+  main { max-width: 360px; text-align: center; }
+  svg { width: 40px; height: 40px; stroke: currentColor; }
+  h1 { font-size: 1.25rem; margin: 16px 0 8px; }
+  p { margin: 0 0 24px; color: var(--muted-foreground); line-height: 1.6; font-size: 0.9375rem; }
+  a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 20px; border-radius: 8px;
+    background: var(--accent); color: var(--accent-foreground); text-decoration: none; font-weight: 600; font-size: 0.9375rem; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<main>
+  <svg viewBox="0 0 32 32" fill="none" stroke-linecap="round" stroke-width="3" aria-hidden="true">
+    <path d="M25.34 20.76A11 11 0 1 1 11.24 6.66"/><path d="M22.8 4.2v10M17.8 9.2h10"/>
+  </svg>
+  <h1>인터넷에 연결되어 있지 않습니다</h1>
+  <p>타이머 시간은 서버에서 계산하므로 연결된 상태에서만 볼 수 있습니다. 연결을 확인한 뒤 다시 시도해 주세요.</p>
+  <!-- href=""는 지금 주소를 다시 불러온다. 버튼은 스크립트 없이 동작한다 -->
+  <a href="">다시 시도</a>
+</main>
+</body>
+</html>
