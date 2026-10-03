@@ -21,6 +21,7 @@
 - 인증: CHZZK OAuth → access JWT(`session` 쿠키, 15분) + refresh token rotation(`refresh` 쿠키, 30일, D1 저장)
 - `src/middleware.ts`가 `/api/*`를 가로채 JWT 검증·자동 갱신 후 `x-user-*` 헤더를 주입한다. Next 16 관례상 `proxy.ts`가 표준이지만 이 프로젝트는 `middleware.ts`를 쓴다
 - Charts: Recharts, Path alias: `@/*` → `./src/*`
+- 사이트 절대 주소는 `src/lib/site.ts`의 `SITE_URL` 상수다. metadata·robots·sitemap은 빌드 때 프리렌더되는데 `BASE_URL`은 프로덕션 런타임 시크릿이라, 빌드 시점에는 `.env`의 localhost 값만 읽힌다. 도메인을 바꾸면 `BASE_URL`, CHZZK Redirect URI와 함께 이 상수도 고친다
 
 ## 디렉토리
 
