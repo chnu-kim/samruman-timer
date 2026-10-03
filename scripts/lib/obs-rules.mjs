@@ -61,6 +61,8 @@ export const TRIAGE_RULES = [
   { event: "timer.create.unique_race", levels: ["warn"], conditions: [{ id: "total", min: 3 }] },
   // 원격 D1 마이그레이션 누락·불일치. 1건이라도 사람이 원격 마이그레이션을 확인해야 한다
   { event: "health.schema_drift", levels: ["error"], conditions: [{ id: "any", min: 1 }] },
+  // 원격 스키마가 코드보다 앞섰다. 배포 직전 프로브 1~2건은 정상 롤아웃이고, 3건 이상(몇 시간째)이면 상수 갱신 누락이나 머지 안 된 마이그레이션 적용이다
+  { event: "health.schema_ahead", levels: ["warn"], conditions: [{ id: "persistent", min: 3 }] },
 ];
 
 const RULES_BY_EVENT = new Map(TRIAGE_RULES.map((r) => [r.event, r]));

@@ -102,6 +102,12 @@ describe("이벤트별 규칙(경계값: 임계 - 1은 정상, 임계는 비정�
     expect(r(2).bucket).toBe("normal");
     expect(r(3).bucket).toBe("abnormal");
   });
+
+  it("health.schema_ahead는 2건 정상(배포 직전 롤아웃), 3건 비정상(몇 시간째 지속)", () => {
+    const r = (n: number) => bucketOf(times(n, () => ev("health.schema_ahead", "warn", { schemaState: "ahead" })), "health.schema_ahead");
+    expect(r(2).bucket).toBe("normal");
+    expect(r(3).bucket).toBe("abnormal");
+  });
 });
 
 describe("규칙에 없는 이벤트", () => {
