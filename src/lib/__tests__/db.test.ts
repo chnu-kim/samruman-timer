@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
+import { parseJson } from "@/__tests__/helpers";
 import { generateId, nowISO, withErrorHandler } from "@/lib/db";
 
 describe("generateId", () => {
@@ -43,7 +44,7 @@ describe("withErrorHandler", () => {
     });
     const res = await handler();
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await parseJson(res);
     expect(body.data).toBe("ok");
     expect(consoleError).not.toHaveBeenCalled();
   });
@@ -54,7 +55,7 @@ describe("withErrorHandler", () => {
     });
     const res = await handler();
     expect(res.status).toBe(500);
-    const body = await res.json();
+    const body = await parseJson(res);
     expect(body.error.code).toBe("INTERNAL_ERROR");
     // 요청 인자가 없어도 로그는 한 번 남는다
     expect(loggedEntries()).toHaveLength(1);
@@ -91,7 +92,7 @@ describe("withErrorHandler", () => {
       throw new Error("SELECT * FROM users WHERE password = 'secret'");
     });
     const res = await handler();
-    const body = await res.json();
+    const body = await parseJson(res);
     expect(body.error.message).not.toContain("SELECT");
     expect(body.error.message).not.toContain("secret");
     expect(body.error.message).toBe("서버 오류가 발생했습니다");
@@ -103,7 +104,7 @@ describe("withErrorHandler", () => {
       return NextResponse.json({ data: `${a}-${b}` });
     });
     const res = await handler("hello", 42);
-    const body = await res.json();
+    const body = await parseJson(res);
     expect(body.data).toBe("hello-42");
   });
 });

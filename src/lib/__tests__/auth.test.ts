@@ -324,7 +324,7 @@ describe("rotateRefreshToken", () => {
     expect(sqls.some((q) => q.includes("SET status = 'REVOKED'"))).toBe(true);
   });
 
-  it("REVOKED 토큰 → reuse_detected", async () => {
+  it("REVOKED 토큰 + 폐기로 바뀐 행 없음 → revoked (경보를 반복하지 않는다)", async () => {
     const rawToken = "revoked-token";
     const tokenHash = await hashToken(rawToken);
 
@@ -340,7 +340,46 @@ describe("rotateRefreshToken", () => {
     });
 
     const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
-    expect(result).toMatchObject({ ok: false, reason: "reuse_detected", familyId: "family-1" });
+    expect(result).toEqual({ ok: false, reason: "revoked", userId: "user-1", familyId: "family-1" });
+    // 폐기 UPDATE는 다시 돌린다(늦게 생긴 ACTIVE 토큰 차단)
+    expect(db._stmt.run).toHaveBeenCalledTimes(1);
+  });
+
+  it("REVOKED 토큰인데 폐기된 family에 늦게 생긴 ACTIVE 토큰이 있으면 폐기하고 reuse_detected", async () => {
+    // 다른 요청의 USED 전환과 새 토큰 INSERT 사이에 family 폐기가 끼어 ACTIVE 토큰이 남은 경우
+    db._stmt.first.mockResolvedValue({
+      id: "rt-1",
+      user_id: "user-1",
+      token_hash: "h",
+      family_id: "family-1",
+      status: "REVOKED",
+      expires_at: new Date(Date.now() + 86400000).toISOString(),
+      created_at: new Date().toISOString(),
+      used_at: null,
+    });
+    db._stmt.run.mockResolvedValue({ meta: { changes: 1 } });
+
+    const result = await rotateRefreshToken(db as unknown as D1Database, "revoked-token");
+    expect(result).toEqual({ ok: false, reason: "reuse_detected", userId: "user-1", familyId: "family-1" });
+    const sqls = db.prepare.mock.calls.map((c) => String(c[0]));
+    expect(sqls.some((q) => q.includes("SET status = 'REVOKED'"))).toBe(true);
+  });
+
+  it("USED 토큰 재사용이지만 동시 요청이 먼저 family를 폐기했으면(changes=0) revoked", async () => {
+    db._stmt.first.mockResolvedValueOnce({
+      id: "rt-1",
+      user_id: "user-1",
+      token_hash: "h",
+      family_id: "family-1",
+      status: "USED",
+      expires_at: new Date(Date.now() + 86400000).toISOString(),
+      created_at: new Date(Date.now() - 120_000).toISOString(),
+      used_at: new Date(Date.now() - 60_000).toISOString(),
+    });
+    db._stmt.run.mockResolvedValue({ meta: { changes: 0 } });
+
+    const result = await rotateRefreshToken(db as unknown as D1Database, "used-token-old");
+    expect(result).toMatchObject({ ok: false, reason: "revoked", familyId: "family-1" });
   });
 
   it("만료된 토큰 → expired", async () => {
@@ -400,7 +439,7 @@ describe("rotateRefreshToken", () => {
     expect(db._stmt.run).toHaveBeenCalledTimes(1);
   });
 
-  it("동시 사용 (changes=0) + 그 사이 family가 폐기됨 → reuse_detected + family 폐기", async () => {
+  it("동시 사용 (changes=0) + 그 사이 다른 요청이 family를 폐기함 → revoked (중복 경보 없음)", async () => {
     const rawToken = "reused-token";
     const tokenHash = await hashToken(rawToken);
 
@@ -420,9 +459,30 @@ describe("rotateRefreshToken", () => {
     db._stmt.run.mockResolvedValue({ meta: { changes: 0 } });
 
     const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
-    expect(result).toMatchObject({ ok: false, reason: "reuse_detected", userId: "user-1", familyId: "family-1" });
-    // UPDATE (0 changes) + family 폐기
+    expect(result).toMatchObject({ ok: false, reason: "revoked", userId: "user-1", familyId: "family-1" });
+    // UPDATE (0 changes) + family 폐기 시도(0 changes)
     expect(db._stmt.run).toHaveBeenCalledTimes(2);
+  });
+
+  it("동시 사용 (changes=0) + 다른 요청이 grace 밖에서 USED로 만듦 → 이번 요청이 폐기하면 reuse_detected", async () => {
+    db._stmt.first
+      .mockResolvedValueOnce({
+        id: "rt-1",
+        user_id: "user-1",
+        token_hash: "h",
+        family_id: "family-1",
+        status: "ACTIVE",
+        expires_at: new Date(Date.now() + 86400000).toISOString(),
+        created_at: new Date(Date.now() - 120_000).toISOString(),
+        used_at: null,
+      })
+      .mockResolvedValueOnce({ status: "USED", used_at: new Date(Date.now() - 60_000).toISOString() });
+    db._stmt.run
+      .mockResolvedValueOnce({ meta: { changes: 0 } }) // USED 전환 CAS 실패
+      .mockResolvedValueOnce({ meta: { changes: 2 } }); // family 폐기
+
+    const result = await rotateRefreshToken(db as unknown as D1Database, "reused-token");
+    expect(result).toEqual({ ok: false, reason: "reuse_detected", userId: "user-1", familyId: "family-1" });
   });
 
   it("rotation 뒤 사용자 행이 없으면 user_missing", async () => {
@@ -473,7 +533,7 @@ describe("revokeRefreshTokenFamily", () => {
     const db = createMockDB();
     db._stmt.run.mockResolvedValue({ meta: { changes: 3 } });
 
-    await revokeRefreshTokenFamily(db as unknown as D1Database, "family-1");
+    expect(await revokeRefreshTokenFamily(db as unknown as D1Database, "family-1")).toBe(3);
 
     expect(db.prepare).toHaveBeenCalledWith(
       expect.stringContaining("UPDATE refresh_tokens SET status = 'REVOKED'")

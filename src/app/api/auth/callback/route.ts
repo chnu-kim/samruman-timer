@@ -54,7 +54,10 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
   // state 검증
   const stateFailure = stateFailureReason(code, state, savedState);
   if (stateFailure || !code || !state) {
-    logger.warn("auth.oauth_state_invalid", { requestId, reason: stateFailure });
+    // code가 없으면 교환할 것이 없어 위조 신호가 아니다(동의 화면에서 취소했거나 주소를 직접 연 경우 등).
+    // warn 필터를 state 위조 의심(mismatch·missing_state·missing_cookie)에만 남기려고 info로 낮춘다
+    const level = stateFailure === "missing_code" ? "info" : "warn";
+    logger[level]("auth.oauth_state_invalid", { requestId, reason: stateFailure });
     return failureRedirect(baseUrl);
   }
 

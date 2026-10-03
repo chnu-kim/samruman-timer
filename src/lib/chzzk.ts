@@ -70,6 +70,20 @@ async function failure(stage: ChzzkStage, res: Response): Promise<ChzzkApiError>
   );
 }
 
+/**
+ * 성공 응답 본문을 JSON으로 읽는다. 본문이 JSON이 아니면(프록시 HTML 오류 페이지 등) SyntaxError 메시지에
+ * 본문 일부가 인용되므로 cause로 넘기지 않고 status만 담은 ChzzkApiError로 바꾼다
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function readJson(stage: ChzzkStage, res: Response): Promise<any> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new ChzzkApiError(stage, `${STAGE_LABEL[stage]} invalid JSON`, { status: res.status });
+  }
+}
+
 function getConfig() {
   const clientId = process.env.CHZZK_CLIENT_ID;
   const clientSecret = process.env.CHZZK_CLIENT_SECRET;
@@ -113,13 +127,12 @@ export async function exchangeCode(
     throw await failure("token", res);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const json: any = await res.json();
+  const json = await readJson("token", res);
 
   // CHZZK API가 { content: { ... } } 로 래핑하는 경우 처리
-  const data = json.content ?? json;
+  const data = json?.content ?? json;
 
-  if (!data.accessToken) {
+  if (!data?.accessToken) {
     throw new ChzzkApiError("token", "CHZZK token response missing accessToken", { status: res.status });
   }
 
@@ -141,11 +154,10 @@ export async function getUserInfo(
     throw await failure("user", res);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const json: any = await res.json();
-  const data = json.content ?? json;
+  const json = await readJson("user", res);
+  const data = json?.content ?? json;
 
-  if (!data.id && !data.channelId) {
+  if (!data?.id && !data?.channelId) {
     throw new ChzzkApiError("user", "CHZZK user response missing id", { status: res.status });
   }
 

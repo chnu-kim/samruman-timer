@@ -131,16 +131,32 @@ export async function deleteExpiredRefreshTokens(db: D1Database, userId: string)
     .run();
 }
 
+/** family의 ACTIVE·USED 토큰을 폐기하고 바뀐 행 수를 돌려준다(0이면 이미 폐기된 family) */
 export async function revokeRefreshTokenFamily(
   db: D1Database,
   familyId: string
-): Promise<void> {
-  await db
+): Promise<number> {
+  const result = await db
     .prepare(
       "UPDATE refresh_tokens SET status = 'REVOKED' WHERE family_id = ? AND status IN ('ACTIVE', 'USED')"
     )
     .bind(familyId)
     .run();
+  return result?.meta?.changes ?? 0;
+}
+
+/**
+ * 재사용 감지 처리. 이번 요청이 family를 실제로 폐기했을 때만 reuse_detected(탈취 의심 경보)로 낸다.
+ * 동시 요청이 먼저 폐기했다면 같은 사건이므로 revoked로 낸다
+ */
+async function revokeOnReuse(db: D1Database, row: RefreshTokenRow): Promise<RotateOutcome> {
+  const changes = await revokeRefreshTokenFamily(db, row.family_id);
+  return {
+    ok: false,
+    reason: changes > 0 ? "reuse_detected" : "revoked",
+    userId: row.user_id,
+    familyId: row.family_id,
+  };
 }
 
 // 동시 요청 grace period: 토큰이 rotation된 지 30초 이내에 다시 쓰이면 race condition으로 판단
@@ -178,12 +194,17 @@ export interface RotateResult {
   familyId: string;
 }
 
-/** refresh 거부 사유. middleware가 운영 로그에 남긴다(이 모듈은 로깅하지 않는다) */
+/**
+ * refresh 거부 사유. middleware가 운영 로그에 남긴다(이 모듈은 로깅하지 않는다)
+ * - reuse_detected: 이번 요청이 재사용을 감지해 family를 폐기했다(사건당 한 번)
+ * - revoked: 이미 폐기된 family의 토큰. 폐기 뒤에도 브라우저가 같은 쿠키를 계속 보내므로 경보로 다루지 않는다
+ */
 export type RotateRejectReason =
   | "not_found"
   | "expired"
   | "family_expired"
   | "reuse_detected"
+  | "revoked"
   | "user_missing";
 
 export type RotateOutcome =
@@ -204,20 +225,27 @@ export async function rotateRefreshToken(
 
   if (!row) return { ok: false, reason: "not_found" };
 
-  // 2. USED/REVOKED면 → grace period 확인 후 reuse detection
-  if (row.status === "USED" || row.status === "REVOKED") {
+  // 2. REVOKED면 family가 이미 폐기됐다. 그래도 폐기 UPDATE는 다시 돌린다: rotation이 원자적이지 않아
+  //    다른 요청의 USED 전환과 새 토큰 INSERT 사이에 폐기가 끼면 폐기된 family에 ACTIVE 토큰이 새로 생기는데,
+  //    이 재폐기가 그 토큰을 막는다. 바뀐 행이 없으면(보통의 경우) revoked로 내 경보를 반복하지 않는다.
+  //    (refresh 쿠키는 로그아웃에서만 지우므로 폐기 뒤에도 페이지를 열 때마다 이 경로로 들어온다)
+  if (row.status === "REVOKED") {
+    return revokeOnReuse(db, row);
+  }
+
+  // 3. USED면 → grace period 확인 후 reuse detection
+  if (row.status === "USED") {
     // 동시 요청 grace: 이 토큰 자신이 방금 rotation됐을 때만 정상적인 동시 요청으로 본다.
     // family에 최근 ACTIVE 토큰이 있는지로 판단하면, 탈취자가 주기적으로 rotation하는 동안
     // 피해자의 재사용이 계속 grace로 통과해 탐지가 일어나지 않는다.
-    if (row.status === "USED" && isWithinRaceGrace(row.used_at)) {
+    if (isWithinRaceGrace(row.used_at)) {
       return graceResult(db, row);
     }
 
-    await revokeRefreshTokenFamily(db, row.family_id);
-    return { ok: false, reason: "reuse_detected", userId: row.user_id, familyId: row.family_id };
+    return revokeOnReuse(db, row);
   }
 
-  // 3. 만료 확인. family 절대 만료가 지났으면 토큰 자체 만료가 남아 있어도 거부한다
+  // 4. 만료 확인. family 절대 만료가 지났으면 토큰 자체 만료가 남아 있어도 거부한다
   if (new Date(row.expires_at) <= new Date()) {
     return { ok: false, reason: "expired", userId: row.user_id, familyId: row.family_id };
   }
@@ -225,7 +253,7 @@ export async function rotateRefreshToken(
     return { ok: false, reason: "family_expired", userId: row.user_id, familyId: row.family_id };
   }
 
-  // 4. 동시성 대응: UPDATE ... WHERE status='ACTIVE' + changes 체크
+  // 5. 동시성 대응: UPDATE ... WHERE status='ACTIVE' + changes 체크
   const updateResult = await db
     .prepare(
       "UPDATE refresh_tokens SET status = 'USED', used_at = ? WHERE id = ? AND status = 'ACTIVE'"
@@ -245,11 +273,10 @@ export async function rotateRefreshToken(
       return graceResult(db, row);
     }
 
-    await revokeRefreshTokenFamily(db, row.family_id);
-    return { ok: false, reason: "reuse_detected", userId: row.user_id, familyId: row.family_id };
+    return revokeOnReuse(db, row);
   }
 
-  // 5. 새 토큰 생성, 같은 family_id
+  // 6. 새 토큰 생성, 같은 family_id
   const newRawToken = generateRefreshToken();
   const newTokenHash = await hashToken(newRawToken);
   // 절대 만료는 family를 따라간다. 0009 이전 행처럼 비어 있으면 이 토큰 생성 시각 기준으로 정한다
@@ -258,7 +285,7 @@ export async function rotateRefreshToken(
     new Date(new Date(row.created_at).getTime() + SESSION_ABSOLUTE_MAX_AGE * 1000).toISOString();
   await createRefreshTokenInDB(db, row.user_id, newTokenHash, row.family_id, familyExpiresAt);
 
-  // 6. user 정보 조회
+  // 7. user 정보 조회
   const user = await db
     .prepare(
       "SELECT id, chzzk_user_id, nickname FROM users WHERE id = ?"

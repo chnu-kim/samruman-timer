@@ -12,7 +12,7 @@ vi.mock("@/lib/auth", async (importOriginal) => {
 
 import { getCurrentUser } from "@/lib/auth";
 import { getDB } from "@/lib/db";
-import { createMockDB } from "../helpers";
+import { createMockDB, parseJson } from "../helpers";
 import { POST } from "@/app/api/auth/logout/route";
 import { NextRequest } from "next/server";
 
@@ -42,7 +42,7 @@ describe("POST /api/auth/logout", () => {
     const res = await POST(createPostReq("session=valid-token") as never);
     expect(res.status).toBe(200);
 
-    const body = await res.json();
+    const body = await parseJson(res);
     expect(body.data).toBeNull();
 
     const setCookie = res.headers.get("Set-Cookie");
@@ -54,7 +54,7 @@ describe("POST /api/auth/logout", () => {
 
     const res = await POST(createPostReq() as never);
     expect(res.status).toBe(401);
-    const body = await res.json();
+    const body = await parseJson(res);
     expect(body.error.code).toBe("UNAUTHORIZED");
   });
 

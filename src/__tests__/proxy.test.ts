@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from "vitest";
 import { NextRequest } from "next/server";
+import { parseJson } from "@/__tests__/helpers";
 
 vi.mock("@/lib/db", async (importOriginal) => {
   const orig = await importOriginal<typeof import("@/lib/db")>();
@@ -105,7 +106,7 @@ describe("proxy: 보호 라우트 — 토큰 없음", () => {
     const req = makeRequest("POST", "/api/projects");
     const res = await proxy(req);
     expect(res.status).toBe(401);
-    const body = await res.json();
+    const body = await parseJson(res);
     expect(body.error.code).toBe("UNAUTHORIZED");
   });
 
@@ -147,7 +148,7 @@ describe("proxy: 보호 라우트 — 잘못된 토큰", () => {
     });
     const res = await proxy(req);
     expect(res.status).toBe(401);
-    const body = await res.json();
+    const body = await parseJson(res);
     expect(body.error.code).toBe("UNAUTHORIZED");
     expect(body.error.message).toContain("인증이 필요합니다");
   });
@@ -251,14 +252,15 @@ describe("proxy: refresh 거부 사유 로깅", () => {
     expect(JSON.stringify(logged[0])).not.toContain("raw-refresh-secret");
   });
 
-  it.each(["not_found", "expired", "family_expired", "user_missing"] as const)(
+  // revoked: 이미 폐기된 family의 쿠키가 페이지마다 다시 오는 경우. 사건당 한 번만 warn이 나가도록 info로 남긴다
+  it.each(["not_found", "expired", "family_expired", "revoked", "user_missing"] as const)(
     "%s → 401 + info auth.refresh.rejected",
     async (reason) => {
       vi.mocked(rotateRefreshToken).mockResolvedValue({ ok: false, reason });
       const res = await proxy(makeRequest("POST", "/api/projects", { cookie: "refresh=r" }));
 
       expect(res.status).toBe(401);
-      const body = await res.json();
+      const body = await parseJson(res);
       expect(body.error.code).toBe("UNAUTHORIZED");
       expect(entries(consoleLog)).toEqual([
         expect.objectContaining({ level: "info", event: "auth.refresh.rejected", reason }),
@@ -295,7 +297,7 @@ describe("proxy: refresh 중 인프라 오류", () => {
     const res = await proxy(makeRequest("GET", "/api/auth/me", { cookie: "refresh=r" }));
 
     expect(res.status).toBe(500);
-    const body = await res.json();
+    const body = await parseJson(res);
     expect(body).toEqual({ error: { code: "INTERNAL_ERROR", message: "서버 오류가 발생했습니다" } });
     const requestId = res.headers.get("x-request-id");
     expect(requestId).toMatch(UUID_RE);
@@ -325,7 +327,7 @@ describe("proxy: 환경변수 검증 실패", () => {
     const res = await proxy(makeRequest("GET", "/api/projects"));
 
     expect(res.status).toBe(500);
-    const body = await res.json();
+    const body = await parseJson(res);
     expect(body.error.code).toBe("INTERNAL_ERROR");
     expect(res.headers.get("x-request-id")).toMatch(UUID_RE);
     const logged = entries(consoleError);

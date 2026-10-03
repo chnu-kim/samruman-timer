@@ -197,12 +197,40 @@ describe("GET /api/auth/callback", () => {
   });
 
   it.each([
-    [{ state: "s" }, { "__Host-oauth_state": "s" }, "missing_code"],
     [{ code: "c" }, { "__Host-oauth_state": "s" }, "missing_state"],
     [{ code: "c", state: "s" }, {}, "missing_cookie"],
   ])("state 검증 실패 사유 %#", async (params, cookies, reason) => {
     await GET(createCallbackReq(params as Record<string, string>, cookies as Record<string, string>) as never);
     expect(entries(consoleWarn)[0]).toMatchObject({ event: "auth.oauth_state_invalid", reason });
+  });
+
+  it("code 없음(동의 취소 등)은 위조 신호가 아니라 info로 남긴다", async () => {
+    await GET(createCallbackReq({ state: "s" }, { "__Host-oauth_state": "s" }) as never);
+    expect(entries(consoleWarn)).toEqual([]);
+    expect(entries(consoleLog)).toEqual([
+      expect.objectContaining({ level: "info", event: "auth.oauth_state_invalid", reason: "missing_code" }),
+    ]);
+  });
+
+  it("실제 CHZZK 호출이 시간 초과되면 kind=timeout으로 남는다", async () => {
+    const actual = await vi.importActual<typeof import("@/lib/chzzk")>("@/lib/chzzk");
+    vi.mocked(exchangeCode).mockImplementation(actual.exchangeCode);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new DOMException("The operation was aborted due to timeout", "TimeoutError"))
+    );
+    try {
+      await GET(createCallbackReq({ code: "c", state: "s" }, { "__Host-oauth_state": "s" }) as never);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(entries(consoleError)[0]).toMatchObject({
+      event: "auth.login.failed",
+      stage: "token",
+      timedOut: true,
+      errorName: "ChzzkApiError",
+      kind: "timeout",
+    });
   });
 
   it("사용자 조회 시간 초과 → stage=user, timedOut, status 없이 기록", async () => {

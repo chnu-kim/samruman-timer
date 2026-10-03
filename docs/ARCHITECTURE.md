@@ -294,14 +294,14 @@ npx opennextjs-cloudflare build && npx opennextjs-cloudflare deploy
 
 - `level`·`event`·`message`·`timestamp`는 예약 키라 fields가 덮어쓰지 못한다. `message`는 대시보드 목록의 표시 열이라 `event`와 같은 값을 넣는다
 - `requestId`는 미들웨어가 만든 UUID다. 같은 값이 응답 헤더 `x-request-id`로 나가므로, 사용자가 알려 준 값으로 로그를 찾는다. 들어온 `x-request-id`나 `cf-ray`는 쓰지 않는다
-- `errorFields(err)`는 `{ errorName, error(300자), cause(300자, 있을 때), stack(2000자), kind }`를 만든다. `kind`는 `schema_drift`(`no such table|column`, 원격 마이그레이션 누락), `timeout`(`TimeoutError`, `AbortSignal.timeout`), `unknown`이다
+- `errorFields(err)`는 `{ errorName, error(300자), cause(300자, 있을 때), stack(2000자), kind }`를 만든다. `kind`는 `schema_drift`(`no such table|column`, 원격 마이그레이션 누락), `timeout`(`TimeoutError`, `AbortSignal.timeout`. `ChzzkApiError`처럼 감싼 오류는 `timedOut: true`나 cause의 `TimeoutError`로 판정), `unknown`이다. stack 첫 줄의 메시지도 300자로 잘라 붙이므로 메시지 상한이 stack에서 풀리지 않는다
 - invocation log를 껐으므로 `api.unhandled`·`auth.refresh.failed` 같은 오류 로그에는 `method`와 `path`(쿼리스트링 제외 pathname)를 직접 넣는다
 
 ### PII 규칙
 
 - 남기지 않는다: 토큰(access·refresh·OAuth code/state), 토큰 해시, 쿠키, nickname, chzzkUserId, actorName, 쿼리스트링, 외부(CHZZK) 응답 본문 원문
 - 남겨도 된다: 서버가 만든 내부 ID(userId·timerId·projectId·familyId), requestId, method, pathname
-- CHZZK 실패 응답은 본문을 버리고 JSON `code` 필드만 오류 메시지에 붙인다(`ChzzkApiError`)
+- CHZZK 실패 응답은 본문을 버리고 JSON `code` 필드만 오류 메시지에 붙인다(`ChzzkApiError`). 200인데 JSON이 아닌 본문도 `invalid JSON` `ChzzkApiError`로 바꾸고, 본문 일부를 인용하는 `SyntaxError`는 cause로 달지 않는다
 
 ### 이벤트 목록
 
@@ -311,16 +311,16 @@ npx opennextjs-cloudflare build && npx opennextjs-cloudflare deploy
 | `env.invalid` | error | middleware | requestId, method, path, invalid(변수 이름만) |
 | `env.weak_jwt_secret` | warn | `lib/env.ts` | variable, minBytes |
 | `auth.refresh.failed` | error | middleware (refresh 중 예외 → 500) | requestId, method, path, 오류 필드 |
-| `auth.refresh.reuse_detected` | warn | middleware | requestId, method, path, userId, familyId |
-| `auth.refresh.rejected` | info | middleware | requestId, method, path, reason(`not_found`·`expired`·`family_expired`·`user_missing`) |
-| `auth.oauth_state_invalid` | warn | `/api/auth/callback` | requestId, reason(`missing_code`·`missing_state`·`missing_cookie`·`mismatch`) |
+| `auth.refresh.reuse_detected` | warn | middleware (이번 요청이 family의 행을 실제로 폐기했을 때만, 보통 사건당 한 번) | requestId, method, path, userId, familyId |
+| `auth.refresh.rejected` | info | middleware | requestId, method, path, reason(`not_found`·`expired`·`family_expired`·`revoked`·`user_missing`) |
+| `auth.oauth_state_invalid` | warn / info | `/api/auth/callback` | requestId, reason(warn: `missing_state`·`missing_cookie`·`mismatch` / info: `missing_code`) |
 | `auth.login.failed` | error | `/api/auth/callback` | requestId, method, path, stage(`token`·`user`·`db`), status, timedOut, durationMs, 오류 필드 |
 | `auth.login.succeeded` | info | `/api/auth/callback` | requestId, userId, durationMs |
 | `auth.logout.revoke_failed` | error | `/api/auth/logout` | requestId, method, path, 오류 필드 |
 | `timer.modify.conflict_exhausted` | warn | `/api/timers/[id]/modify` (409) | requestId, timerId, action |
 | `timer.create.unique_race` | warn | `POST /api/projects/[id]/timers` | requestId, projectId |
 
-refresh 쿠키 없이 보호 라우트를 부른 401은 정상 흐름이고 양이 많아 남기지 않는다. `env.invalid`는 검증이 성공했을 때만 캐시되므로 설정을 고칠 때까지 요청마다 한 건씩 남는다.
+refresh 쿠키 없이 보호 라우트를 부른 401은 정상 흐름이고 양이 많아 남기지 않는다. 반면 거부된 refresh 쿠키(폐기된 family = `revoked`, `expired`, `family_expired`, `not_found`)는 쿠키를 로그아웃에서만 지우므로 그 브라우저가 페이지를 열 때마다(Header와 페이지가 각각 `/api/auth/me`를 부르므로 한 화면에 1~2건) `auth.refresh.rejected`가 다시 남는다. 쿠키가 만료(최대 30일)되거나 다시 로그인할 때까지 이어진다. 그래서 `auth.refresh.rejected` 건수는 사건 수가 아니라 페이지 조회 수에 가깝고, 사건 수는 `auth.refresh.reuse_detected`로 센다. `env.invalid`는 검증이 성공했을 때만 캐시되므로 설정을 고칠 때까지 요청마다 한 건씩 남는다.
 
 ### 무료 한도와 초과 시 동작
 
@@ -332,7 +332,7 @@ refresh 쿠키 없이 보호 라우트를 부른 401은 정상 흐름이고 양�
 | Workers Logs (2026-12-01 이전) | 하루 200,000 이벤트, 3일 보관 | 그날 남은 시간 동안 1% 샘플링 |
 | Workers Logs (2026-12-01 이후) | 하루 0.5GB, 7일 보관. Issues도 같은 한도를 쓴다 | 00:00 UTC까지 수집 중단 |
 
-Free 플랜은 추가 구매가 불가능하므로 어느 경우든 과금되지 않는다. invocation log를 끈 지금은 앱 이벤트(로그인, refresh 거부, 경고·오류)만 쓰므로 하루 수십~수백 건 수준이다. 요청 한도가 로그 한도보다 먼저 찬다.
+Free 플랜은 추가 구매가 불가능하므로 어느 경우든 과금되지 않는다. invocation log를 끈 지금은 앱 이벤트(로그인, refresh 거부, 경고·오류)만 쓴다. 가장 많은 것은 위의 `auth.refresh.rejected`로, 거부된 쿠키를 가진 브라우저의 페이지 조회 수만큼 늘어난다. 그래도 이벤트 수는 요청 수를 넘을 수 없으므로(요청당 많아야 한두 건) 요청 한도(하루 100,000건)가 로그 한도보다 먼저 찬다.
 
 ### 대시보드에서 찾기
 
@@ -342,7 +342,7 @@ Cloudflare 대시보드 → Workers & Pages → `samrumantimer` → Observabilit
 - 서버 오류 전체: `level` = `error`
 - 마이그레이션 누락 의심: `kind` = `schema_drift` (보이면 `npx wrangler d1 migrations list samrumantimer-db --remote`로 확인)
 - 로그인 장애: `event` = `auth.login.failed`, `stage`·`status`·`timedOut`로 나눠 본다
-- 세션 탈취 의심: `event` = `auth.refresh.reuse_detected`
+- 세션 탈취 의심: `event` = `auth.refresh.reuse_detected` (보통 사건당 한 건. 약 15분 전에 `auth.refresh.failed`가 있었다면 AUTH.md "rotation의 비원자성"의 오탐일 수 있다. `auth.refresh.failed`에는 familyId가 없어 시간으로만 짝짓는다)
 - 묶인 오류는 Issues 탭에서 본다
 
 ### wrangler tail
@@ -352,9 +352,11 @@ Cloudflare 대시보드 → Workers & Pages → `samrumantimer` → Observabilit
 ```bash
 npx wrangler tail samrumantimer                       # 사람이 읽는 형식
 npx wrangler tail samrumantimer --format json         # 원본 이벤트(요청 메타데이터 포함)
-npx wrangler tail samrumantimer --status error        # 실패한 호출만
+npx wrangler tail samrumantimer --search '"level":"error"' # 앱 오류 로그만(처리된 500 포함)
 npx wrangler tail samrumantimer --search auth.refresh # 문자열 검색
 ```
+
+`--status error`는 호출 결과(outcome)가 `error`인 것, 즉 잡히지 않은 예외만 보여 준다. 이 앱의 오류(`api.unhandled`, `auth.refresh.failed`, `env.invalid`, `auth.login.failed`)는 모두 잡아서 500 응답이나 리다이렉트로 끝내므로 outcome이 `ok`라 `--status error`에는 나오지 않는다. 앱 오류는 위처럼 `--search`로 로그 내용(`"level":"error"`)을 걸러 본다.
 
 로컬에서는 `npx opennextjs-cloudflare preview`가 같은 앱 로그를 터미널(또는 로컬 explorer의 observability 쿼리)로 보여 준다.
 

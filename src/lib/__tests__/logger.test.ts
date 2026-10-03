@@ -72,11 +72,49 @@ describe("errorFields", () => {
 
   it("message·cause는 300자, stack은 2000자로 자른다", () => {
     const err = new Error("m".repeat(1000), { cause: "c".repeat(1000) });
-    err.stack = "s".repeat(5000);
+    err.stack = `Error: ${"m".repeat(1000)}` + "\n    at frame (file.js:1:1)".repeat(200);
     const fields = errorFields(err);
     expect(String(fields.error)).toHaveLength(300);
     expect(String(fields.cause)).toHaveLength(300);
     expect(String(fields.stack)).toHaveLength(2000);
+  });
+
+  it("stack 머리말의 메시지도 300자 상한을 지킨다(서브클래스 name이 머리말과 달라도)", () => {
+    class WrappedError extends Error {
+      constructor(message: string) {
+        super(message);
+        // ChzzkApiError처럼 super() 뒤에 name을 바꾸면 V8 stack 머리말은 "Error: ..."로 남는다
+        this.name = "WrappedError";
+      }
+    }
+    const secret = "x".repeat(300) + "BODY-TAIL-THAT-MUST-NOT-LEAK";
+    const fields = errorFields(new WrappedError(secret));
+    const stack = String(fields.stack);
+    expect(stack).not.toContain("BODY-TAIL-THAT-MUST-NOT-LEAK");
+    expect(stack.startsWith(`WrappedError: ${"x".repeat(300)}\n`)).toBe(true);
+    // 프레임은 남긴다
+    expect(stack).toMatch(/\n\s+at /);
+  });
+
+  it("frame이 없는 stack은 머리말만 잘린 메시지로 남긴다", () => {
+    const err = new Error("m".repeat(1000));
+    err.stack = `Error: ${"m".repeat(1000)}`;
+    expect(String(errorFields(err).stack)).toBe(`Error: ${"m".repeat(300)}`);
+  });
+
+  it("감싼 오류의 cause가 TimeoutError이거나 timedOut이면 timeout으로 분류한다", async () => {
+    const { ChzzkApiError } = await import("@/lib/chzzk");
+    const timeoutErr = new DOMException("The operation was aborted due to timeout", "TimeoutError");
+    const wrapped = new ChzzkApiError("token", "CHZZK token exchange timed out", {
+      timedOut: true,
+      cause: timeoutErr,
+    });
+    expect(errorFields(wrapped)).toMatchObject({ errorName: "ChzzkApiError", kind: "timeout" });
+    expect(errorFields(new Error("wrapped", { cause: timeoutErr })).kind).toBe("timeout");
+    expect(errorFields(Object.assign(new Error("flag"), { timedOut: true })).kind).toBe("timeout");
+    expect(errorFields(new ChzzkApiError("user", "CHZZK user info failed: 500", { status: 500 })).kind).toBe(
+      "unknown"
+    );
   });
 
   it("cause가 없으면 cause 키를 넣지 않는다", () => {

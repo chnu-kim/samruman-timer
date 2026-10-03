@@ -60,10 +60,33 @@ const STACK_LIMIT = 2000;
 /** 마이그레이션 누락(schema_drift)과 외부 호출 시간 초과(timeout)를 로그 한 줄로 구분하기 위한 분류 */
 export type ErrorKind = "schema_drift" | "timeout" | "unknown";
 
-function classify(name: string, message: string): ErrorKind {
+function nameOf(value: unknown): unknown {
+  return typeof value === "object" && value !== null ? (value as { name?: unknown }).name : undefined;
+}
+
+/**
+ * 시간 초과는 감싼 오류(ChzzkApiError 등)로 올라오는 경우가 많아 바깥 name만 보면 놓친다.
+ * `timedOut: true` 속성이나 cause의 name도 함께 본다(logger가 도메인 오류 클래스를 import하지 않도록 덕 타이핑)
+ */
+function classify(err: unknown, name: string, message: string): ErrorKind {
   if (/no such (table|column)/i.test(message)) return "schema_drift";
   if (name === "TimeoutError") return "timeout";
+  if (typeof err === "object" && err !== null) {
+    const e = err as { timedOut?: unknown; cause?: unknown };
+    if (e.timedOut === true || nameOf(e.cause) === "TimeoutError") return "timeout";
+  }
   return "unknown";
+}
+
+/**
+ * V8 stack의 첫 줄(들)은 `${name}: ${message}`라 메시지 상한이 stack에서 풀린다.
+ * 첫 프레임(`\n    at `) 앞의 머리말을 버리고 잘린 메시지로 다시 붙인다.
+ * 서브클래스는 super() 뒤에 name을 바꾸므로 머리말의 이름이 errorName과 다를 수 있어 문자열 비교로 찾지 않는다
+ */
+function boundedStack(stack: string, name: string, message: string): string {
+  const frameStart = stack.search(/\n\s+at /);
+  const frames = frameStart === -1 ? "" : stack.slice(frameStart);
+  return `${name}: ${message.slice(0, MESSAGE_LIMIT)}${frames}`.slice(0, STACK_LIMIT);
 }
 
 /**
@@ -78,13 +101,13 @@ export function errorFields(err: unknown): LogFields {
     const fields: LogFields = {
       errorName: name,
       error: message.slice(0, MESSAGE_LIMIT),
-      kind: classify(name, message),
+      kind: classify(err, name, message),
     };
     if (e.cause !== undefined) {
       fields.cause = String(e.cause).slice(0, MESSAGE_LIMIT);
     }
     if (typeof e.stack === "string") {
-      fields.stack = e.stack.slice(0, STACK_LIMIT);
+      fields.stack = boundedStack(e.stack, name, message);
     }
     return fields;
   }
@@ -92,6 +115,6 @@ export function errorFields(err: unknown): LogFields {
   return {
     errorName: typeof err,
     error: message.slice(0, MESSAGE_LIMIT),
-    kind: classify("", message),
+    kind: classify(err, "", message),
   };
 }
