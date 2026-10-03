@@ -53,6 +53,7 @@ argument-hint: "[<Issue ID> | <requestId> | verify <tag> | (없음)]"
 - `--expect-event`: 수정한 경로가 실제로 실행됐다는 근거(로그인 수정이면 `auth.login.succeeded`). 없으면 `clean`은 "오류가 보이지 않았다"일 뿐이다
   - 수정한 경로가 성공 로그를 남기지 않으면 `--expect-event health.check`를 준다. 외부 프로브(`.github/workflows/health.yml`)가 매시 남기므로 배포 후 1시간 이상 지나면 태그 로그 0건(`too_few_events`)으로 끝나지 않는다. 다만 "그 버전이 요청을 받았다"까지만 보여 주므로, 보고에 경로 실행 근거는 아니라고 적는다
   - 태그 로그에 `health.schema_drift`가 있으면 그 버전은 원격 마이그레이션이 빠진 상태다. 재발 판정보다 `npx wrangler d1 migrations list samrumantimer-db --remote` 확인이 먼저다. `--event`로 좁히면 verify의 exit에는 반영되지 않고 `notes`에만 나온다. 따로 볼 때는 `node scripts/obs.mjs events health.schema_drift --since <배포 시각>`
+  - `health.schema_ahead`(warn)는 원격이 코드보다 앞선 상태다. 배포 직전 1~2건은 정상이고, 배포 뒤에도 이어지면(24h 3건 이상) 상수 갱신 누락이나 머지 안 된 브랜치 마이그레이션의 원격 적용이다. 응답이 200이라 프로브 알림이 가지 않으므로 훑을 때 `node scripts/obs.mjs events health.schema_ahead --since 24h`로 따로 본다(OBSERVABILITY.md)
 - exit 0(`clean`): 그 버전에서 대상 오류가 보이지 않았다. `--expect-event`로 경로가 실행된 근거가 있을 때 Issue resolve를 사용자에게 제안한다. 근거가 없으면 그 한계를 함께 적는다
 - exit 1(`recurred`): 출력된 `error`·`occurrence`가 고친 대상(같은 event·kind·path·오류)과 맞는지 먼저 확인한다. 맞으면 "원인"으로 돌아가고, 다른 오류라면 별건으로 보고하고 대상을 좁혀 다시 판정한다
 - exit 2: 조회 실패 또는 근거 부족. `reason`을 본다

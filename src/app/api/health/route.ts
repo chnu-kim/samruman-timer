@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDB, withErrorHandler } from "@/lib/db";
 import { compareSchema, EXPECTED_LATEST_MIGRATION } from "@/lib/health";
 import { logger } from "@/lib/logger";
+import type { ApiErrorResponse } from "@/types";
 
 // 프로브가 매번 실제 Worker·D1에 닿아야 하므로 응답을 어디에도 캐시하지 않는다
 const NO_STORE = { "Cache-Control": "no-store" };
@@ -34,15 +35,24 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
       actual,
     });
     return NextResponse.json(
-      { error: { code: "SERVICE_UNAVAILABLE", message: "서비스를 사용할 수 없습니다" } },
+      { error: { code: "SERVICE_UNAVAILABLE", message: "서비스를 사용할 수 없습니다" } } satisfies ApiErrorResponse,
       { status: 503, headers: NO_STORE }
     );
   }
 
-  logger.info("health.check", {
-    requestId,
-    ok: true,
-    ...(schema.state === "ahead" ? { schemaState: schema.state } : {}),
-  });
+  if (schema.state === "ahead") {
+    // "원격 마이그레이션 먼저, 배포 나중" 롤아웃 사이에도 생기는 상태라 응답은 200으로 두어 프로브 알림을 피한다.
+    // 배포 뒤에도 이어지면(상수 갱신 누락·머지 안 된 브랜치 마이그레이션 적용) 알림 없이 묻히므로 warn으로 따로 남긴다
+    logger.warn("health.schema_ahead", {
+      requestId,
+      schemaState: schema.state,
+      expected: EXPECTED_LATEST_MIGRATION,
+      actual,
+    });
+  }
+
+  // ahead여도 health.check를 남긴다. verify --expect-event health.check의 근거는 "이 버전이 요청을 받았다"이고
+  // 그것은 스키마가 앞서 있어도 참이다. 스키마 상태는 위 warn 이벤트가 맡으므로 여기에는 섞지 않는다
+  logger.info("health.check", { requestId, ok: true });
   return NextResponse.json({ data: { ok: true } }, { headers: NO_STORE });
 });

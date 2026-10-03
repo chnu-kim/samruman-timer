@@ -46,7 +46,7 @@
 
 ## 이벤트 카탈로그
 
-새 이벤트를 만들면 이 표와 아래 상세에 추가한다. 이벤트 키는 영어 dot 표기(`auth.refresh.rejected`)다. `src/__tests__/observability-catalog.test.ts`가 코드의 `logger` 호출(이벤트 이름·레벨)과 이 표·상세 절을 양방향으로 대조하므로, 어긋나면 `pnpm test`가 실패한다. 이벤트 이름은 문자열 리터럴로 쓴다(레벨이 동적인 `logger[level]("event")`는 같은 파일의 `const level = ...` 선언에 레벨 리터럴이 있으면 허용). error·warn 이벤트면 `scripts/lib/obs-rules.mjs` 규칙표에도 넣는다. 없으면 triage가 error는 비정상, warn은 `unknown`(exit 2)으로 본다.
+새 이벤트를 만들면 이 표와 아래 상세에 추가한다. 이벤트 키는 영어 dot 표기(`auth.refresh.rejected`)다. `src/__tests__/observability-catalog.test.ts`가 코드의 `logger` 호출(이벤트 이름·레벨)과 이 표·상세 절을 양방향으로 대조하므로, 어긋나면 `pnpm test`가 실패한다. 이벤트 이름은 문자열 리터럴로 쓴다(레벨이 동적인 `logger[level]("event")`는 같은 파일의 `const level = ...` 선언에 레벨 리터럴이 있으면 허용). 스캐너가 호출을 못 찾는 형태는 테스트가 실패하므로 항상 `import { logger } from "@/lib/logger"` 후 `logger.<level>("event", ...)`로 직접 호출한다. 실패하는 형태는 별칭 import, `logger`를 변수에 대입·인자로 전달·구조분해, `const w = logger.warn` 같은 메서드 참조, `import * as X`·default import·re-export·`require`·동적 `import()`다(스캐너 `src/__tests__/logger-scan.ts`, 형태별 픽스처 `logger-scan.test.ts`). error·warn 이벤트면 `scripts/lib/obs-rules.mjs` 규칙표에도 넣는다. 없으면 triage가 error는 비정상, warn은 `unknown`(exit 2)으로 본다.
 
 | event | level | 위치 | 주요 필드 |
 |-------|-------|------|-----------|
@@ -62,7 +62,8 @@
 | `auth.logout.revoke_failed` | error | `/api/auth/logout` | requestId, method, path, 오류 필드 |
 | `timer.modify.conflict_exhausted` | warn | `/api/timers/[id]/modify` (409) | requestId, timerId, action |
 | `timer.create.unique_race` | warn | `POST /api/projects/[id]/timers` | requestId, projectId |
-| `health.check` | info | `GET /api/health` (정상일 때만) | requestId, ok(`true`), schemaState(원격이 앞설 때만 `ahead`) |
+| `health.check` | info | `GET /api/health` (200일 때. 원격이 앞선 `ahead`도 포함) | requestId, ok(`true`) |
+| `health.schema_ahead` | warn | `GET /api/health` (200, 원격이 앞설 때만 `health.check`와 함께) | requestId, schemaState(`ahead`), expected, actual(마이그레이션 파일명) |
 | `health.schema_drift` | error | `GET /api/health` (503) | requestId, method, path, ok(`false`), kind(`schema_drift`), schemaState(`behind`·`mismatch`·`missing`), expected, actual(마이그레이션 파일명, 없으면 null) |
 
 refresh 쿠키 없이 보호 라우트를 부른 401은 정상 흐름이고 양이 많아 남기지 않는다. 반면 거부된 refresh 쿠키(폐기된 family = `revoked`, `expired`, `family_expired`, `not_found`)는 쿠키를 로그아웃에서만 지우므로 그 브라우저가 페이지를 열 때마다(Header와 페이지가 각각 `/api/auth/me`를 부르므로 한 화면에 1~2건) `auth.refresh.rejected`가 다시 남는다. 쿠키가 만료(최대 30일)되거나 다시 로그인할 때까지 이어진다. 그래서 `auth.refresh.rejected` 건수는 사건 수가 아니라 페이지 조회 수에 가깝고, 사건 수는 `auth.refresh.reuse_detected`로 센다. `env.invalid`는 검증이 성공했을 때만 캐시되므로 설정을 고칠 때까지 요청마다 한 건씩 남는다.
@@ -124,9 +125,15 @@ refresh 쿠키 없이 보호 라우트를 부른 401은 정상 흐름이고 양�
 - 정상: 드물게(더블 클릭, 24h에 2건까지). 비정상: 24h에 3건 이상이면 클라이언트 중복 제출 방지를 확인한다.
 
 **`health.check`** (info) — 헬스체크 정상 응답(200). 외부 프로브(`.github/workflows/health.yml`)가 매시 17분에 부르므로 배포된 버전마다 한 시간에 한 건쯤 남는다. 다른 앱 로그는 로그인·거부·오류 때만 남아 조용한 날에는 태그 로그가 0건이라, verify의 "이 버전이 요청을 받았다"는 근거(`--expect-event health.check`)로 쓴다.
-- 정상: 한 시간에 1건 안팎(cron 지연으로 비거나 몰릴 수 있다. 수동 실행·사람의 호출도 섞인다). `schemaState=ahead`는 원격 마이그레이션을 먼저 적용하고 코드를 아직 배포하지 않은 상태라 배포하면 사라진다.
-- 비정상: 몇 시간째 0건. 프로브가 멈췄거나(아래 "외부 프로브"의 60일 비활성화·cron 지연) Worker가 응답하지 않는다. Actions 탭의 `health` 실행 기록을 먼저 본다. `ahead`가 배포 뒤에도 남으면 원인은 둘 중 하나다. `EXPECTED_LATEST_MIGRATION` 갱신을 빠뜨렸거나, 아직 머지되지 않은 브랜치의 마이그레이션이 원격에 적용됐다(작업 트리에 그 파일이 있는 채로 `pnpm db:migrate:remote`를 돌린 경우). `npx wrangler d1 migrations list samrumantimer-db --remote`의 적용 목록을 main의 `migrations/`와 대조해 가린다. 프로브는 200이라 알림이 가지 않으므로 이 상태는 `obs.mjs events health.check`의 `schemaState`로만 보인다.
+- 정상: 한 시간에 1건 안팎(cron 지연으로 비거나 몰릴 수 있다. 수동 실행·사람의 호출도 섞인다). 원격이 앞선 `ahead`에서도 남는다(그 버전이 요청을 받았다는 사실은 스키마가 앞서도 참이라서다). 스키마 상태는 이 이벤트에 넣지 않고 `health.schema_ahead`로 따로 남긴다.
+- 비정상: 몇 시간째 0건. 프로브가 멈췄거나(아래 "외부 프로브"의 60일 비활성화·cron 지연) Worker가 응답하지 않는다. Actions 탭의 `health` 실행 기록을 먼저 본다.
 - 코드: `src/app/api/health/route.ts`, `src/lib/health.ts`(`EXPECTED_LATEST_MIGRATION`, `compareSchema`).
+
+**`health.schema_ahead`** (warn) — 원격 D1의 마지막 적용 마이그레이션이 코드가 기대하는 것보다 번호가 크다(`ahead`). "원격 마이그레이션 먼저, 배포 나중" 롤아웃 사이에도 생기는 상태라 응답은 200이고 프로브 알림은 가지 않는다. 그래서 배포 뒤에도 이어지는 경우를 알림 없이 놓치지 않도록 info인 `health.check`와 나눠 warn으로 남긴다.
+- 정상: 배포 직전 짧은 구간에만(프로브 기준 1~2건). 배포하면 사라진다.
+- 비정상: 24h에 3건 이상(몇 시간째 지속). 원인은 둘 중 하나다. `EXPECTED_LATEST_MIGRATION` 갱신을 빠뜨렸거나(`src/lib/__tests__/health.test.ts`가 `migrations/`와 대조하므로 로컬 `pnpm test`에서 걸린다. 테스트를 돌리는 CI는 없어서, 테스트를 건너뛰고 배포하면 이 이벤트로만 보인다), 아직 머지되지 않은 브랜치의 마이그레이션이 원격에 적용됐다(작업 트리에 그 파일이 있는 채로 `pnpm db:migrate:remote`를 돌린 경우). 후자는 그 브랜치가 머지되기 전까지 다른 배포의 코드가 모르는 스키마가 원격에 있다는 뜻이다.
+- 조사: `node scripts/obs.mjs events health.schema_ahead --since 24h`로 `actual`을 보고, `npx wrangler d1 migrations list samrumantimer-db --remote`의 적용 목록을 main의 `migrations/`(`git ls-tree --name-only origin/main migrations/`)와 대조한다. main에 없는 파일이 원격에 적용돼 있으면 후자, 있으면 상수 갱신 누락이다.
+- 코드: `src/app/api/health/route.ts`, `src/lib/health.ts`(`compareSchema`).
 
 **`health.schema_drift`** (error) — 원격 D1의 마지막 적용 마이그레이션(`d1_migrations`)이 코드가 기대하는 것보다 뒤처졌다(`behind`), 번호가 같은데 이름이 다르다(`mismatch`), 또는 적용 기록이 없다(`missing`). 응답은 503 `SERVICE_UNAVAILABLE`이고 외부 프로브 job이 실패해 GitHub 알림이 간다. 사용자가 새 스키마를 쓰는 경로를 밟기 전에(`api.unhandled` `kind=schema_drift`보다 먼저) 잡으려는 것이다.
 - 정상: 0건. 비정상: 1건이라도. `expected`·`actual`에 파일명이 있다.
@@ -227,7 +234,7 @@ Claude Code에 Cloudflare 플러그인이 연결돼 있으면 그 `execute` 도�
   occurrences: { "<issueId>": [ { request: { query: { per_page: 100, cursor? } }, response }, ... ] } }    // Issues를 볼 때만
 ```
 
-응답의 이벤트·occurrence·Issue 행은 `slimEvent`·`slimOccurrence`·`slimIssue`로 판정이 읽지 않는 필드를 덜어 낸 것이다(결과가 대화로 돌아오므로). 이벤트·occurrence에서는 stack 본문, `$workers.event` 같은 큰 필드를 덜어 내고, occurrence의 `error.message`는 verify 출력에 나가는 값이라 남기되 출력과 같은 300자에서 자른다. Issue 목록 행은 ID·`status`·시각(`lastObserved` 등)·건수·`error.name`(`errorName`)만 남긴다. `title`·`error.message`처럼 외부 입력이 섞일 수 있는 자유 텍스트와 모르는 필드는 싣지 않고, `status`·`errorName`은 판정의 `safeValue`를 통과하지 못할 값을 미리 `[?]`로, 시각으로 읽히지 않는 시각과 숫자가 아닌 건수도 `[?]`로 바꾼다(판정 결과는 원문과 같다). `result_info`(쪽 정보)는 그대로 둔다. `telemetry/query` 응답은 `result`에서 이벤트 배열만 남기고 `run`(계정·사용자 ID)·`events.series`(빈 버킷)·`events.fields`는 버린다. 그래도 태그 로그가 많으면 결과가 크다. `--since`를 배포 시각으로 좁힌다.
+응답의 이벤트·occurrence·Issue 행은 `slimEvent`·`slimOccurrence`·`slimIssue`로 판정이 읽지 않는 필드를 덜어 낸 것이다(결과가 대화로 돌아오므로). 이벤트·occurrence에서는 stack 본문, `$workers.event` 같은 큰 필드를 덜어 내고, occurrence의 `error.message`는 verify 출력에 나가는 값이라 남기되 출력과 같은 300자에서 자른다. `source`가 JSON 문자열이면 객체로 풀어 stack을 비우고, 풀 수 없는 문자열은 verify가 읽지 않으므로 300자로 자른다. Issue 목록 행은 ID·`status`·시각(`lastObserved` 등)·건수·`error.name`(`errorName`)만 남긴다. `title`·`error.message`처럼 외부 입력이 섞일 수 있는 자유 텍스트와 모르는 필드는 싣지 않고, `status`·`errorName`은 판정의 `safeValue`를 통과하지 못할 값을 미리 `[?]`로, 시각으로 읽히지 않는 시각과 숫자가 아닌 건수도 `[?]`로 바꾼다(판정 결과는 원문과 같다). `result_info`(쪽 정보)는 그대로 둔다. `telemetry/query` 응답은 `result`에서 이벤트 배열만 남기고 `run`(계정·사용자 ID)·`events.series`(빈 버킷)·`events.fields`는 버린다. 그래도 태그 로그가 많으면 결과가 크다. `--since`를 배포 시각으로 좁힌다.
 
 판정은 토큰 경로와 같은 함수(`evaluateVerify`)가 한다. 파일은 누가 어떻게 모았는지 코드가 보지 못하므로 근거가 애매한 곳을 더 좁게 본다:
 

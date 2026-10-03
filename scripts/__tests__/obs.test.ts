@@ -1377,6 +1377,29 @@ describe("verify --input (플러그인 조회 결과로 판정)", () => {
       expect(JSON.stringify(slim)).not.toContain("example.test");
     });
 
+    it("slimEvent는 JSON 문자열 source의 stack도 덜어 내고 객체로 넣는다", () => {
+      const raw = { timestamp: NOW, source: JSON.stringify(errEvent().source) };
+      const slim = slimEvent(raw);
+      expect(JSON.stringify(slim)).not.toContain("at a");
+      expect(slim.source).toMatchObject({ event: "api.unhandled", stack: "" });
+      expect(normalizeEvent(slim)).toEqual(normalizeEvent(raw));
+    });
+
+    it("slimEvent는 해석할 수 없는 문자열 source를 300자로 자른다(verify는 이 source를 읽지 않는다)", () => {
+      const raw = { timestamp: NOW, level: "error", event: "a.b", source: `not json ${"x".repeat(1000)}` };
+      const slim = slimEvent(raw);
+      expect((slim.source as string).length).toBeLessThanOrEqual(301);
+      expect(normalizeEvent(slim)).toEqual(normalizeEvent(raw));
+    });
+
+    it("플러그인 코드도 JSON 문자열 source의 stack을 덜어 낸다", async () => {
+      const stringSource = { ...errEvent(), source: JSON.stringify(errEvent().source) };
+      const route = fullRoute({ tagEvents: [stringSource], issuePages: [[]], occurrences: {} });
+      const { bundle } = await runPluginCode(buildPluginCode({ tag: TAG, from: Date.parse(SINCE), to: NOW }), route);
+      expect(JSON.stringify(bundle)).not.toContain("at a");
+      expect(JSON.stringify(bundle)).toContain("no such table");
+    });
+
     it.each([
       ["worker.scriptVersion", occ({})],
       [
