@@ -469,12 +469,13 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                     ) : (
                       <span className="text-right font-mono text-xs text-muted-foreground">—</span>
                     )}
-                    <span className="col-span-2 font-mono text-xs text-muted-foreground">
-                      {formatDateTime(log.createdAt)}
-                    </span>
-                    <span className="text-right font-mono text-xs text-muted-foreground">
-                      {formatSeconds(log.beforeSeconds)} → <span className="text-foreground">{formatSeconds(log.afterSeconds)}</span>
-                    </span>
+                    {/* 좁은 화면에서 변경 전→후가 길면 날짜가 둘로 쪼개지지 않고 전→후가 다음 줄로 내려간다 */}
+                    <div className="col-span-3 flex flex-wrap items-baseline justify-between gap-x-3 font-mono text-xs text-muted-foreground">
+                      <span className="whitespace-nowrap">{formatDateTime(log.createdAt)}</span>
+                      <span className="ml-auto whitespace-nowrap text-right">
+                        {formatSeconds(log.beforeSeconds)} → <span className="text-foreground">{formatSeconds(log.afterSeconds)}</span>
+                      </span>
+                    </div>
                   </li>
                 ))}
               </ul>
