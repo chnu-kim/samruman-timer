@@ -6,8 +6,17 @@ export const RESET_BASE_DELAY_MS = 5_000;
 export const RESET_MAX_DELAY_MS = 60_000;
 /** 이 횟수만큼 reset()이 실패하면 location.reload()로 넘어간다 */
 export const MAX_RESETS_BEFORE_RELOAD = 5;
-/** 결정적인 렌더 오류에서 reload가 무한히 반복되지 않게 세션당 reload 횟수를 제한한다 */
+/**
+ * 결정적인 렌더 오류에서 reload가 무한히 반복되지 않게 한 장애당 reload 횟수를 제한한다.
+ * 카운터는 sessionStorage에 있어 reload를 넘어 유지되고, 오버레이가 RECOVERY_STABLE_MS 동안 정상으로 버텨야 초기화된다.
+ */
 export const MAX_RELOADS = 2;
+/**
+ * 데이터를 그린 뒤 이만큼 오류 없이 버텨야 회복으로 보고 clearRecovery()한다.
+ * 첫 렌더 직후 바로 초기화하면, 데이터를 그린 다음에야 터지는 오류(카운트다운·애니메이션 상태 등)에서
+ * 백오프와 reload 상한이 매번 처음부터 다시 시작돼 끝없이 돈다.
+ */
+export const RECOVERY_STABLE_MS = 5 * 60_000;
 const RELOAD_COUNT_KEY = "overlay-reload-count";
 
 let resetAttempts = 0;
@@ -38,7 +47,7 @@ export function recordReload(): boolean {
   }
 }
 
-/** 오버레이가 데이터를 그리는 데 성공하면 부른다. 몇 시간 뒤의 새 오류에서도 다시 reload할 수 있게 상한을 되돌린다 */
+/** 오버레이가 데이터를 그린 뒤 RECOVERY_STABLE_MS 동안 정상이면 부른다. 몇 시간 뒤의 새 오류에서도 다시 reload할 수 있게 상한을 되돌린다 */
 export function clearRecovery(): void {
   resetAttempts = 0;
   try {

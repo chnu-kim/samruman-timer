@@ -1,10 +1,12 @@
 "use client";
 
-import { useLayoutEffect } from "react";
+import { useLayoutEffect, useState } from "react";
+import { useOverlayRecovery } from "@/hooks/useOverlayRecovery";
 
 // 루트 레이아웃(Header·Provider)에서 난 렌더 오류 경계. 루트 레이아웃을 대신하므로 자체 html/body를 갖고,
 // 전역 CSS가 적용되지 않아 스타일은 인라인으로 둔다.
-// 오버레이 경로에서는 방송 화면에 문구가 보이지 않게 투명한 빈 화면만 그린다.
+// 오버레이 경로에서는 방송 화면에 문구가 보이지 않게 투명한 빈 화면만 그리고, 오버레이 오류 경계와 같은 정책으로
+// reset()·reload를 자동으로 시도한다(OBS에서는 아무도 '다시 시도'를 누르지 않는다).
 // 서버 렌더와 클라이언트 렌더가 같은 마크업을 내도록 분기는 html의 data-overlay 속성과 CSS로 한다:
 // 서버 렌더(HTML 파싱 중)는 head의 인라인 스크립트가, 클라이언트 렌더는 useLayoutEffect가 페인트 전에 속성을 붙인다.
 
@@ -28,11 +30,15 @@ export default function GlobalError({
   retry?: () => void;
   reset: () => void;
 }) {
+  const [isOverlay, setIsOverlay] = useState(false);
   useLayoutEffect(() => {
     if (new RegExp(OVERLAY_PATH_SOURCE).test(window.location.pathname)) {
       document.documentElement.setAttribute("data-overlay", "");
+      setIsOverlay(true);
     }
   }, []);
+  // retry()는 RSC 요청을 보내 요청 한도를 소모하므로 오버레이 자동 복구에는 reset()만 쓴다
+  useOverlayRecovery(reset, isOverlay);
 
   return (
     <html lang="ko" suppressHydrationWarning>

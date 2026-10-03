@@ -3,6 +3,12 @@ import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import AppError from "@/app/error";
 import GlobalError from "@/app/global-error";
+import { __resetOverlayRecoveryForTest, reloadPage } from "@/lib/overlay-recovery";
+
+vi.mock("@/lib/overlay-recovery", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/overlay-recovery")>();
+  return { ...actual, reloadPage: vi.fn() };
+});
 
 const withDigest = Object.assign(new Error("boom"), { digest: "123456789" });
 
@@ -72,5 +78,50 @@ describe("전역 오류 경계 (global-error.tsx)", () => {
     const { unmount } = render(<GlobalError error={withDigest} reset={vi.fn()} />, { container: document });
     expect(document.documentElement.hasAttribute("data-overlay")).toBe(true);
     unmount();
+  });
+
+  describe("자동 복구", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      __resetOverlayRecoveryForTest();
+      window.sessionStorage.clear();
+      vi.mocked(reloadPage).mockClear();
+    });
+
+    afterEach(() => {
+      cleanup();
+      vi.useRealTimers();
+      window.sessionStorage.clear();
+    });
+
+    /** reset()이 실패하면 오류 경계가 새로 마운트되는 흐름을 흉내 낸다 */
+    function mountGlobalError(reset: () => void) {
+      cleanup();
+      return render(<GlobalError error={withDigest} reset={reset} />, { container: document });
+    }
+
+    it("오버레이 경로이면 reset()을 백오프로 예약하고, 5번 실패하면 reload한다", () => {
+      window.history.replaceState(null, "", "/timers/abc/overlay");
+      const reset = vi.fn();
+      mountGlobalError(reset);
+      for (const delay of [5_000, 10_000, 20_000, 40_000, 60_000]) {
+        vi.advanceTimersByTime(delay - 1);
+        expect(reset).not.toHaveBeenCalled();
+        vi.advanceTimersByTime(1);
+        expect(reset).toHaveBeenCalledTimes(1);
+        reset.mockClear();
+        mountGlobalError(reset);
+      }
+      expect(reloadPage).toHaveBeenCalledTimes(1);
+    });
+
+    it("오버레이 경로가 아니면 자동으로 reset하거나 reload하지 않는다", () => {
+      window.history.replaceState(null, "", "/timers/abc");
+      const reset = vi.fn();
+      mountGlobalError(reset);
+      vi.advanceTimersByTime(600_000);
+      expect(reset).not.toHaveBeenCalled();
+      expect(reloadPage).not.toHaveBeenCalled();
+    });
   });
 });

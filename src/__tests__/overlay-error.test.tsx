@@ -66,7 +66,7 @@ describe("오버레이 렌더 오류 경계", () => {
     }
   });
 
-  it("reset이 5번 실패하면 reload하고, reload는 세션당 2번까지만 한다", () => {
+  it("reset이 5번 실패하면 reload하고, reload는 장애당 2번까지만 한다", () => {
     const reset = vi.fn();
     // 앞선 5번의 reset 실패
     render(<OverlayError error={error} reset={reset} />);
@@ -113,6 +113,28 @@ describe("오버레이 렌더 오류 경계", () => {
 
     expect(reloadPage).not.toHaveBeenCalled();
     expect(reset).toHaveBeenCalledTimes(6);
+  });
+
+  it("카운터는 읽히지만 저장이 실패하면(QuotaExceeded 등) reload하지 않고 60초 뒤 reset한다", () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("full", "QuotaExceededError");
+    });
+    const reset = vi.fn();
+    render(<OverlayError error={error} reset={reset} />);
+    for (let i = 0; i < 5; i++) {
+      vi.advanceTimersByTime(60_000);
+      mountAgain(reset);
+    }
+    expect(reset).toHaveBeenCalledTimes(5);
+    expect(reloadPage).not.toHaveBeenCalled();
+
+    // reload 차례였지만 기록하지 못했으므로 60초 간격 reset으로 버틴다
+    reset.mockClear();
+    vi.advanceTimersByTime(59_999);
+    expect(reset).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(reset).toHaveBeenCalledTimes(1);
+    expect(reloadPage).not.toHaveBeenCalled();
   });
 
   it("오버레이가 회복되면(clearRecovery) reset 간격과 reload 상한을 되돌린다", () => {

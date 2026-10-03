@@ -16,7 +16,7 @@ export const SHORT_BACKOFF_MAX_MS = 60_000;
  */
 export type PollOutcome = "ok" | "not_found" | "rate_limited" | "server" | "network";
 
-/** ok가 아닌 응답의 원인. 401·403은 공개 엔드포인트라 따로 다루지 않는다 */
+/** ok가 아닌 응답의 원인. 공개 엔드포인트라 401·403에 별도 분기를 두지 않고 server(60초 상한)로 다룬다 */
 export function classifyFailedResponse(res: Pick<Response, "status"> & { headers?: Headers }): Exclude<PollOutcome, "ok" | "network"> {
   if (res.status === 404) return "not_found";
   if (res.status === 429) return "rate_limited";

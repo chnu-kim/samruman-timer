@@ -9,7 +9,7 @@ import { formatDateTime } from "@/lib/utils";
 import { isOverlayBackground, isOverlayColor } from "@/lib/overlay-style";
 import { applyOverlayMode } from "@/lib/overlay-mode";
 import { classifyFailedResponse, nextPollDelay, type PollOutcome } from "@/lib/overlay-polling";
-import { clearRecovery } from "@/lib/overlay-recovery";
+import { RECOVERY_STABLE_MS, clearRecovery } from "@/lib/overlay-recovery";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import type { ApiSuccessResponse, TimerDetailResponse } from "@/types";
 
@@ -57,9 +57,9 @@ export default function TimerOverlayPage() {
   const [floatingText, setFloatingText] = useState<string | null>(null);
   const [floatingKey, setFloatingKey] = useState(0);
   const prevTimerRef = useRef<TimerSnapshot | null>(null);
-  // 폴링마다 같은 경고가 쌓이지 않게 마지막으로 경고한 원인(상태 코드·네트워크·해석 실패)을 기억한다
-  const warnedRef = useRef<number | "network" | "invalid" | null>(null);
-  const warnOnce = useCallback((key: number | "network" | "invalid", message: string) => {
+  // 폴링마다 같은 경고가 쌓이지 않게 마지막으로 경고한 원인(상태 코드·네트워크·해석 실패·처리 중 예외)을 기억한다
+  const warnedRef = useRef<number | "network" | "invalid" | "exception" | null>(null);
+  const warnOnce = useCallback((key: number | "network" | "invalid" | "exception", message: string) => {
     if (warnedRef.current === key) return;
     warnedRef.current = key;
     console.warn(message);
@@ -73,10 +73,14 @@ export default function TimerOverlayPage() {
   // 오버레이 모드: 헤더/푸터 숨기고 body 배경 투명 처리
   useEffect(() => applyOverlayMode(bg), [bg]);
 
-  // 데이터를 그리는 데 성공했으면 렌더 오류 복구 상태(reset 횟수·reload 상한)를 되돌린다
+  // 데이터를 그린 뒤 RECOVERY_STABLE_MS 동안 렌더 오류 없이 버티면 복구 상태(reset 횟수·reload 상한)를 되돌린다.
+  // 그 전에 다시 터지면 오류 경계가 이 페이지를 언마운트하면서 예약이 취소되므로 백오프와 reload 상한이 이어진다
+  const hasTimer = timer !== null;
   useEffect(() => {
-    if (timer) clearRecovery();
-  }, [timer]);
+    if (!hasTimer) return;
+    const handle = setTimeout(clearRecovery, RECOVERY_STABLE_MS);
+    return () => clearTimeout(handle);
+  }, [hasTimer]);
 
   const fetchTimer = useCallback(async (): Promise<PollOutcome> => {
     let res: Response;
@@ -101,7 +105,9 @@ export default function TimerOverlayPage() {
 
     let data: TimerDetailResponse;
     try {
-      const json = (await res.json()) as ApiSuccessResponse<TimerDetailResponse>;
+      const json = (await res.json()) as ApiSuccessResponse<TimerDetailResponse> | null;
+      // 200인데 data가 없으면(프록시·CDN이 끼워 넣은 응답 등) 해석 실패와 같이 다룬다
+      if (!json?.data) throw new TypeError("응답에 data가 없습니다");
       data = json.data;
     } catch {
       // 200인데 JSON이 아니면 Cloudflare 한도 초과 안내 같은 HTML 페이지다
@@ -136,19 +142,26 @@ export default function TimerOverlayPage() {
     let failures = 0;
 
     const tick = async () => {
-      const outcome = await fetchTimer();
+      let outcome: PollOutcome;
+      try {
+        outcome = await fetchTimer();
+      } catch {
+        // 예상하지 못한 예외에도 폴링 체인이 끊기지 않게 일시적 실패로 보고 다음 요청을 예약한다
+        warnOnce("exception", "[오버레이] 서버 응답을 처리하지 못했습니다. 잠시 후 다시 시도합니다.");
+        outcome = "server";
+      }
       // 응답을 기다리는 사이 언마운트됐으면 다음 폴링을 예약하지 않는다
       if (cancelled) return;
       failures = outcome === "ok" ? 0 : failures + 1;
       handle = setTimeout(tick, nextPollDelay(outcome, failures));
     };
-    tick();
+    void tick();
 
     return () => {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [fetchTimer]);
+  }, [fetchTimer, warnOnce]);
 
   // RUNNING 상태에서 클라이언트 1초 카운트다운 (Date.now 기반)
   useEffect(() => {

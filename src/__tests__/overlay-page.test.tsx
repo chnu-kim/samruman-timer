@@ -1,7 +1,19 @@
 // @vitest-environment jsdom
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, act } from "@testing-library/react";
 import type { TimerStatus } from "@/types";
 import TimerOverlayPage from "@/app/timers/[id]/overlay/page";
+import OverlayError from "@/app/timers/[id]/overlay/error";
+import {
+  MAX_RELOADS,
+  RECOVERY_STABLE_MS,
+  __resetOverlayRecoveryForTest,
+  reloadPage,
+} from "@/lib/overlay-recovery";
+
+vi.mock("@/lib/overlay-recovery", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/overlay-recovery")>();
+  return { ...actual, reloadPage: vi.fn() };
+});
 
 let search = "";
 vi.mock("next/navigation", () => ({
@@ -119,15 +131,6 @@ describe("오버레이 색상 쿼리 검증 (보안 감사 F03)", () => {
 
     expect(document.body.style.getPropertyValue("background")).toBe("transparent");
     expect(document.getElementById("overlay-style")?.textContent).not.toContain("url(");
-  });
-
-  it("타이머를 그리는 데 성공하면 렌더 오류 reload 상한을 되돌린다", async () => {
-    window.sessionStorage.setItem("overlay-reload-count", "2");
-    stubTimer("RUNNING", 600);
-    render(<TimerOverlayPage />);
-    await screen.findByRole("timer");
-
-    expect(window.sessionStorage.getItem("overlay-reload-count")).toBeNull();
   });
 
   it("유효한 #rrggbb bg는 적용한다", async () => {
@@ -297,5 +300,120 @@ describe("오버레이 폴링 백오프", () => {
     await vi.advanceTimersByTimeAsync(600_000);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe("오버레이 폴링 예외 내성", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("200인데 data가 없는 응답({})이 와도 다음 폴링을 예약한다", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}) }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<TimerOverlayPage />);
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // 해석 실패와 같이 다뤄 10초 뒤 다시 요청한다
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(console.warn).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("timer")).not.toBeInTheDocument();
+  });
+
+  it("응답 처리 중 예상하지 못한 예외가 나도 폴링 체인이 끊기지 않는다", async () => {
+    const broken = {
+      status: 200,
+      get ok(): boolean {
+        throw new Error("unexpected");
+      },
+    };
+    const fetchMock = vi.fn(async () => broken);
+    vi.stubGlobal("fetch", fetchMock);
+    render(<TimerOverlayPage />);
+
+    // 일시적 실패(60초 상한)로 보고 10초, 20초 뒤 다시 요청한다
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(console.warn).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(console.warn).mock.calls[0][0]).toContain("처리하지 못했습니다");
+  });
+});
+
+describe("오버레이 렌더 오류 복구 상태 초기화", () => {
+  const RELOAD_KEY = "overlay-reload-count";
+  const renderError = Object.assign(new Error("render failed"), { digest: undefined });
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    __resetOverlayRecoveryForTest();
+    window.sessionStorage.clear();
+    vi.mocked(reloadPage).mockClear();
+    stubTimer("RUNNING", 600);
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    window.sessionStorage.clear();
+  });
+
+  it("데이터를 그린 직후가 아니라 RECOVERY_STABLE_MS 동안 버틴 뒤에 reload 상한을 되돌린다", async () => {
+    window.sessionStorage.setItem(RELOAD_KEY, "2");
+    render(<TimerOverlayPage />);
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.getByRole("timer")).toBeInTheDocument();
+
+    await vi.advanceTimersByTimeAsync(RECOVERY_STABLE_MS - 1);
+    expect(window.sessionStorage.getItem(RELOAD_KEY)).toBe("2");
+    await vi.advanceTimersByTimeAsync(1);
+    expect(window.sessionStorage.getItem(RELOAD_KEY)).toBeNull();
+  });
+
+  it("데이터를 그린 뒤 곧 렌더 오류가 나면 reset 간격이 계속 늘고 reload는 상한까지만 한다", async () => {
+    const reset = vi.fn();
+    /** 페이지가 데이터를 그린 뒤 10초 만에 렌더 오류로 언마운트되고, 오류 경계가 마운트되는 한 주기 */
+    async function crashAfterRender() {
+      cleanup();
+      render(<TimerOverlayPage />);
+      await act(() => vi.advanceTimersByTimeAsync(0));
+      expect(screen.getByRole("timer")).toBeInTheDocument();
+      await vi.advanceTimersByTimeAsync(10_000);
+      cleanup();
+      render(<OverlayError error={renderError} reset={reset} />);
+    }
+
+    await crashAfterRender();
+    for (const delay of [5_000, 10_000, 20_000, 40_000, 60_000]) {
+      reset.mockClear();
+      await vi.advanceTimersByTimeAsync(delay - 1);
+      expect(reset).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(reset).toHaveBeenCalledTimes(1);
+      await crashAfterRender();
+    }
+    expect(reloadPage).toHaveBeenCalledTimes(1);
+
+    // reload하면 모듈 상태는 새로 시작하지만 sessionStorage 카운터는 남는다. 같은 주기를 여러 번 반복해도 상한을 넘지 않는다
+    for (let round = 0; round < 4; round++) {
+      __resetOverlayRecoveryForTest();
+      await crashAfterRender();
+      for (let i = 0; i < 5; i++) {
+        await vi.advanceTimersByTimeAsync(60_000);
+        await crashAfterRender();
+      }
+    }
+    expect(reloadPage).toHaveBeenCalledTimes(MAX_RELOADS);
   });
 });
