@@ -75,9 +75,11 @@ interface TimerConsoleProps {
   aside?: ReactNode;
   /** 시간이 바뀌었을 때(여기서 조작했거나 다른 기기에서 바뀌었을 때). 목표 진행률처럼 시간에 딸린 데이터를 다시 불러오는 데 쓴다 */
   onTimeChanged?: () => void;
+  /** 다른 탭·기기에서 타이머가 삭제돼 폴링이 404를 받았을 때. 상위 화면이 '타이머 없음' 상태로 바꾼다 */
+  onTimerRemoved?: () => void;
 }
 
-export function TimerConsole({ timerId, isOwner, aside, onTimeChanged }: TimerConsoleProps) {
+export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRemoved }: TimerConsoleProps) {
   const { toast } = useToast();
 
   const [timer, setTimer] = useState<TimerDetailResponse | null>(null);
@@ -191,6 +193,10 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged }: TimerCo
   const pollTimer = useCallback(async () => {
     try {
       const res = await fetch(`/api/timers/${timerId}`);
+      if (res.status === 404) {
+        onTimerRemoved?.();
+        return;
+      }
       if (!res.ok) return;
       const json = (await res.json()) as ApiSuccessResponse<TimerDetailResponse>;
       const serverData = json.data;
@@ -221,7 +227,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged }: TimerCo
     } catch {
       // 폴링 실패는 무시
     }
-  }, [timerId, logPage, activeFilters, logsExpanded, fetchLogs, fetchGraph, onTimeChanged]);
+  }, [timerId, logPage, activeFilters, logsExpanded, fetchLogs, fetchGraph, onTimeChanged, onTimerRemoved]);
 
   usePolling({
     fn: pollTimer,

@@ -246,6 +246,30 @@ describe("프로젝트 콘솔", () => {
     expect(calls.some((c) => c.url === "/api/timers/t1" && c.method === "DELETE")).toBe(true);
   });
 
+  it("다른 곳에서 타이머가 삭제되면 폴링이 404를 받는 즉시 '타이머 없음' 상태로 바꾼다", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      stubApi({ timers: [timer], goals: [], me: owner });
+      render(<ProjectDetailPage />);
+      await screen.findByRole("heading", { name: "시간 조작" });
+
+      global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/timers/t1") return new Response(null, { status: 404 });
+        if (url === "/api/projects/p1/timers") return jsonResponse([]);
+        if (url === "/api/projects/p1/goals") return jsonResponse([]);
+        return jsonResponse({});
+      }) as typeof fetch;
+      // 만료 타이머는 15초 간격으로 폴링한다
+      await vi.advanceTimersByTimeAsync(15_000);
+
+      expect(await screen.findByText("아직 타이머가 없습니다.")).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "시간 조작" })).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("더보기 메뉴는 Escape로 닫히고 포커스가 버튼으로 돌아간다", async () => {
     stubApi({ timers: [timer], goals: [], me: owner });
     render(<ProjectDetailPage />);
