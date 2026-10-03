@@ -46,7 +46,7 @@
 
 ## 이벤트 카탈로그
 
-새 이벤트를 만들면 이 표와 아래 상세에 추가한다. 이벤트 키는 영어 dot 표기(`auth.refresh.rejected`)다. `src/__tests__/observability-catalog.test.ts`가 코드의 `logger` 호출(이벤트 이름·레벨)과 이 표·상세 절을 양방향으로 대조하므로, 어긋나면 `pnpm test`가 실패한다. 이벤트 이름은 문자열 리터럴로 쓴다(레벨이 동적인 `logger[level]("event")`는 같은 파일의 `const level = ...` 선언에 레벨 리터럴이 있으면 허용). 스캐너가 호출을 못 찾는 형태는 테스트가 실패하므로 항상 `import { logger } from "@/lib/logger"` 후 `logger.<level>("event", ...)`로 직접 호출한다. 실패하는 형태는 별칭 import, `logger`를 변수에 대입·인자로 전달·구조분해, `const w = logger.warn` 같은 메서드 참조, `import * as X`·default import·re-export·`require`·동적 `import()`다(스캐너 `src/__tests__/logger-scan.ts`, 형태별 픽스처 `logger-scan.test.ts`).
+새 이벤트를 만들면 이 표와 아래 상세에 추가한다. 이벤트 키는 영어 dot 표기(`auth.refresh.rejected`)다. `src/__tests__/observability-catalog.test.ts`가 코드의 `logger` 호출(이벤트 이름·레벨)과 이 표·상세 절을 양방향으로 대조하므로, 어긋나면 `pnpm test`가 실패한다. 이벤트 이름은 문자열 리터럴로 쓴다(레벨이 동적인 `logger[level]("event")`는 같은 파일의 `const level = ...` 선언에 레벨 리터럴이 있으면 허용). 스캐너가 호출을 못 찾는 형태는 테스트가 실패하므로 항상 `import { logger } from "@/lib/logger"` 후 `logger.<level>("event", ...)`로 직접 호출한다. 실패하는 형태는 별칭 import, `logger`를 변수에 대입·인자로 전달·구조분해, `const w = logger.warn` 같은 메서드 참조, `import * as X`·default import·re-export·`require`·동적 `import()`다(스캐너 `src/__tests__/logger-scan.ts`, 형태별 픽스처 `logger-scan.test.ts`). error·warn 이벤트면 `scripts/lib/obs-rules.mjs` 규칙표에도 넣는다. 없으면 triage가 error는 비정상, warn은 `unknown`(exit 2)으로 본다.
 
 | event | level | 위치 | 주요 필드 |
 |-------|-------|------|-----------|
@@ -72,39 +72,42 @@ refresh 쿠키 없이 보호 라우트를 부른 401은 정상 흐름이고 양�
 
 "정상"은 이 이벤트가 보여도 할 일이 없는 수준, "비정상"은 조사를 시작할 기준이다. 수치는 지금 트래픽(소규모) 기준의 출발점이라 운영하며 고친다.
 
+건수는 24시간 창 기준이다. error·warn 이벤트의 기준은 `scripts/lib/obs-rules.mjs`의 규칙표(`TRIAGE_RULES`)에 같은 수치로 들어 있고 `obs.mjs triage`가 그것으로 가른다(아래 "triage 판정"). 기준을 고치면 규칙표와 이 문장을 함께 고친다. "비정상: N건 이상"은 N건부터 비정상, 그 아래는 정상이라는 뜻이다. 규칙표에 없는 기준(info 이벤트, 비율)은 triage가 보지 않으므로 `summary`로 사람이 본다.
+
 **`api.unhandled`** (error) — 라우트 핸들러에서 잡히지 않은 예외. 사용자는 500 `INTERNAL_ERROR`를 받았다.
-- 정상: 0건. 비정상: 1건이라도.
+- 정상: 0건. 비정상: 1건 이상.
 - 먼저 `kind`를 본다(아래 "kind별 대응"). `unknown`이면 `path`로 라우트(`src/app/api/**/route.ts`)를 찾고 `stack`으로 줄을 좁힌다.
 - 조사: `obs.mjs events api.unhandled --since 24h`, 한 건은 `obs.mjs request <requestId>`.
 
 **`env.invalid`** (error) — 필수 환경변수(`CHZZK_CLIENT_ID`·`CHZZK_CLIENT_SECRET`·`JWT_SECRET`·`BASE_URL`) 누락·형식 오류. 모든 API가 500을 낸다.
-- 정상: 0건. 비정상: 1건이라도(요청마다 남으므로 보통 대량).
+- 정상: 0건. 비정상: 1건 이상(요청마다 남으므로 보통 대량).
 - 코드 문제가 아니라 Worker 설정(Secrets) 문제다. `invalid`에 변수 이름이 있다. `src/lib/env.ts`의 검증 규칙과 대시보드 Settings → Variables를 대조한다. Secret 변경은 사람이 한다.
 - 조사: `obs.mjs events env.invalid --limit 5`.
 
 **`env.weak_jwt_secret`** (warn) — `JWT_SECRET`이 32바이트 미만. 서비스는 계속 돈다.
-- isolate가 뜰 때마다 남을 수 있다. 보이는 동안은 비정상(보안 부채)이지만 긴급하지 않다. Secret 교체는 모든 세션을 끊으므로 사람이 시점을 정한다.
+- 비정상: 1건 이상. isolate가 뜰 때마다 남을 수 있다. 보이는 동안은 비정상(보안 부채)이지만 긴급하지 않다. triage는 이것을 `abnormal`이 아니라 `debt` 칸에 싣고, 다른 판정(1·2)이 없을 때만 exit 3(`debt`)으로 낸다(아래 "triage 판정"). Secret 교체는 모든 세션을 끊으므로 사람이 시점을 정한다.
 
 **`auth.refresh.failed`** (error) — 미들웨어의 refresh 회전 중 예외(대개 D1). 그 요청은 500.
-- 정상: 0건. 비정상: 1건이라도. `kind=schema_drift`면 원격 마이그레이션 누락.
+- 정상: 0건. 비정상: 1건 이상. `kind=schema_drift`면 원격 마이그레이션 누락.
 - 코드: `src/middleware.ts`의 refresh 분기, `src/lib/auth.ts`의 `rotateRefreshToken`. 원자성은 `docs/AUTH.md` "rotation의 원자성".
 - 조사: `obs.mjs events auth.refresh.failed`, `obs.mjs request <requestId>`.
 
 **`auth.refresh.reuse_detected`** (warn) — 이미 쓰인 refresh 토큰이 다시 와서 family 전체를 폐기했다. 탈취 의심 또는 같은 쿠키를 가진 두 탭의 경합.
-- 정상: 드물게(주 몇 건). 비정상: 같은 `userId`에 반복되거나 갑자기 늘 때.
+- 정상: 드물게(주 몇 건, 24h에 2건까지). 비정상: 24h에 3건 이상, 또는 같은 `userId`에 2건 이상.
 - rotation의 DB 쓰기는 원자적이라 `auth.refresh.failed` 뒤에 따라오는 오탐은 없다. 남은 예외는 `docs/AUTH.md` "rotation의 원자성".
 - 조사: `obs.mjs events auth.refresh.reuse_detected --since 7d`.
 
 **`auth.refresh.rejected`** (info) — 거부된 refresh 쿠키(사유 `reason`). 위 설명대로 페이지 조회 수에 비례한다.
 - 정상: `revoked`·`expired`·`family_expired`가 꾸준히. 비정상: `not_found`나 `user_missing`이 급증(마이그레이션·데이터 삭제 의심), 또는 배포 직후 전체가 급증(쿠키·JWT 설정 변경 의심).
+- info라 triage가 보지 않는다. 급증은 평소 건수와 비교해야 해서 고정 임계를 두지 않았다. `summary`로 사람이 본다.
 - 조사: `obs.mjs summary --since 24h`로 추세, `obs.mjs events auth.refresh.rejected --limit 200`으로 reason 분포.
 
 **`auth.oauth_state_invalid`** (warn/info) — OAuth 콜백의 state 검증 실패.
-- 정상: `missing_code`(info, 동의 화면 취소)와 가끔의 `missing_cookie`(쿠키 만료·다른 브라우저). 비정상: `mismatch`·`missing_state`가 반복(위조 시도 의심), 또는 모든 로그인이 `missing_cookie`(쿠키 속성·도메인 변경 의심).
+- 정상: `missing_code`(info, 동의 화면 취소)와 가끔의 `missing_cookie`(쿠키 만료·다른 브라우저, 24h에 2건까지). 비정상: `mismatch`·`missing_state`가 합쳐 2건 이상(반복, 위조 시도 의심), 또는 `missing_cookie` 3건 이상(쿠키 속성·도메인 변경 의심. "모든 로그인이 `missing_cookie`"는 성공 건수와의 비율이라 고정 임계로 대신한다). 목록에 없는 `reason`은 규칙으로 판단하지 않는다(triage `unknown`).
 - 코드: `src/app/api/auth/callback/route.ts`, `src/app/api/auth/login/route.ts`(state 쿠키 발급).
 
 **`auth.login.failed`** (error) — 로그인 실패. 사용자는 `/login?error=auth_failed`로 간다.
-- 정상: 드물게(CHZZK 일시 장애). 비정상: 연속 발생, 또는 `stage=db`(우리 쪽 문제).
+- 정상: `stage=token|user` 1건(CHZZK 일시 장애). 비정상: `stage=token|user`가 합쳐 2건 이상(연속 발생), `stage=db` 1건 이상(우리 쪽 문제), `kind=schema_drift` 1건 이상, `stage`가 없거나 목록 밖의 값 1건 이상.
 - `stage=token|user`면 CHZZK 쪽: `status`·`timedOut`을 본다(아래 `timeout`). `stage=db`면 `kind`를 본다.
 - 코드: `src/app/api/auth/callback/route.ts`, `src/lib/chzzk.ts`.
 - 조사: `obs.mjs events auth.login.failed --since 24h`.
@@ -112,14 +115,14 @@ refresh 쿠키 없이 보호 라우트를 부른 401은 정상 흐름이고 양�
 **`auth.login.succeeded`** (info) — 로그인 성공. `durationMs`로 CHZZK 지연을 본다. 배포 후 verify에서 "이 버전이 트래픽을 받았다"는 근거로도 쓴다.
 
 **`auth.logout.revoke_failed`** (error) — 로그아웃 시 refresh 폐기 실패. 쿠키는 지워졌지만 DB 행이 남아 탈취된 토큰이라면 만료까지 쓸 수 있다.
-- 정상: 0건. 비정상: 1건이라도. 코드: `src/app/api/auth/logout/route.ts`.
+- 정상: 0건. 비정상: 1건 이상. 코드: `src/app/api/auth/logout/route.ts`.
 
 **`timer.modify.conflict_exhausted`** (warn) — 시간 변경의 낙관적 잠금 재시도를 모두 소진해 409를 냈다.
-- 정상: 드물게(같은 타이머를 여러 탭·사람이 동시에 조작). 비정상: 같은 `timerId`에 반복(재시도 로직·버전 갱신 버그 의심).
+- 정상: 드물게(같은 타이머를 여러 탭·사람이 동시에 조작, 24h에 서로 다른 타이머로 2건까지). 비정상: 같은 `timerId`에 2건 이상(재시도 로직·버전 갱신 버그 의심), 또는 24h에 3건 이상.
 - 코드: `src/app/api/timers/[id]/modify/route.ts`, `src/lib/timer.ts`. 규칙은 `docs/TIMER-LOGIC.md`.
 
 **`timer.create.unique_race`** (warn) — 타이머 생성 경합을 부분 UNIQUE 인덱스(0009)가 막았다. 사용자는 400을 받았고 데이터는 안전하다.
-- 정상: 드물게(더블 클릭). 비정상: 잦으면 클라이언트 중복 제출 방지 확인.
+- 정상: 드물게(더블 클릭, 24h에 2건까지). 비정상: 24h에 3건 이상이면 클라이언트 중복 제출 방지를 확인한다.
 
 **`health.check`** (info) — 헬스체크 정상 응답(200). 외부 프로브(`.github/workflows/health.yml`)가 매시 17분에 부르므로 배포된 버전마다 한 시간에 한 건쯤 남는다. 다른 앱 로그는 로그인·거부·오류 때만 남아 조용한 날에는 태그 로그가 0건이라, verify의 "이 버전이 요청을 받았다"는 근거(`--expect-event health.check`)로 쓴다.
 - 정상: 한 시간에 1건 안팎(cron 지연으로 비거나 몰릴 수 있다. 수동 실행·사람의 호출도 섞인다). 원격이 앞선 `ahead`에서도 남는다(그 버전이 요청을 받았다는 사실은 스키마가 앞서도 참이라서다). 스키마 상태는 이 이벤트에 넣지 않고 `health.schema_ahead`로 따로 남긴다.
@@ -162,19 +165,23 @@ node scripts/obs.mjs verify --tag <sha> [--since 3d] [--event <e>] [--issue <id>
 # 토큰 없이 verify: 플러그인에 넘길 조회 코드를 받고, 그 반환값 파일로 판정한다(아래 "Cloudflare 플러그인으로 조회")
 node scripts/obs.mjs verify --tag <sha> [--since ...] [위 옵션] --print-plugin-code
 node scripts/obs.mjs verify --input <file> --tag <sha> --since <ISO> --until <ISO> [위 옵션]
+node scripts/obs.mjs triage [--since 24h] [--skip-issues]   # error·warn 로그와 active Issue를 규칙표로 가른다
+node scripts/obs.mjs triage [--since ...] --print-plugin-code   # 토큰 없이(verify와 같은 방식)
+node scripts/obs.mjs triage --input <file> --since <ISO> --until <ISO> [--skip-issues]
 ```
 
-- 공통: `--json`(API 응답 원문, verify는 판정 객체), `--limit N`(기본 100, 최대 2000), `--since`(기간 `15m`·`1h`·`3d` 또는 ISO 시각), `--until`(끝 시각, 기본 지금)
+- 공통: `--json`(API 응답 원문, verify·triage는 판정 객체), `--limit N`(기본 100, 최대 2000. triage는 `--limit`·`--path`를 받지 않고 인자 오류로 끝난다. 항상 level별 2000건, 경로 필터 없음), `--since`(기간 `15m`·`1h`·`3d` 또는 ISO 시각), `--until`(끝 시각, 기본 지금)
 - Issue occurrence에서 앱 로그로: occurrence에는 앱 `requestId`가 없다(`invocationId`는 런타임의 invocation ID라 앱 requestId와 다르다). occurrence의 `timestamp`·`path`로 `errors --since <시각-5분> --until <시각+5분> --path <path>`를 부르고, 나온 `requestId`로 `request`를 부른다
-- 환경변수: `CF_OBS_TOKEN`(필수. `verify --print-plugin-code`·`--input`은 API를 부르지 않아 필요 없다), `CLOUDFLARE_ACCOUNT_ID`(선택, 기본값은 이 서비스 계정. 계정 ID는 대시보드 URL에도 드러나는 값이고 토큰 없이는 쓸 수 없어 비밀로 보지 않는다)
-- 종료 코드: 0 성공, 2 조회 실패(인자 오류, 네트워크, 401/403, API 오류). 401/403이면 토큰 권한 안내를 낸다. 토큰은 어떤 출력에도 나오지 않는다
+- 환경변수: `CF_OBS_TOKEN`(필수. verify·triage의 `--print-plugin-code`·`--input`은 API를 부르지 않아 필요 없다), `CLOUDFLARE_ACCOUNT_ID`(선택, 기본값은 이 서비스 계정. 계정 ID는 대시보드 URL에도 드러나는 값이고 토큰 없이는 쓸 수 없어 비밀로 보지 않는다)
+- 종료 코드: 0 성공, 2 조회 실패(인자 오류, 네트워크, 401/403, API 오류). verify·triage는 판정을 exit code로 낸다(아래 "triage 판정", "verify 판정"). 3은 triage만 낸다(부채만 있음). 401/403이면 토큰 권한 안내를 낸다. 토큰은 어떤 출력에도 나오지 않는다
 - 보관 기간이 지나면(현재 3일, 2026-12-01부터 7일) 조회되지 않는다
 
 응답 모양(2026-10-03 실측):
 - API(`telemetry/query`, `view: "events"`): 봉투는 `result.events.events[]`다. 이벤트마다 앱 필드(`event`·`level`·`requestId`·`versionTag`·`versionId`·`reason`·`kind` 등)가 `source` 객체에 들어 있고, 최상위에는 `dataset`·`timestamp`·`$metadata`·`$workers`가 있다. 앱 필드는 `event`·`level`처럼 접두 없이 필터 키로 쓴다(`APP_FIELD_PREFIX = ""`)
 - 대시보드에서 복사한 JSON: 앱 필드가 `source` 없이 최상위에 펼쳐진다. 정규화는 두 모양을 모두 받는다
 - 공통: `$metadata.requestId`는 런타임 ID라 앱의 `requestId`와 다르다. `$workers.event.request.path`에는 쿼리스트링이 없다
-- Issues API(`GET .../workers/observability/issues`): 활성 이슈가 없으면 `result`가 빈 배열이다
+- Issues API(`GET .../workers/observability/issues`): 활성 이슈가 없으면 `result`가 빈 배열이다. 플러그인 execute로 받아도 `result_info`(`page`·`per_page`·`count`·`total_count`·`total_pages`)가 그대로 온다(0건이면 `total_pages: 0`)
+- `triage --print-plugin-code` → execute → `triage --input` 경로를 프로덕션 데이터로 한 번 돌려 끝까지 판정되는 것을 확인했다(error 0건, warn 1건 정상, active Issue 0건 → exit 0)
 
 정규화가 이상하면(필드가 비거나 0건인데 대시보드에는 있음) `--json`으로 원문을 보고 `scripts/lib/obs.mjs`의 정규화 함수를 고친다.
 
@@ -227,7 +234,7 @@ Claude Code에 Cloudflare 플러그인이 연결돼 있으면 그 `execute` 도�
   occurrences: { "<issueId>": [ { request: { query: { per_page: 100, cursor? } }, response }, ... ] } }    // Issues를 볼 때만
 ```
 
-응답의 이벤트·occurrence는 `slimEvent`·`slimOccurrence`로 stack 본문, `$workers.event` 같은 verify가 읽지 않는 필드를 덜어 낸 것이다(결과가 대화로 돌아오므로). `source`가 JSON 문자열이면 객체로 풀어 stack을 비우고, 풀 수 없는 문자열은 verify가 읽지 않으므로 300자로 자른다. `telemetry/query` 응답은 `result`에서 이벤트 배열만 남기고 `run`(계정·사용자 ID)·`events.series`(빈 버킷)·`events.fields`는 버린다. 그래도 태그 로그가 많으면 결과가 크다. `--since`를 배포 시각으로 좁힌다.
+응답의 이벤트·occurrence·Issue 행은 `slimEvent`·`slimOccurrence`·`slimIssue`로 판정이 읽지 않는 필드를 덜어 낸 것이다(결과가 대화로 돌아오므로). 이벤트·occurrence에서는 stack 본문, `$workers.event` 같은 큰 필드를 덜어 내고, occurrence의 `error.message`는 verify 출력에 나가는 값이라 남기되 출력과 같은 300자에서 자른다. `source`가 JSON 문자열이면 객체로 풀어 stack을 비우고, 풀 수 없는 문자열은 verify가 읽지 않으므로 300자로 자른다. Issue 목록 행은 ID·`status`·시각(`lastObserved` 등)·건수·`error.name`(`errorName`)만 남긴다. `title`·`error.message`처럼 외부 입력이 섞일 수 있는 자유 텍스트와 모르는 필드는 싣지 않고, `status`·`errorName`은 판정의 `safeValue`를 통과하지 못할 값을 미리 `[?]`로, 시각으로 읽히지 않는 시각과 숫자가 아닌 건수도 `[?]`로 바꾼다(판정 결과는 원문과 같다). `result_info`(쪽 정보)는 그대로 둔다. `telemetry/query` 응답은 `result`에서 이벤트 배열만 남기고 `run`(계정·사용자 ID)·`events.series`(빈 버킷)·`events.fields`는 버린다. 그래도 태그 로그가 많으면 결과가 크다. `--since`를 배포 시각으로 좁힌다.
 
 판정은 토큰 경로와 같은 함수(`evaluateVerify`)가 한다. 파일은 누가 어떻게 모았는지 코드가 보지 못하므로 근거가 애매한 곳을 더 좁게 본다:
 
@@ -236,6 +243,51 @@ Claude Code에 Cloudflare 플러그인이 연결돼 있으면 그 `execute` 도�
   - 미확인(2026-10-03): 플러그인 execute가 occurrence 응답의 `result_info.cursors`를 그대로 넘기는지는 실측하지 못했다(그때 active Issue가 0건). execute 도구의 응답 타입 선언에는 `cursors`가 없다. 깎여 온다면 기간 안 occurrence가 있는 Issue는 플러그인 경로에서 늘 `truncated`(2)가 된다(fail closed). active Issue가 생기면 한 번 실측해 "응답 모양"에 적고, 깎여 온다면 조회 코드가 cursor 유무를 따로 기록하게 고친다
 - `--input`에서는 `--since`·`--until`을 ISO 시각으로 둘 다 받는다. 기록된 요청과 대조할 기간이 판정할 때마다 바뀌면 안 되기 때문이다
 - 판정은 파일이 실제 조회 결과 그대로라는 전제 위에 있다. 코드는 요청과 쪽 연결만 확인한다. 보고에 "플러그인 조회 결과로 `verify --input` 판정"이라고 적는다
+
+#### 플러그인으로 triage (`triage --print-plugin-code` → `--input`)
+
+verify와 같은 절차다. `node scripts/obs.mjs triage --since 24h --print-plugin-code`가 낸 코드를 고치지 않고 execute에 넘기고, 반환된 JSON을 저장소 밖 파일에 저장한 뒤 stderr 마지막 줄의 `triage --input <파일> --since <ISO> --until <ISO>`를 실행한다. 반환값은 `format: "obs-triage-input/1"` 묶음이다.
+
+```js
+{ format: "obs-triage-input/1",
+  errorQuery: { request: <telemetry/query 바디>, response: <응답> },  // level=error
+  warnQuery:  { request: <telemetry/query 바디>, response: <응답> },  // level=warn
+  issuePages: [ { request: { query: { service, status: "active", perPage: 100, page } }, response }, ... ] } // --skip-issues면 없음
+```
+
+Issue 목록 행은 verify와 같은 `slimIssue`로 판정이 읽는 필드만 남긴다(`title`·`error.message`는 싣지 않는다). 입력 오류·`truncated`의 기준(요청 대조, 실패 응답, 배열 없음, 다음 쪽 기록 없음, `total_pages` 없음)과 ISO 기간 요구는 verify `--input`과 같다.
+
+### triage 판정
+
+`triage`는 "지금 무엇이 비정상인가"를 규칙표로 가른다. 인자 없는 조사(prod-triage의 시작점, 무인 Routine)가 실행마다 같은 판단을 내게 하려는 것이다. 기간 기본값은 24h다.
+
+- 조회: `level=error`, `level=warn` 쿼리 둘(필터가 and로만 묶여 따로 묻는다, 각각 2000건 한도)과 active Issue 목록. info 로그는 보지 않는다
+- 이벤트는 event×level로 묶어 `scripts/lib/obs-rules.mjs` 규칙표로 가른다. 규칙의 조건은 모두 "건수 ≥ 임계"다(전체, `reason`·`stage`·`kind`별, 또는 같은 `userId`·`timerId`의 최대 건수)
+  - `abnormal`: 조건 하나라도 임계 이상, 규칙에 없는 error 이벤트(또는 규칙에 없는 level로 나온 error), 규칙이 예상하지 못한 값(`stage` 없음 등)의 error, 앱 이벤트 이름이 아닌 error(런타임 예외 메시지는 `(앱 이벤트 아님)`으로 묶고 원문은 내지 않는다)
+  - `unknown`: 규칙에 없는 warn 이벤트, 규칙이 예상하지 못한 값(목록 밖 `reason`)의 warn
+  - `normal`: 규칙이 있고 모든 조건이 임계 미만. 근거로 조건별 건수(`checks`)를 싣는다
+  - `debt`: 규칙에 `severity: "debt"`가 있고 임계 이상인 것(`env.weak_jwt_secret`). 긴급하지 않은 부채라 보고만 하고 조사·수정하지 않는다. `abnormal`(1)에 넣으면 부채가 남은 동안 매 실행이 1이 되어 실제 장애와 구분되지 않고 `truncated`·`unknown`(2)도 가려진다. 반대로 0(정상)으로 내면 exit code만 보는 실행(Routine)이 부채를 놓친다. 그래서 따로 exit 3을 두고 우선순위를 가장 낮게(1 > 2 > 3 > 0) 둔다
+- active Issue: `lastSeen`이 기간 안이거나 알 수 없으면 `abnormal`, 기간 전이면 `normal`(재발하지 않는 Issue, resolve 후보)
+- 이어 갈 조사: 이벤트 항목은 위 카탈로그의 조사 명령(`events <event>`), Issue 항목은 `issue <id>`. `(앱 이벤트 아님)` 묶음은 이벤트 이름으로 찾을 수 없으므로 `errors --since 24h`와 `issues`로 본다
+- 미확인(2026-10-03): active Issue가 0건이라 Issue 응답의 ID 형식과 `lastObserved`·`updated` 중 무엇이 오는지 실측하지 못했다. `updated`만 온다면 상태 변경만으로도 기간 안으로 보여 `abnormal`이 될 수 있다(fail closed). Issue가 생기면 한 번 실측해 "응답 모양"에 적는다
+
+| exit | verdict | 조건 |
+|------|---------|------|
+| 1 | `abnormal` | `abnormal`이 하나라도 있다(`debt`가 함께 있어도 1이다). 조회가 잘렸어도 1이다(조건이 모두 "건수 ≥ 임계"라 덜 센 결과에서 넘은 임계는 확정이다) |
+| 2 | `insufficient` | `reason`: `truncated`(로그 2000건, Issue 목록 5쪽 한도에서 잘림), `unknown`(규칙으로 판단할 수 없는 항목이 있다). `debt`가 함께 있어도 2다 |
+| 2 | (조회 실패) | 하위 조회 실패(Issues 403 포함. 권한이 없으면 `--skip-issues`), 응답에 이벤트·Issue 배열이 없음(응답 모양 변화를 0건으로 보지 않는다), `--input`이면 입력 파일 오류 |
+| 3 | `debt` | 위에 해당하지 않고 `debt`가 하나라도 있다. 부채 항목을 보고만 한다(Secret 교체 등 시점은 사람이 정한다) |
+| 0 | `normal` | 위에 해당하지 않는다 |
+
+조회 경로도 `--input`처럼 근거가 애매하면 0으로 끝내지 않는다. 응답에 이벤트·Issue 배열이 없으면 조회 실패(2), Issue가 있는데 `total_pages`가 없으면 `truncated`(2)다. verify 조회 경로는 아직 이 둘을 0건·마지막 쪽으로 본다.
+
+출력은 PII 규칙의 공개 저장소 기준을 따른다. 항목마다 이벤트·level·건수, `reason`·`stage`·`kind`·`errorName` 분포, `versionTag`별 건수, 라우트 패턴(ID 모양 세그먼트는 `[id]`, 그 밖의 이상한 세그먼트는 `[?]`, 쿼리스트링 제외)만 싣는다. requestId·userId·timerId·familyId, 오류 메시지·stack, 경로 원문은 싣지 않는다. 같은 `userId` 반복 같은 조건도 키 없이 최대 건수만 낸다. Issue는 ID·`errorName`·건수·`lastSeen`만 싣고 `title`(오류 메시지)은 싣지 않는다. 내용은 `issue <id>`로 본다.
+
+설계 이유:
+
+- `unknown`을 0이 아니라 2로 본다. 규칙 없는 warn을 정상으로 넘기면 새 이벤트가 카탈로그에 들어오지 않은 채 묻힌다. 2를 없애려면 카탈로그와 규칙표에 기준을 적는다
+- 비율("모든 로그인이 `missing_cookie`")과 info 기준(`auth.refresh.rejected` 급증)은 규칙으로 두지 않았다. 단조가 아니거나 info 조회가 필요해서, 잘린 조회에서 찾은 비정상을 확정으로 볼 수 없게 된다. 고정 임계로 대신하거나(`missing_cookie`), `summary`로 사람이 본다
+- 임계는 24h 기준 절대 건수다. `--since`를 다르게 줘도 늘리거나 줄이지 않는다(notes에 남는다). 긴 기간은 더 쉽게 비정상이 되는 쪽(fail closed)이다
 
 ### verify 판정
 
@@ -270,12 +322,12 @@ Claude Code에 Cloudflare 플러그인이 연결돼 있으면 그 `execute` 도�
 
 배포·원격 마이그레이션·PR 머지는 사람 승인이 필요하다. 에이전트는 조회, 원인 분석, 브랜치·커밋·PR 작성, verify까지 하고, 승인이 필요한 단계에서는 근거를 정리해 넘긴다.
 
-1. **감지**: `obs.mjs issues`, `obs.mjs errors --since 24h`, `obs.mjs summary --since 24h`. 사용자 신고라면 받은 `x-request-id`로 시작한다
+1. **감지**: `obs.mjs triage --since 24h`(토큰이 없으면 `--print-plugin-code` → `--input`). exit 1이면 `abnormal` 항목마다 카탈로그의 조사 명령(`events <event>`, `issue <id>`)으로 이어 간다. exit 0이면 조사할 것이 없다고 보고하고 끝낸다. exit 3이면 `debt` 항목(부채)만 보고하고 조사·수정은 하지 않는다(Secret 교체 시점은 사람이 정한다). exit 2면 `reason`(`truncated`면 `--since`를 좁힘, `unknown`이면 그 항목을 사람이 판단하고 카탈로그·규칙표에 기준을 추가)을 보고한다. 추세(info 이벤트 등)는 `obs.mjs summary --since 24h`로 따로 본다. 사용자 신고라면 받은 `x-request-id`로 시작한다
 2. **재현·원인**: `obs.mjs request <requestId>`로 한 요청의 로그를 모으고, 위 카탈로그의 코드 위치와 `kind`별 대응을 따라 원인을 좁힌다. `versionTag`로 어느 배포에서 시작됐는지 보고 `git log <이전 태그>..<태그>`로 의심 변경을 찾는다. 로컬 재현은 `pnpm db:migrate:local` 후 `pnpm dev` 또는 테스트로 한다
 3. **수정 PR**: 실패를 재현하는 테스트를 먼저 쓰고 고친다. `pnpm test`, `pnpm build`를 통과시킨다. PR 본문에 근거와 verify 계획을 적는다. 근거는 위 "PII 규칙"의 공개 저장소 기준(이벤트 이름·`kind`·건수·기간·`versionTag`만, ID·오류 원문 제외)을 따른다
 4. **배포(사람 승인)**: 머지 후 사람이 `pnpm run deploy`를 실행한다. 스크립트가 배포 태그(git short SHA 12자)와, 끝나면 배포 시각(deploy 단계 시작 시각. 새 버전은 그 명령이 끝나기 전부터 요청을 받는다)과 `--since`를 채운 verify 명령을 출력한다. 스키마 변경이 있으면 원격 마이그레이션을 먼저 적용한다(사람)
 5. **재발 판정**: 충분한 시간이 지난 뒤(외부 프로브가 한 번 이상 돈 뒤, 배포 후 1시간 이상) `obs.mjs verify --tag <태그> --since <배포 시각> --event <e> [--issue <id>] --expect-event <e>`. `--expect-event`는 수정한 경로의 성공 이벤트가 있으면 그것을, 없으면 `health.check`를 준다. 다만 `health.check`는 버전이 살아 있다는 근거일 뿐 수정한 경로가 실행됐다는 근거가 아니므로 보고에 그렇게 적는다. `health.schema_drift`가 있으면 그 버전은 원격 마이그레이션이 빠졌다는 뜻이라 먼저 해소한다. `--event`로 좁히면 이 이벤트는 재발 후보에서 빠지므로 판정(exit)에는 반영되지 않고 verify 출력의 `notes`에만 나온다. 따로 볼 때는 `obs.mjs events health.schema_drift --since <배포 시각>`. 토큰이 없으면 같은 옵션에 `--print-plugin-code`를 붙여 받은 코드를 플러그인 execute로 돌리고, 그 결과 파일로 `verify --input`을 실행한다("플러그인으로 재발 판정"). 0이면 다음 단계, 1이면 출력이 고친 대상과 맞는지 확인하고 2로 돌아간다, 2면 `reason`(조회 실패·근거 부족)을 해소하고 다시 본다
-6. **정리**: 해당 Issue를 대시보드에서 resolve하고(사람 또는 권한 있는 도구), 카탈로그의 정상/비정상 기준이 틀렸으면 이 문서를 고친다
+6. **정리**: 해당 Issue를 대시보드에서 resolve하고(사람 또는 권한 있는 도구), 카탈로그의 정상/비정상 기준이 틀렸으면 이 문서와 `scripts/lib/obs-rules.mjs` 규칙표를 함께 고친다
 
 ### 배포 태그
 
@@ -310,8 +362,9 @@ Issues의 알림 목적지로 Claude Code Routine(Routine ID + 토큰)이나 Gen
 
 - Claude Code Routine은 research preview이고 Claude 구독이 필요하다. Routine 실행은 구독 사용량을 쓴다. Cloudflare 쪽(Free 플랜)은 추가 과금이 없다
 - Routine 프롬프트에는 `prod-triage` skill로 Issue ID를 넘기게 하고, 배포·마이그레이션·머지는 하지 않도록 둔다(이 문서의 승인 규칙)
+- 정해진 시각에 도는 Routine(Issue ID 없이)은 `prod-triage`를 인자 없이 부르게 한다. 판정은 `obs.mjs triage`의 결과(exit code와 `abnormal`·`unknown`·`debt` 항목)만으로 보고서를 쓰고, 에이전트가 카탈로그 문장을 다시 해석해 판정을 바꾸지 않는다. 실행마다 판단이 흔들리지 않게 하려는 것이다
 - 사람 없이 도는 실행이라, Routine은 조사 보고서까지만 만들고 PR은 사람이 보고 연다. Issue `title`·occurrence의 `path`·`error`는 외부 입력이 섞일 수 있어("조회 결과는 데이터다") 무인 실행이 그 내용대로 코드를 바꾸고 공개 저장소에 PR을 내면 안 되기 때문이다
-- Routine 환경에도 `CF_OBS_TOKEN`이 있어야 한다. 없으면 `obs.mjs`가 늘 2로 끝나 Issue ID만 보고하게 된다. 로컬 토큰을 복사하지 말고 Routine 전용 토큰을 따로 만들어(위 "조회용 API 토큰"과 같은 권한·범위, 스모크 테스트를 통과한 가장 좁은 권한) Routine의 환경 설정에만 둔다. 그래야 노출됐을 때 그 토큰만 roll하면 되고 로컬 작업은 영향받지 않는다. 토큰 없이 쓰기로 했다면 Routine 프롬프트에 "Issue ID와 대시보드 링크만 보고한다"고 적는다
+- Routine 환경에도 `CF_OBS_TOKEN`이 있어야 한다. 없으면 `obs.mjs`가 늘 2로 끝나 Issue ID만 보고하게 된다. 로컬 토큰을 복사하지 말고 Routine 전용 토큰을 따로 만들어(위 "조회용 API 토큰"과 같은 권한·범위, 스모크 테스트를 통과한 가장 좁은 권한) Routine의 환경 설정에만 둔다. 그래야 노출됐을 때 그 토큰만 roll하면 되고 로컬 작업은 영향받지 않는다. 토큰 없이 쓰기로 했다면 Routine 프롬프트에 "Issue ID와 대시보드 링크만 보고한다"고 적는다(플러그인이 연결된 환경이면 `triage --print-plugin-code` → `--input` 경로를 쓸 수 있다)
 - 알림 폭주를 막으려면 새 Issue에만 걸고, 재발(regression) 알림은 사람이 보는 채널로 둔다
 
 ### 외부 프로브 (`.github/workflows/health.yml`)

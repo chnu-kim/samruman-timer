@@ -160,7 +160,7 @@ migrations/
 scripts/
   deploy.mjs                            — pnpm run deploy 진입점 (git short SHA 버전 태그, dirty 트리·origin/main 밖 HEAD 거부)
   obs.mjs                               — 운영 로그·Issues 읽기 전용 조회 CLI (docs/OBSERVABILITY.md)
-  lib/                                  — 위 둘의 순수 로직 (version-tag.mjs, obs.mjs). 테스트는 scripts/__tests__/
+  lib/                                  — 위 둘의 순수 로직 (version-tag.mjs, obs.mjs, obs-rules.mjs = triage 규칙표). 테스트는 scripts/__tests__/
 
 wrangler.toml                           — Cloudflare Workers 설정
 open-next.config.ts                     — @opennextjs/cloudflare 설정 (기본값)
@@ -335,7 +335,7 @@ npx opennextjs-cloudflare build && npx opennextjs-cloudflare deploy --tag=<git s
 
 ### 로그 형식·이벤트·조사 절차
 
-앱 로그는 `src/lib/logger.ts`가 한 줄 JSON으로 낸다. 요청 처리 중 로그에는 `requestId`(응답 헤더 `x-request-id`와 같은 값)와 배포 버전(`versionId`·`versionTag`, `[version_metadata]`)이 붙는다. 로그 형식, PII 규칙, 이벤트 카탈로그(의미·정상/비정상 기준·코드 위치), 조회 CLI(`scripts/obs.mjs`), 배포 태그와 재발 판정(verify) 절차는 `docs/OBSERVABILITY.md`에 있다.
+앱 로그는 `src/lib/logger.ts`가 한 줄 JSON으로 낸다. 요청 처리 중 로그에는 `requestId`(응답 헤더 `x-request-id`와 같은 값)와 배포 버전(`versionId`·`versionTag`, `[version_metadata]`)이 붙는다. 로그 형식, PII 규칙, 이벤트 카탈로그(의미·정상/비정상 기준·코드 위치), 조회 CLI(`scripts/obs.mjs`), 배포 태그와 재발 판정(verify)·정상/비정상 판정(triage) 절차는 `docs/OBSERVABILITY.md`에 있다.
 
 ### 무료 한도와 초과 시 동작
 

@@ -7,6 +7,7 @@
 
 import { readFileSync } from "node:fs";
 import { normalizeVerifyTag } from "./version-tag.mjs";
+import { classifyEvents, safeValue } from "./obs-rules.mjs";
 
 export const SERVICE = "samrumantimer";
 /**
@@ -25,7 +26,8 @@ export const MAX_LIMIT = 2000;
 export const APP_FIELD_PREFIX = "";
 export const appKey = (name) => `${APP_FIELD_PREFIX}${name}`;
 
-export const EXIT = { OK: 0, RECURRED: 1, FAILED: 2 };
+// DEBT(3)는 triage만 쓴다: 긴급하지 않은 부채(severity: debt)만 남았다. verify는 0·1·2만 낸다
+export const EXIT = { OK: 0, RECURRED: 1, FAILED: 2, DEBT: 3 };
 
 // ───────────────────────── 인자·기간
 
@@ -538,15 +540,21 @@ export const USAGE = `사용: node scripts/obs.mjs <명령> [옵션]
   verify ... --print-plugin-code    토큰 없이: Cloudflare 플러그인 execute에 넘길 조회 코드와 이어서 실행할 명령을 낸다
   verify --input <file> --tag <sha> --since <ISO> --until <ISO> [같은 옵션]
                                     토큰 없이: 그 코드의 반환값(JSON 파일)으로 같은 규칙의 판정을 낸다. 입력 오류는 2
+  triage [--since 24h] [--skip-issues]
+                                    error·warn 로그와 active Issue를 카탈로그 규칙으로 가른다(abnormal·normal·unknown).
+                                    exit 0 = 정상, 1 = 비정상 있음, 2 = 조회 실패·판정 근거 부족(잘림, 규칙 없는 항목),
+                                    3 = 부채(severity: debt)만 있음. 우선순위는 1 > 2 > 3 > 0
+  triage ... --print-plugin-code / triage --input <file> --since <ISO> --until <ISO>
+                                    토큰 없이: verify와 같은 방식(플러그인 조회 코드 → 결과 파일로 판정)
 
 공통 옵션
-  --json      응답 원문(JSON)을 출력한다. verify는 판정 결과 객체
-  --limit N   최대 건수(기본 100, 최대 2000)
+  --json      응답 원문(JSON)을 출력한다. verify·triage는 판정 결과 객체
+  --limit N   최대 건수(기본 100, 최대 2000). triage는 받지 않는다(--limit·--path를 주면 인자 오류)
   --since     기간(15m, 1h, 3d) 또는 ISO 시각
   --until     끝 시각(기간 또는 ISO, 기본 지금). occurrence 시각 앞뒤로 앱 로그를 찾을 때 쓴다
 
 환경변수
-  CF_OBS_TOKEN           필수(verify --print-plugin-code·--input 제외). 조회용 API 토큰 (docs/OBSERVABILITY.md "1회성 설정")
+  CF_OBS_TOKEN           필수(verify·triage의 --print-plugin-code·--input 제외). 조회용 API 토큰 (docs/OBSERVABILITY.md "1회성 설정")
   CLOUDFLARE_ACCOUNT_ID  선택. 기본 ${DEFAULT_ACCOUNT_ID}`;
 
 function jsonl(out, rows) {
@@ -672,21 +680,25 @@ export const occurrenceQuery = (cursor) => (cursor === undefined ? { per_page: 1
 
 /**
  * active Issue 목록 한 쪽을 읽는다. next: 다음 쪽을 불러야 한다.
- * strict(파일 입력): Issue가 있는데 total_pages가 없으면 마지막 쪽인지 알 수 없다(unknown). 조회 경로는 기존대로 마지막 쪽으로 본다
+ * closed(파일 입력, triage): Issue 배열이 없으면 0건으로 보지 않고 오류, Issue가 있는데 total_pages가 없으면 마지막 쪽인지
+ * 알 수 없다(unknown). 오류는 strict(파일 입력)면 InputError, 아니면 ApiError(응답 모양 변화).
+ * verify 조회 경로는 기존대로 배열이 없으면 0건, total_pages가 없으면 마지막 쪽으로 본다
  */
-function readIssuePage(body, page, strict = false) {
-  if (strict && findArray(unwrap(body), ISSUE_PATHS) === undefined) {
-    throw new InputError(`active Issue 목록 ${page}쪽: 응답에서 Issue 배열을 찾지 못했다`);
+function readIssuePage(body, page, strict = false, closed = strict) {
+  if (closed && findArray(unwrap(body), ISSUE_PATHS) === undefined) {
+    const message = `active Issue 목록 ${page}쪽: 응답에서 Issue 배열을 찾지 못했다`;
+    throw strict ? new InputError(message) : new ApiError(`${message}(응답 모양이 예상과 다르다)`);
   }
   const issues = extractIssues(body);
-  const ids = issues.map((i) => normalizeIssue(i).id).filter(Boolean);
+  const normalized = issues.map(normalizeIssue);
+  const ids = normalized.map((i) => i.id).filter(Boolean);
   if (ids.length < issues.length) {
     throw new ApiError("Issue 목록에서 ID를 읽지 못했다(응답 모양이 예상과 다르다). --json으로 원문을 확인한다");
   }
   const totalPages = Number(body?.result_info?.total_pages);
   const next = Number.isFinite(totalPages) && page < totalPages && issues.length > 0;
-  const unknown = strict && issues.length > 0 && !Number.isFinite(totalPages);
-  return { ids, next, unknown };
+  const unknown = closed && issues.length > 0 && !Number.isFinite(totalPages);
+  return { ids, issues: normalized, next, unknown };
 }
 
 /**
@@ -740,10 +752,10 @@ function sameQuery(a, b) {
 }
 
 /** 기록 한 건({ request, response })을 확인하고 응답을 돌려준다 */
-function recorded(entry, label, matches) {
+function recorded(entry, label, matches, command = "verify") {
   if (!isObj(entry) || !("response" in entry)) throw new InputError(`${label}: 기록이 없다({ request, response } 형식)`);
   if (!matches(entry.request)) {
-    throw new InputError(`${label}: 기록된 요청이 verify가 보낼 요청과 다르다. --print-plugin-code가 낸 코드로 다시 조회한다`);
+    throw new InputError(`${label}: 기록된 요청이 ${command}가 보낼 요청과 다르다. --print-plugin-code가 낸 코드로 다시 조회한다`);
   }
   const body = entry.response;
   if (!isObj(body) || body.success === false) {
@@ -791,23 +803,38 @@ function judgeOccurrencePages(id, pages, fromMs, maxPages, strict = false) {
   return { rows, truncated: why !== undefined, why };
 }
 
-/** active Issue 목록 쪽들을 따라가 ID와 잘림 여부를 낸다 */
-function judgeIssuePages(pages, maxPages, strict = false) {
+/**
+ * active Issue 목록 쪽들을 따라가 ID·Issue(정규화)와 잘림 여부를 낸다.
+ * command는 기록된 요청이 다를 때 오류 메시지에 쓰고, narrow는 잘렸을 때 좁히는 방법 안내다
+ */
+function judgeIssuePages(
+  pages,
+  maxPages,
+  strict = false,
+  { command = "verify", narrow = "--issue <id>로 좁힌다", closed = strict } = {}
+) {
   const ids = [];
+  const issues = [];
   for (let page = 1; page <= maxPages; page++) {
     if (pages[page - 1] === undefined) {
-      return { ids, truncated: true, why: `입력 파일에 active Issue 목록 ${page}쪽이 없다. --print-plugin-code가 낸 코드로 다시 조회한다` };
+      return {
+        ids,
+        issues,
+        truncated: true,
+        why: `입력 파일에 active Issue 목록 ${page}쪽이 없다. --print-plugin-code가 낸 코드로 다시 조회한다`,
+      };
     }
     const expected = issueListQuery(page);
-    const body = recorded(pages[page - 1], `active Issue 목록 ${page}쪽`, (req) => sameQuery(req?.query, expected));
-    const step = readIssuePage(body, page, strict);
+    const body = recorded(pages[page - 1], `active Issue 목록 ${page}쪽`, (req) => sameQuery(req?.query, expected), command);
+    const step = readIssuePage(body, page, strict, closed);
     ids.push(...step.ids);
+    issues.push(...step.issues);
     if (step.unknown) {
-      return { ids, truncated: true, why: `active Issue 목록 ${page}쪽 응답에 total_pages가 없어 다른 쪽이 있는지 알 수 없다` };
+      return { ids, issues, truncated: true, why: `active Issue 목록 ${page}쪽 응답에 total_pages가 없어 다른 쪽이 있는지 알 수 없다` };
     }
-    if (!step.next) return { ids, truncated: false };
+    if (!step.next) return { ids, issues, truncated: false };
   }
-  return { ids, truncated: true, why: "active Issue 목록이 페이지 한도에서 잘렸다. --issue <id>로 좁힌다" };
+  return { ids, issues, truncated: true, why: `active Issue 목록이 페이지 한도에서 잘렸다. ${narrow}` };
 }
 
 /**
@@ -1073,13 +1100,85 @@ const SLIM_OCCURRENCE_SOURCE = `function slimOccurrence(raw) {
   if ("worker" in raw) out.worker = only(raw.worker, ["scriptVersion"]);
   if ("invocation" in raw) out.invocation = only(raw.invocation, ["id", "timestamp", "method", "path", "statusCode", "rayId"]);
   if ("error" in raw) out.error = only(raw.error, ["name", "message"]);
+  // 오류 메시지는 verify 출력(occurrence 항목)에 나가는 값이라 남기되, normalizeOccurrence처럼 300자에서 자른다
+  if (isObj(out.error) && typeof out.error.message === "string" && out.error.message.length > 300) {
+    out.error.message = out.error.message.slice(0, 300) + "\u2026";
+  }
   return out;
 }`;
+
+const SLIM_ISSUE_SOURCE = `function slimIssue(raw) {
+  const isObj = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+  if (!isObj(raw)) return null;
+  // 빈 값(undefined·null·"")은 그대로 둔다. normalizeIssue의 ?? 연쇄와 safeValue가 원문과 같은 결과를 내게 하려는 것이다
+  const empty = (v) => v === undefined || v === null || v === "";
+  // status·errorName: 판정이 safeValue로 거르는 값. 통과하지 못할 값은 미리 "[?]"로 바꾼다(safeValue 결과가 같다)
+  const token = (v) => (empty(v) ? v : /^[A-Za-z0-9_.:-]{1,64}$/.test(String(v)) ? v : "[?]");
+  // count: 숫자만 판정에 쓰인다. 글자는 "[?]"(문자열이라 ?? 연쇄를 멈추고 판정에서 빠진다), 그 밖의 모양은 false(같은 뜻)
+  const count = (v) => (empty(v) || typeof v === "number" ? v : typeof v === "string" ? (/^\d{1,15}$/.test(v) ? v : "[?]") : false);
+  // 시각: 숫자(epoch)는 그대로, 문자열은 시각으로 읽힐 때만. 읽히지 않으면 원문과 같이 "lastSeen을 알 수 없다"가 된다
+  const time = (v) =>
+    empty(v) || typeof v === "number" ? v : typeof v === "string" ? (v.length <= 64 && !Number.isNaN(Date.parse(v)) ? v : "[?]") : false;
+  const out = {};
+  const put = (k, f) => {
+    if (k in raw) out[k] = f(raw[k]);
+  };
+  // ID는 Cloudflare가 정하는 값이다. 다음 조회(occurrence)와 issue <id>로 이어 가야 해서 원문 그대로 둔다
+  put("id", (v) => (typeof v === "string" || typeof v === "number" ? v : false));
+  put("issueId", (v) => (typeof v === "string" || typeof v === "number" ? v : false));
+  put("status", token);
+  put("errorName", token);
+  for (const k of ["count", "occurrenceCount", "occurrences", "eventCount"]) put(k, count);
+  for (const k of ["firstObserved", "created", "firstSeen", "first_seen", "createdAt"]) put(k, time);
+  for (const k of ["lastObserved", "updated", "lastSeen", "last_seen", "updatedAt"]) put(k, time);
+  if (isObj(raw.error) && "name" in raw.error) out.error = { name: token(raw.error.name) };
+  return out;
+}`;
+
+/**
+ * verify·triage 조회 코드가 함께 쓰는 앞부분: 엔드포인트 기준 경로, slimEvent·slimIssue, 실패를 응답 모양으로 바꾸는 call,
+ * telemetry 쿼리를 보내고 { request, response }로 기록하는 query, active Issue 목록 한 쪽을 받는 issuePage.
+ * sandbox의 accountId·cloudflare만 참조한다
+ */
+const PLUGIN_PRELUDE = `  const base = "/accounts/" + accountId + "/workers/observability";
+  const slimEvent = ${SLIM_EVENT_SOURCE.replace(/\n/g, "\n  ")};
+  const call = async (method, path, extra) => {
+    try {
+      return await cloudflare.request({ method, path: base + path, ...extra });
+    } catch (err) {
+      return { success: false, result: null, errors: [{ code: 0, message: String((err && err.message) || err) }] };
+    }
+  };
+  const query = async (body) => {
+    const res = await call("POST", "/telemetry/query", { body });
+    // 판정은 이벤트 배열만 읽는다. run(계정·사용자 ID)·series·fields 같은 나머지는 대화로 돌려보내지 않는다
+    const r = res && res.result;
+    if (r && r.events && Array.isArray(r.events.events)) res.result = { events: { events: r.events.events.map(slimEvent) } };
+    else if (r && Array.isArray(r.events)) res.result = { events: r.events.map(slimEvent) };
+    else if (r && typeof r === "object") delete r.run;
+    return { request: body, response: res };
+  };
+  const slimIssue = ${SLIM_ISSUE_SOURCE.replace(/\n/g, "\n  ")};
+  const issuePage = async (q) => {
+    const res = await call("GET", "/issues", { query: q });
+    // Issue 행에는 title·error.message처럼 외부 입력이 섞일 수 있는 자유 텍스트가 있다. 판정이 읽는 필드만 대화로 돌려보낸다.
+    // result_info(쪽 정보)는 그대로 둔다. 배열이 다른 경로(issues·items·data)에 있어도 같이 줄이고 나머지 키는 버린다
+    const r = res && res.result;
+    if (Array.isArray(r)) res.result = r.map(slimIssue);
+    else if (r && typeof r === "object") {
+      const kept = {};
+      for (const k of ["issues", "items", "data"]) if (Array.isArray(r[k])) kept[k] = r[k].map(slimIssue);
+      res.result = kept;
+    }
+    return { request: { query: q }, response: res };
+  };`;
 
 /** 이벤트에서 verify가 읽지 않는 큰 필드를 덜어 낸다(플러그인 코드에 들어가는 것과 같은 소스) */
 export const slimEvent = new Function(`return (${SLIM_EVENT_SOURCE});`)();
 /** occurrence에서 verify가 읽지 않는 큰 필드를 덜어 낸다(플러그인 코드에 들어가는 것과 같은 소스) */
 export const slimOccurrence = new Function(`return (${SLIM_OCCURRENCE_SOURCE});`)();
+/** Issue 목록 행에서 판정(readIssuePage·classifyIssues)이 읽는 필드만 남긴다(플러그인 코드에 들어가는 것과 같은 소스) */
+export const slimIssue = new Function(`return (${SLIM_ISSUE_SOURCE});`)();
 
 /**
  * execute 도구의 code로 그대로 넘길 async 함수 소스를 만든다. 계정 ID는 넣지 않고 sandbox의 accountId를 쓴다.
@@ -1105,25 +1204,8 @@ export function buildPluginCode(opts) {
   // 부르는 엔드포인트는 조회용뿐이다: POST .../workers/observability/telemetry/query (dry: true),
   // GET .../workers/observability/issues, GET .../workers/observability/issues/{id}/occurrences
   const plan = ${JSON.stringify(plan, null, 2).replace(/\n/g, "\n  ")};
-  const base = "/accounts/" + accountId + "/workers/observability";
-  const slimEvent = ${SLIM_EVENT_SOURCE.replace(/\n/g, "\n  ")};
+${PLUGIN_PRELUDE}
   const slimOccurrence = ${SLIM_OCCURRENCE_SOURCE.replace(/\n/g, "\n  ")};
-  const call = async (method, path, extra) => {
-    try {
-      return await cloudflare.request({ method, path: base + path, ...extra });
-    } catch (err) {
-      return { success: false, result: null, errors: [{ code: 0, message: String((err && err.message) || err) }] };
-    }
-  };
-  const query = async (body) => {
-    const res = await call("POST", "/telemetry/query", { body });
-    // 판정은 이벤트 배열만 읽는다. run(계정·사용자 ID)·series·fields 같은 나머지는 대화로 돌려보내지 않는다
-    const r = res && res.result;
-    if (r && r.events && Array.isArray(r.events.events)) res.result = { events: { events: r.events.events.map(slimEvent) } };
-    else if (r && Array.isArray(r.events)) res.result = { events: r.events.map(slimEvent) };
-    else if (r && typeof r === "object") delete r.run;
-    return { request: body, response: res };
-  };
   const tsOf = (o) => {
     const inv = (o && typeof o.invocation === "object" && o.invocation) || {};
     const v = o && (o.timestamp ?? o.occurredAt ?? o.createdAt ?? inv.timestamp);
@@ -1140,9 +1222,9 @@ export function buildPluginCode(opts) {
     ids = [];
     out.issuePages = [];
     for (let page = 1; page <= plan.maxPages; page++) {
-      const q = { ...plan.issueListQuery, page };
-      const res = await call("GET", "/issues", { query: q });
-      out.issuePages.push({ request: { query: q }, response: res });
+      const entry = await issuePage({ ...plan.issueListQuery, page });
+      out.issuePages.push(entry);
+      const res = entry.response;
       const list = res && Array.isArray(res.result) ? res.result : [];
       for (const i of list) if (i && (i.id ?? i.issueId)) ids.push(i.id ?? i.issueId);
       const total = Number(res && res.result_info && res.result_info.total_pages);
@@ -1198,6 +1280,278 @@ function printPluginCode(opts, io) {
 
 /** --input: 파일로 받은 묶음을 판정한다. 토큰·네트워크를 쓰지 않는다 */
 function verifyFromInput(path, opts, readFile, io) {
+  const evaluated = evaluateVerify(readBundleFile(path, VERIFY_INPUT_FORMAT, readFile), opts, { strict: true });
+  /** @type {string[]} */ (evaluated.report.notes).push(INPUT_NOTE);
+  return printVerify(evaluated, opts, io);
+}
+
+// ───────────────────────── triage: 지금 무엇이 비정상인가
+//
+// 인자 없는 조사의 시작점이다. error·warn 로그와 active Issue를 받아 obs-rules.mjs의 규칙표로 가른다.
+// verify와 같은 구조다: 조회(fetchTriageBundle)가 요청·응답 원문을 묶고, 순수 함수(evaluateTriage)가 그 묶음만으로 판정한다.
+// 토큰 경로와 --input(플러그인 조회 결과) 경로가 같은 판정 코드를 탄다.
+// info 로그는 보지 않는다. info에 걸린 기준(auth.refresh.rejected 급증 등)과 비율 기준은 summary로 사람이 본다.
+
+export const TRIAGE_INPUT_FORMAT = "obs-triage-input/1";
+const TRIAGE_REFERENCE_WINDOW_MS = 86_400_000;
+
+/** triage가 보내는 telemetry 쿼리 둘. filterCombination이 and라 level을 OR로 묶지 못해 따로 묻는다(각각 2000건 한도) */
+export function buildTriageQueries({ from, to }) {
+  return {
+    errorQuery: buildTelemetryQuery({ from, to, limit: MAX_LIMIT, filters: [eq("level", "error")] }),
+    warnQuery: buildTelemetryQuery({ from, to, limit: MAX_LIMIT, filters: [eq("level", "warn")] }),
+  };
+}
+
+/**
+ * triage의 하위 조회를 보내고 요청·응답 원문을 묶는다. 판정은 하지 않는다
+ * @param {ReturnType<typeof createClient>} client
+ * @param {{ from: number, to: number, skipIssues?: boolean }} opts
+ */
+export async function fetchTriageBundle(client, opts) {
+  const { errorQuery, warnQuery } = buildTriageQueries(opts);
+  /** @type {Record<string, unknown>} */
+  const bundle = { format: TRIAGE_INPUT_FORMAT };
+  bundle.errorQuery = { request: errorQuery, response: await client.query(errorQuery) };
+  bundle.warnQuery = { request: warnQuery, response: await client.query(warnQuery) };
+  if (opts.skipIssues) return bundle;
+  const pages = [];
+  for (let page = 1; page <= VERIFY_MAX_PAGES; page++) {
+    const query = issueListQuery(page);
+    const body = await client.issues(query);
+    pages.push({ request: { query }, response: body });
+    if (!readIssuePage(body, page).next) break;
+  }
+  bundle.issuePages = pages;
+  return bundle;
+}
+
+/**
+ * active Issue를 가른다. 기간 안에 마지막으로 보였거나(lastSeen ≥ from) 언제 보였는지 모르면 비정상,
+ * 기간 전에 마지막으로 보였으면 정상(재발하지 않는 Issue, resolve 후보).
+ * title은 오류 메시지라 외부 입력이 섞일 수 있어 내보내지 않는다. 내용은 issue <id>로 본다
+ */
+function classifyIssues(issues, fromMs) {
+  const abnormal = [];
+  const normal = [];
+  for (const i of issues) {
+    const lastMs = Date.parse(String(i.lastSeen ?? ""));
+    const entry = {
+      type: "issue",
+      // ID는 Cloudflare가 정하는 값이라 외부 입력이 아니다. 형식이 실측되지 않아(2026-10 active Issue 0건) 모양으로 가리지 않는다.
+      // 가리면 issue <id>로 이어 갈 수 없다
+      id: String(i.id).slice(0, 128),
+      ...(i.status !== undefined ? { status: safeValue(i.status) } : {}),
+      ...(i.errorName !== undefined ? { errorName: safeValue(i.errorName) } : {}),
+      ...(typeof i.count === "number" ? { count: i.count } : {}),
+      ...(!Number.isNaN(lastMs) ? { lastSeen: new Date(lastMs).toISOString() } : {}),
+    };
+    if (Number.isNaN(lastMs)) abnormal.push({ ...entry, why: "lastSeen을 알 수 없다" });
+    else if (lastMs >= fromMs) abnormal.push({ ...entry, why: "기간 안에 발생했다" });
+    else normal.push({ ...entry, why: "기간 안에 발생하지 않았다(resolve 후보)" });
+  }
+  return { abnormal, normal };
+}
+
+const LEVEL_RANK = { error: 0, warn: 1 };
+const byLevelThenCount = (a, b) =>
+  (LEVEL_RANK[a.level] ?? 2) - (LEVEL_RANK[b.level] ?? 2) || b.count - a.count || a.event.localeCompare(b.event);
+
+/**
+ * 묶음으로 지금의 정상/비정상을 가른다(순수 함수). 기록된 요청이 opts로 triage가 보낼 요청과 다르거나 실패한 응답이 있으면
+ * InputError(호출자가 exit 2). strict는 파일 입력(--input)용으로 evaluateVerify와 같은 뜻이다.
+ * exit: 비정상이 하나라도 있으면 1(잘린 조회에서 찾은 것도 확정. 규칙이 모두 "건수 ≥ 임계"라 덜 세도 넘은 것은 넘은 것이다),
+ * 아니면 조회가 잘렸거나(truncated) 규칙으로 판단할 수 없는 것(unknown)이 있으면 2, 아니면 부채(debt)가 있으면 3,
+ * 그 밖에는 0
+ * @param {Record<string, any>} bundle
+ * @param {{ from: number, to: number, skipIssues?: boolean }} opts
+ * @param {{ strict?: boolean }} [mode]
+ */
+export function evaluateTriage(bundle, opts, { strict = false } = {}) {
+  const { from, to, skipIssues = false } = opts;
+  if (!isObj(bundle)) throw new InputError("triage 입력이 객체가 아니다");
+  const { errorQuery, warnQuery } = buildTriageQueries(opts);
+  const notes = [];
+  const truncated = [];
+
+  const read = (entry, request, level) => {
+    const label = `${level} 로그 조회(${level}Query)`;
+    const body = recorded(entry, label, (req) => sameJson(req, request), "triage");
+    // triage는 exit 0이면 조사를 끝내는 명령이라 조회 경로에서도 배열이 없는 응답(모양 변화)을 0건으로 보지 않는다
+    if (findArray(unwrap(body), EVENT_PATHS) === undefined) {
+      const message = `${label}: 응답에서 이벤트 배열을 찾지 못했다`;
+      throw strict ? new InputError(message) : new ApiError(`${message}(응답 모양이 예상과 다르다)`);
+    }
+    const raw = extractEvents(body);
+    if (raw.length >= MAX_LIMIT) truncated.push(`${level} 로그가 ${MAX_LIMIT}건에서 잘렸다. --since를 좁힌다`);
+    // 서버가 level로 거른 결과다. level을 읽지 못한 이벤트는 그 쿼리의 level로 본다
+    return raw.map((e) => {
+      const n = normalizeEvent(e);
+      return n.level === undefined ? { ...n, level } : n;
+    });
+  };
+  const errorEvents = read(bundle.errorQuery, errorQuery, "error");
+  const warnEvents = read(bundle.warnQuery, warnQuery, "warn");
+  const classified = classifyEvents([...errorEvents, ...warnEvents]);
+  // severity: debt(긴급하지 않은 부채)는 abnormal과 따로 둔다. abnormal에 넣으면 부채가 남은 동안 매 실행이 1이 되어
+  // 실제 장애와 구분되지 않고, truncated·unknown(2)도 가려진다. 그렇다고 0(정상)으로 내면 exit code만 보는 실행(Routine)이
+  // 부채를 놓치므로, 다른 판정이 없을 때만 따로 3(debt)으로 낸다
+  const debt = classified.abnormal.filter((x) => x.severity === "debt").sort(byLevelThenCount);
+  const abnormal = classified.abnormal.filter((x) => x.severity !== "debt").sort(byLevelThenCount);
+  const normal = classified.normal.sort(byLevelThenCount);
+  const unknown = classified.unknown.sort(byLevelThenCount);
+
+  let activeIssues;
+  if (skipIssues) {
+    notes.push("Issues는 --skip-issues로 건너뛰었다. 런타임 예외(앱 로그 밖)는 이 판정에 들어가지 않았다");
+  } else {
+    const listed = judgeIssuePages(Array.isArray(bundle.issuePages) ? bundle.issuePages : [], VERIFY_MAX_PAGES, strict, {
+      command: "triage",
+      narrow: "issues 명령으로 목록을 본다",
+      closed: true,
+    });
+    if (listed.truncated) truncated.push(listed.why);
+    activeIssues = listed.issues.length;
+    const issues = classifyIssues(listed.issues, from);
+    abnormal.push(...issues.abnormal);
+    normal.push(...issues.normal);
+  }
+
+  if (to - from !== TRIAGE_REFERENCE_WINDOW_MS) {
+    notes.push("규칙의 임계값은 24h 창 기준이다. 다른 기간에도 그대로 적용했다(긴 기간은 더 쉽게 비정상이 된다)");
+  }
+  notes.push("info 로그(auth.refresh.rejected 급증 등)와 비율 기준은 보지 않았다. 추세는 summary로 본다");
+
+  let verdict = "normal";
+  let exitCode = EXIT.OK;
+  let reason;
+  if (abnormal.length > 0) {
+    verdict = "abnormal";
+    exitCode = EXIT.RECURRED;
+  } else if (truncated.length > 0) {
+    verdict = "insufficient";
+    exitCode = EXIT.FAILED;
+    reason = "truncated";
+  } else if (unknown.length > 0) {
+    verdict = "insufficient";
+    exitCode = EXIT.FAILED;
+    reason = "unknown";
+  } else if (debt.length > 0) {
+    verdict = "debt";
+    exitCode = EXIT.DEBT;
+  }
+  return {
+    verdict,
+    exitCode,
+    ...(reason ? { reason } : {}),
+    window: { from: new Date(from).toISOString(), to: new Date(to).toISOString() },
+    counts: {
+      errorEvents: errorEvents.length,
+      warnEvents: warnEvents.length,
+      ...(activeIssues !== undefined ? { activeIssues } : {}),
+    },
+    abnormal,
+    debt,
+    normal,
+    unknown,
+    ...(truncated.length > 0 ? { truncated } : {}),
+    notes,
+  };
+}
+
+/** 판정 결과를 출력하고 exit code를 돌려준다. 기본 출력은 요약 한 줄 + 칸별 항목 JSON lines */
+function printTriage(report, { json }, io) {
+  if (json) {
+    io.out(JSON.stringify(report, null, 2));
+    return report.exitCode;
+  }
+  const { abnormal, debt, normal, unknown, ...rest } = report;
+  io.out(
+    JSON.stringify({ ...rest, abnormal: abnormal.length, debt: debt.length, normal: normal.length, unknown: unknown.length })
+  );
+  jsonl(io.out, abnormal.map((x) => ({ abnormal: x })));
+  jsonl(io.out, unknown.map((x) => ({ unknown: x })));
+  jsonl(io.out, debt.map((x) => ({ debt: x })));
+  jsonl(io.out, normal.map((x) => ({ normal: x })));
+  const message = {
+    abnormal: `비정상 ${abnormal.length}건. 항목마다 카탈로그(docs/OBSERVABILITY.md "이벤트별 판단과 조사")의 조사 명령으로 이어 간다`,
+    insufficient:
+      report.reason === "truncated"
+        ? `판정 근거 부족: 조회가 잘렸다(${(report.truncated ?? []).join("; ")})`
+        : `판정 근거 부족: 규칙으로 판단할 수 없는 항목 ${unknown.length}건. 카탈로그에 규칙을 추가하거나 사람이 판단한다`,
+    debt: `부채만 있다: 비정상 기준에 걸린 것은 없고 긴급하지 않은 부채 ${debt.length}건이 남았다(정상 ${normal.length}건)`,
+    normal: `정상: 비정상 기준에 걸린 것이 없다(정상 ${normal.length}건)`,
+  }[report.verdict];
+  io.err(`# ${message}`);
+  if (debt.length > 0) {
+    io.err(
+      `# 부채 ${debt.length}건(severity: debt, 보고만 하고 조사·수정하지 않는다. Secret 교체 등 시점은 사람이 정한다): ${debt.map((x) => x.event).join(", ")}`
+    );
+  }
+  for (const n of report.notes) io.err(`# ${n}`);
+  return report.exitCode;
+}
+
+async function cmdTriage(client, opts, io) {
+  return printTriage(evaluateTriage(await fetchTriageBundle(client, opts), opts), opts, io);
+}
+
+/**
+ * triage용 execute 조회 코드. verify의 buildPluginCode와 같은 앞부분(PLUGIN_PRELUDE)을 쓴다.
+ * 반환값은 triage --input이 읽는 묶음(TRIAGE_INPUT_FORMAT)이다
+ * @param {{ from: number, to: number, skipIssues?: boolean }} opts
+ */
+export function buildTriagePluginCode(opts) {
+  const { errorQuery, warnQuery } = buildTriageQueries(opts);
+  const plan = {
+    format: TRIAGE_INPUT_FORMAT,
+    errorQuery,
+    warnQuery,
+    issues: !opts.skipIssues,
+    issueListQuery: issueListQuery(1),
+    maxPages: VERIFY_MAX_PAGES,
+  };
+  return `async () => {
+  // node scripts/obs.mjs triage --print-plugin-code가 만든 조회 코드. 판정은 하지 않는다.
+  // 부르는 엔드포인트는 조회용뿐이다: POST .../workers/observability/telemetry/query (dry: true),
+  // GET .../workers/observability/issues
+  const plan = ${JSON.stringify(plan, null, 2).replace(/\n/g, "\n  ")};
+${PLUGIN_PRELUDE}
+  const out = { format: plan.format };
+  out.errorQuery = await query(plan.errorQuery);
+  out.warnQuery = await query(plan.warnQuery);
+  if (!plan.issues) return out;
+  out.issuePages = [];
+  for (let page = 1; page <= plan.maxPages; page++) {
+    const entry = await issuePage({ ...plan.issueListQuery, page });
+    out.issuePages.push(entry);
+    const res = entry.response;
+    const list = res && Array.isArray(res.result) ? res.result : [];
+    const total = Number(res && res.result_info && res.result_info.total_pages);
+    if (!res || res.success === false || list.length === 0 || !(page < total)) break;
+  }
+  return out;
+}`;
+}
+
+function printTriagePluginCode(opts, io) {
+  io.out(buildTriagePluginCode(opts));
+  const args = [
+    "--since",
+    new Date(opts.from).toISOString(),
+    "--until",
+    new Date(opts.to).toISOString(),
+    ...(opts.skipIssues ? ["--skip-issues"] : []),
+    ...(opts.json ? ["--json"] : []),
+  ];
+  io.err("# 위 코드를 Cloudflare 플러그인 execute 도구의 code로 그대로 넘긴다(조회용 엔드포인트만 부른다)");
+  io.err("# 반환된 JSON을 저장소 밖(scratchpad 등) 파일에 그대로 저장하고 판정한다:");
+  io.err(`# node scripts/obs.mjs triage --input <파일> ${args.join(" ")}`);
+  return EXIT.OK;
+}
+
+/** 입력 파일을 읽어 format까지 확인한 묶음을 돌려준다(verify·triage 공용) */
+function readBundleFile(path, format, readFile) {
   let text;
   try {
     text = readFile(path);
@@ -1211,14 +1565,29 @@ function verifyFromInput(path, opts, readFile, io) {
     throw new InputError("입력 파일이 JSON이 아니다");
   }
   if (!isObj(bundle)) throw new InputError("입력 파일이 객체가 아니다");
-  if (bundle.format !== VERIFY_INPUT_FORMAT) {
-    throw new InputError(`입력 파일의 format이 ${VERIFY_INPUT_FORMAT}이 아니다. --print-plugin-code가 낸 코드의 반환값을 그대로 저장한다`);
+  if (bundle.format !== format) {
+    throw new InputError(`입력 파일의 format이 ${format}이 아니다. --print-plugin-code가 낸 코드의 반환값을 그대로 저장한다`);
   }
-  const evaluated = evaluateVerify(bundle, opts, { strict: true });
-  /** @type {string[]} */ (evaluated.report.notes).push(
-    "조회 결과 파일로 판정했다(--input). 기록된 요청과 쪽 연결은 확인했지만, 파일이 실제 조회 결과 그대로인지는 확인하지 못한다"
-  );
-  return printVerify(evaluated, opts, io);
+  return bundle;
+}
+
+const INPUT_NOTE =
+  "조회 결과 파일로 판정했다(--input). 기록된 요청과 쪽 연결은 확인했지만, 파일이 실제 조회 결과 그대로인지는 확인하지 못한다";
+
+function triageFromInput(path, opts, readFile, io) {
+  const report = evaluateTriage(readBundleFile(path, TRIAGE_INPUT_FORMAT, readFile), opts, { strict: true });
+  report.notes.push(INPUT_NOTE);
+  return printTriage(report, opts, io);
+}
+
+/** --input에서는 기록된 요청과 대조할 기간이 판정할 때마다 바뀌면 안 되므로 --since·--until을 ISO로 받는다 */
+function requireIsoWindow(flags, command) {
+  for (const name of ["since", "until"]) {
+    const v = flags[name];
+    if (v === undefined || /^\d+\s*[smhd]$/.test(String(v).trim())) {
+      throw new UsageError(`${command} --input: --${name}를 ISO 시각으로 준다(--print-plugin-code가 안내한 명령의 값 그대로)`);
+    }
+  }
 }
 
 /**
@@ -1244,16 +1613,18 @@ export async function run(argv, deps) {
       io.err(USAGE);
       return EXIT.FAILED;
     }
-    const known = ["errors", "events", "request", "summary", "issues", "issue", "verify"];
+    const known = ["errors", "events", "request", "summary", "issues", "issue", "verify", "triage"];
     if (!known.includes(command)) throw new UsageError(`알 수 없는 명령: ${command}`);
 
-    // verify --input·--print-plugin-code는 API를 부르지 않는다(토큰 없이 플러그인 조회 결과로 판정하는 경로)
-    const offline = command === "verify" && (flags.input !== undefined || flags["print-plugin-code"] === true);
+    // verify·triage의 --input·--print-plugin-code는 API를 부르지 않는다(토큰 없이 플러그인 조회 결과로 판정하는 경로)
+    const offline =
+      (command === "verify" || command === "triage") &&
+      (flags.input !== undefined || flags["print-plugin-code"] === true);
     let client;
     if (!offline) {
       if (!token) {
         throw new UsageError(
-          'CF_OBS_TOKEN이 없다. 조회용 토큰을 셸 환경변수로 둔다(docs/OBSERVABILITY.md "1회성 설정"). 토큰 없이 verify를 하려면 --print-plugin-code·--input("Cloudflare 플러그인으로 조회")'
+          'CF_OBS_TOKEN이 없다. 조회용 토큰을 셸 환경변수로 둔다(docs/OBSERVABILITY.md "1회성 설정"). 토큰 없이 verify·triage를 하려면 --print-plugin-code·--input("Cloudflare 플러그인으로 조회")'
         );
       }
       const accountId = deps.env.CLOUDFLARE_ACCOUNT_ID || DEFAULT_ACCOUNT_ID;
@@ -1315,17 +1686,8 @@ export async function run(argv, deps) {
         if (inputPath !== undefined && printCode) {
           throw new UsageError("verify: --input과 --print-plugin-code는 함께 쓰지 않는다(먼저 코드를 받아 조회하고, 그 결과로 --input)");
         }
-        if (inputPath !== undefined) {
-          // 파일의 기록된 요청을 이 기간으로 만든 요청과 대조한다. 상대 기간은 판정할 때마다 달라지므로 받지 않는다
-          for (const name of ["since", "until"]) {
-            const v = flags[name];
-            if (v === undefined || /^\d+\s*[smhd]$/.test(String(v).trim())) {
-              throw new UsageError(
-                `verify --input: --${name}를 ISO 시각으로 준다(--print-plugin-code가 안내한 명령의 값 그대로)`
-              );
-            }
-          }
-        }
+        // 파일의 기록된 요청을 이 기간으로 만든 요청과 대조한다. 상대 기간은 판정할 때마다 달라지므로 받지 않는다
+        if (inputPath !== undefined) requireIsoWindow(flags, "verify");
         const verifyOpts = {
           tag,
           // 보관 기간(현재 3일)만큼 본다. 태그로 가리므로 이전 버전의 오류는 섞이지 않는다
@@ -1344,6 +1706,25 @@ export async function run(argv, deps) {
           return verifyFromInput(inputPath, verifyOpts, readFile, io);
         }
         return await cmdVerify(client, verifyOpts, io);
+      }
+      case "triage": {
+        // 판정 근거가 바뀌므로 조용히 무시하지 않는다(로그는 항상 level별 2000건, 경로 필터 없음)
+        for (const f of ["limit", "path"]) {
+          if (flags[f] !== undefined) throw new UsageError(`triage는 --${f}를 받지 않는다(항상 level별 ${MAX_LIMIT}건, 경로 필터 없음)`);
+        }
+        const inputPath = flags.input;
+        const printCode = flags["print-plugin-code"] === true;
+        if (inputPath !== undefined && printCode) {
+          throw new UsageError("triage: --input과 --print-plugin-code는 함께 쓰지 않는다(먼저 코드를 받아 조회하고, 그 결과로 --input)");
+        }
+        if (inputPath !== undefined) requireIsoWindow(flags, "triage");
+        const triageOpts = { ...window("24h"), skipIssues: flags["skip-issues"] === true, json };
+        if (printCode) return printTriagePluginCode(triageOpts, io);
+        if (inputPath !== undefined) {
+          const readFile = deps.readFile ?? ((path) => readFileSync(path, "utf8"));
+          return triageFromInput(inputPath, triageOpts, readFile, io);
+        }
+        return await cmdTriage(client, triageOpts, io);
       }
     }
     return EXIT.FAILED;
