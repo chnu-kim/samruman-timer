@@ -15,6 +15,7 @@ paths:
 - `src/__tests__/proxy.test.ts` — `src/middleware.ts`
 - `src/__tests__/*-page.test.tsx` — 페이지 컴포넌트 (`projects-page`, `project-detail-page`, `timer-detail-page`, `overlay-page`)
 - `src/components/*/__tests__/*.test.tsx`, `src/hooks/__tests__/*.test.tsx` — 컴포넌트·훅 테스트
+- `scripts/__tests__/*.test.ts` — `scripts/lib/*.mjs`(배포 태그, obs CLI) 단위 테스트. fetch는 주입한 목으로 대신하고 실제 API는 부르지 않는다
 - `src/__tests__/integration/*.test.ts` — 여러 라우트를 순서대로 호출하는 흐름 테스트 (예: `timer-lifecycle`, `auth-flow`, `cross-resource-auth`)
 
 ## 환경

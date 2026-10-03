@@ -11,7 +11,7 @@
     "test:watch": "vitest",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "deploy": "npx opennextjs-cloudflare build && npx opennextjs-cloudflare deploy",
+    "deploy": "node scripts/deploy.mjs",
     "db:migrate": "wrangler d1 migrations apply samrumantimer-db",
     "db:migrate:local": "wrangler d1 migrations apply samrumantimer-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply samrumantimer-db --remote"

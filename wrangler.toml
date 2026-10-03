@@ -7,6 +7,10 @@ compatibility_flags = ["nodejs_compat"]
 directory = ".open-next/assets"
 binding = "ASSETS"
 
+# 배포 버전(id, tag)을 운영 로그에 붙인다(src/lib/logger.ts). tag는 pnpm run deploy가 git SHA로 넣는다
+[version_metadata]
+binding = "CF_VERSION_METADATA"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "samrumantimer-db"
