@@ -3,12 +3,18 @@ import { render, screen, cleanup, act } from "@testing-library/react";
 import type { TimerStatus } from "@/types";
 import TimerOverlayPage from "@/app/timers/[id]/overlay/page";
 import OverlayError from "@/app/timers/[id]/overlay/error";
+import { isStaleResponse } from "@/lib/overlay-animation";
 import {
   MAX_RELOADS,
   RECOVERY_STABLE_MS,
   __resetOverlayRecoveryForTest,
   reloadPage,
 } from "@/lib/overlay-recovery";
+
+vi.mock("@/lib/overlay-animation", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/overlay-animation")>();
+  return { ...actual, isStaleResponse: vi.fn(actual.isStaleResponse) };
+});
 
 vi.mock("@/lib/overlay-recovery", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/overlay-recovery")>();
@@ -346,6 +352,23 @@ describe("오버레이 폴링 예외 내성", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(console.warn).toHaveBeenCalledTimes(1);
     expect(vi.mocked(console.warn).mock.calls[0][0]).toContain("처리하지 못했습니다");
+  });
+
+  it("데이터를 받은 뒤 처리 중 예외가 반복돼도 경고는 한 번만 남긴다", async () => {
+    const original = vi.mocked(isStaleResponse).getMockImplementation()!;
+    vi.mocked(isStaleResponse).mockImplementation(() => {
+      throw new Error("unexpected");
+    });
+    try {
+      stubTimer("RUNNING", 600);
+      render(<TimerOverlayPage />);
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThanOrEqual(3);
+      expect(console.warn).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.mocked(isStaleResponse).mockImplementation(original);
+    }
   });
 });
 

@@ -115,9 +115,11 @@ export default function TimerOverlayPage() {
       return "rate_limited";
     }
 
-    warnedRef.current = null;
     const now = Date.now();
-    if (isStaleResponse(prevTimerRef.current, data)) return "ok";
+    if (isStaleResponse(prevTimerRef.current, data)) {
+      warnedRef.current = null;
+      return "ok";
+    }
 
     // 변경 감지: updatedAt이 바뀌었으면 수동 조작 발생
     if (animation && prevTimerRef.current) {
@@ -132,6 +134,8 @@ export default function TimerOverlayPage() {
     prevTimerRef.current = { remainingSeconds: data.remainingSeconds, updatedAt: data.updatedAt, fetchedAt: now, status: data.status };
     setTimer(data);
     setDisplayed(data.remainingSeconds);
+    // 처리를 끝까지 마친 뒤에야 경고 억제를 풀어, 처리 중 예외가 반복될 때 경고가 폴링마다 쌓이지 않게 한다
+    warnedRef.current = null;
     return "ok";
   }, [timerId, animation, warnOnce]);
 
