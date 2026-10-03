@@ -30,6 +30,8 @@ describe("scanLoggerSource: 우회 형태는 problems로 실패한다", () => {
     "bracket 참조": `${IMPORT}const w = logger["warn"];\n`,
     "bind": `${IMPORT}const w = logger.warn.bind(logger);\n`,
     "구조분해": `${IMPORT}const { warn } = logger;\n`,
+    "스프레드 복사": `${IMPORT}const l = { ...logger };\n`,
+    ".js 확장자 네임스페이스 import": `import * as L from "@/lib/logger.js";\n`,
     "객체 인자 전달": `${IMPORT}run(logger);\n`,
     "변수 대입": `${IMPORT}const l = logger;\n`,
     "옵셔널 체이닝 호출": `${IMPORT}logger?.info("a.b");\n`,

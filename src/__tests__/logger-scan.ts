@@ -31,7 +31,7 @@ function dynamicLevels(source: string, name: string): string[] {
 }
 
 /** logger 모듈 경로: `@/lib/logger`, `./logger`, `../lib/logger.ts` 등 */
-const LOGGER_PATH = `["'](?:[^"']*\\/)?logger(?:\\.tsx?)?["']`;
+const LOGGER_PATH = `["'](?:[^"']*\\/)?logger(?:\\.(?:tsx?|m?jsx?))?["']`;
 const NAMESPACE_IMPORT = new RegExp(`\\bimport\\s*\\*\\s*as\\s+[\\w$]+\\s+from\\s*${LOGGER_PATH}`);
 const DEFAULT_IMPORT = new RegExp(`\\bimport\\s+[\\w$]+\\s*(?:,[^;]*?)?\\s+from\\s*${LOGGER_PATH}`);
 const REEXPORT = new RegExp(`\\bexport\\s+(?:\\*|\\{[^}]*\\})(?:\\s+as\\s+[\\w$]+)?\\s*from\\s*${LOGGER_PATH}`);
@@ -57,7 +57,8 @@ export function scanLoggerSource(rawSource: string, rel: string): { calls: LogCa
 
     // import 문을 걷어낸 뒤, 뒤에 `.`·`[`·`?.`가 붙지 않은 logger는 값으로 넘기거나 대입한 것이다(구조분해 포함)
     const body = source.replace(IMPORT_STATEMENT, (s) => s.replace(/[^\n]/g, ""));
-    for (const m of body.matchAll(/(?<![\w$.'"/-])logger\b(?!\s*(?:\?\.|\.|\[))/g)) {
+    // `...logger`(스프레드 복사)도 값 사용이다. 앞 글자가 `.`이어도 `...`이면 잡는다
+    for (const m of body.matchAll(/(?:(?<=\.\.\.\s*)|(?<![\w$.'"/-]))logger\b(?!\s*(?:\?\.|\.|\[))/g)) {
       problems.push(
         `${rel}:${lineOf(body, m.index!)}: logger 객체를 값으로 쓰고 있다(대입·인자 전달·구조분해). ` +
           `이 테스트가 호출을 찾지 못하므로 \`logger.<level>("event", ...)\`로 직접 호출하라.`,
