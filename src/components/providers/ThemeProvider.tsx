@@ -1,8 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
-
-type Theme = "light" | "dark" | "system";
+import { applyTheme, isTheme, type Theme } from "@/lib/theme";
 
 interface ThemeContextValue {
   theme: Theme;
@@ -17,22 +16,12 @@ export function useTheme() {
   return ctx;
 }
 
-function applyTheme(theme: Theme) {
-  const root = document.documentElement;
-  if (theme === "system") {
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    root.classList.toggle("dark", prefersDark);
-  } else {
-    root.classList.toggle("dark", theme === "dark");
-  }
-}
-
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("system");
 
   useEffect(() => {
-    const stored = localStorage.getItem("theme") as Theme | null;
-    if (stored && ["light", "dark", "system"].includes(stored)) {
+    const stored = localStorage.getItem("theme");
+    if (isTheme(stored)) {
       setThemeState(stored);
       applyTheme(stored);
     } else {
