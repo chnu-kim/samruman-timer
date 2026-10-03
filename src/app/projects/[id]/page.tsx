@@ -498,6 +498,7 @@ export default function ProjectDetailPage() {
         <CreateTimerForm
           key={formKey}
           projectId={projectId}
+          defaultTitle={project.name}
           onSuccess={handleCreateSuccess}
           onCancel={() => setShowForm(false)}
         />

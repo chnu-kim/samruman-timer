@@ -151,3 +151,55 @@ describe("OverlaySettings 미리보기 배경 (UX-57)", () => {
     expect(iframe.style.background).toMatch(/#3f3f46|rgb\(63, 63, 70\)/);
   });
 });
+
+// 프로젝트 화면에 통합하면서 타이머 제목은 오버레이의 '타이틀 표시'에서만 쓰이므로 여기서 고친다
+describe("OverlaySettings 표시할 제목", () => {
+  type Call = { url: string; init?: RequestInit };
+  let calls: Call[];
+
+  beforeEach(() => {
+    mockToast.mockReset();
+    calls = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push({ url, init });
+      if (url === "/api/timers/abc" && !init?.method) {
+        return { ok: true, status: 200, json: async () => ({ data: { title: "본방 타이머" } }) };
+      }
+      if (url.endsWith("/overlay-settings") && !init?.method) {
+        return { ok: true, status: 200, json: async () => ({ data: { fontSize: 72, color: "#ffffff", bg: "transparent", showTitle: true, shadow: true, position: "center", animation: true } }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ data: {} }) };
+    }));
+  });
+
+  it("타이틀 표시가 켜져 있으면 제목을 고칠 수 있고, 저장하면 제목과 설정을 함께 저장한다", async () => {
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    const input = await screen.findByLabelText("표시할 제목");
+    expect(input).toHaveValue("본방 타이머");
+
+    fireEvent.change(input, { target: { value: "  주말 서브어톤  " } });
+    expect(screen.getByText("저장하지 않은 변경 사항이 있습니다")).toHaveClass("opacity-100");
+    fireEvent.click(screen.getByRole("button", { name: "저장" }));
+
+    await waitFor(() => expect(calls.some((c) => c.init?.method === "PUT")).toBe(true));
+    const patch = calls.find((c) => c.url === "/api/timers/abc" && c.init?.method === "PATCH");
+    expect(JSON.parse(String(patch!.init!.body))).toEqual({ title: "주말 서브어톤" });
+  });
+
+  it("제목을 비우면 저장하지 않고 알린다", async () => {
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    fireEvent.change(await screen.findByLabelText("표시할 제목"), { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: "저장" }));
+
+    expect(mockToast).toHaveBeenCalledWith("표시할 제목을 입력해주세요", "error");
+    expect(calls.some((c) => c.init?.method === "PATCH" || c.init?.method === "PUT")).toBe(false);
+  });
+
+  it("타이틀 표시를 끄면 제목 입력란을 숨긴다", async () => {
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    await screen.findByLabelText("표시할 제목");
+    fireEvent.click(screen.getByRole("checkbox", { name: "타이틀 표시" }));
+    expect(screen.queryByLabelText("표시할 제목")).not.toBeInTheDocument();
+  });
+});

@@ -75,6 +75,27 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
   const [colorDraft, setColorDraft] = useState<string | null>(null);
   const [bgDraft, setBgDraft] = useState<string | null>(null);
   const [iframeSrc, setIframeSrc] = useState<string>("");
+  // 타이머 제목은 오버레이의 '타이틀 표시'에서만 화면에 나오므로 여기서 함께 고친다.
+  // 저장 전 변경 여부와 닫기 경고에 포함되도록 설정과 같은 저장 흐름에 둔다
+  const [savedTitle, setSavedTitle] = useState<string | null>(null);
+  const [title, setTitle] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`/api/timers/${timerId}`);
+        if (res.ok) {
+          const json = (await res.json()) as { data?: { title: string } };
+          if (json.data) {
+            setSavedTitle(json.data.title);
+            setTitle(json.data.title);
+          }
+        }
+      } catch {
+        // 제목을 못 불러오면 제목 입력란만 숨긴다
+      }
+    })();
+  }, [timerId]);
 
   useEffect(() => {
     (async () => {
@@ -104,9 +125,10 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
     })();
   }, [timerId]);
 
+  const titleDirty = savedTitle !== null && title.trim() !== savedTitle;
   const isDirty = useMemo(
-    () => savedConfig !== null && JSON.stringify(config) !== JSON.stringify(savedConfig),
-    [config, savedConfig],
+    () => titleDirty || (savedConfig !== null && JSON.stringify(config) !== JSON.stringify(savedConfig)),
+    [config, savedConfig, titleDirty],
   );
 
   const handleClose = useCallback(() => {
@@ -163,8 +185,27 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
   }, []);
 
   const handleSave = useCallback(async () => {
+    const trimmedTitle = title.trim();
+    if (titleDirty && !trimmedTitle) {
+      toast("표시할 제목을 입력해주세요", "error");
+      return;
+    }
     setSaving(true);
     try {
+      if (titleDirty) {
+        const titleRes = await authFetch(`/api/timers/${timerId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: trimmedTitle }),
+        });
+        if (!titleRes.ok) {
+          const json = await titleRes.json().catch(() => null) as { error?: { message?: string } } | null;
+          toast(json?.error?.message ?? "제목을 저장하지 못했습니다", "error");
+          return;
+        }
+        setSavedTitle(trimmedTitle);
+        setTitle(trimmedTitle);
+      }
       const res = await authFetch(`/api/timers/${timerId}/overlay-settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -183,7 +224,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
     } finally {
       setSaving(false);
     }
-  }, [timerId, config, toast]);
+  }, [timerId, config, toast, title, titleDirty]);
 
   const overlayUrl = useMemo(() => {
     const params = new URLSearchParams();
@@ -511,6 +552,18 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
             />
             <span className="text-sm">타이틀 표시</span>
           </label>
+          {config.showTitle && savedTitle !== null && (
+            <div className="pl-7">
+              <Input
+                label="표시할 제목"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                maxLength={100}
+              />
+              {/* 제목은 오버레이가 주기적으로 다시 읽으므로 URL을 다시 붙여넣지 않아도 바뀐다 */}
+              <p className="mt-1 text-xs text-muted-foreground">제목은 저장하면 방송 화면에 바로 반영됩니다.</p>
+            </div>
+          )}
           <label className="flex items-center gap-3 cursor-pointer">
             <input
               type="checkbox"
@@ -582,6 +635,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                   setBgDraft(null);
                   setConfig({ ...savedConfig });
                 }
+                if (savedTitle !== null) setTitle(savedTitle);
               }}
             >
               변경 취소

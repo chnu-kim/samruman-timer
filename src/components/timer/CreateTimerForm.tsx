@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useId } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
@@ -81,14 +81,16 @@ function SelectField({ value, options, onChange, suffix, label, pad = 0, width =
 
 interface CreateTimerFormProps {
   projectId: string;
+  /** 제목 기본값. 프로젝트 화면은 프로젝트 이름을 넘긴다 */
+  defaultTitle?: string;
   onSuccess?: (id: string) => void;
   onCancel?: () => void;
 }
 
-export function CreateTimerForm({ projectId, onSuccess, onCancel }: CreateTimerFormProps) {
+export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess, onCancel }: CreateTimerFormProps) {
   const { toast } = useToast();
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  const [title, setTitle] = useState(defaultTitle);
+  const titleHintId = useId();
   const [hours, setHours] = useState(0);
   const [minutes, setMinutes] = useState(0);
   const [seconds, setSeconds] = useState(0);
@@ -210,7 +212,6 @@ export function CreateTimerForm({ projectId, onSuccess, onCancel }: CreateTimerF
     try {
       const body: Record<string, unknown> = {
         title,
-        description: description || undefined,
         initialSeconds,
       };
       if (useScheduled && scheduledStartAt) {
@@ -243,21 +244,21 @@ export function CreateTimerForm({ projectId, onSuccess, onCancel }: CreateTimerF
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      <Input
-        label="타이머 제목 (필수)"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        required
-        maxLength={100}
-        placeholder="타이머 제목을 입력하세요"
-      />
-      <Input
-        label="설명"
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        maxLength={500}
-        placeholder="타이머 설명 (선택)"
-      />
+      {/* 화면에서는 프로젝트 이름을 쓰므로 타이머 제목은 오버레이의 '타이틀 표시'에만 나온다 */}
+      <div>
+        <Input
+          label="오버레이 제목 (필수)"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          required
+          maxLength={100}
+          placeholder="오버레이에 표시할 제목"
+          aria-describedby={titleHintId}
+        />
+        <p id={titleHintId} className="mt-1 text-xs text-muted-foreground">
+          OBS 오버레이 설정에서 &lsquo;타이틀 표시&rsquo;를 켜면 방송 화면에 보입니다.
+        </p>
+      </div>
 
       {/* 초기 시간 */}
       <div>
