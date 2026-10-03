@@ -254,7 +254,7 @@ describe("오버레이 폴링 백오프", () => {
     expect(warn.mock.calls[0][0]).toContain("연결하지 못했습니다");
   });
 
-  it("200인데 JSON이 아닌 응답(한도 초과 안내 페이지)은 긴 백오프 대상이다", async () => {
+  it("200인데 JSON이 아닌 응답은 긴 백오프 대상이다", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
       status: 200,
