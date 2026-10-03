@@ -170,6 +170,20 @@ function parseSource(source) {
   return {};
 }
 
+/**
+ * 앱 로그 필드. 대시보드·API가 JSON 로그를 최상위에 펼쳐 주기도 하고(2026-10 실측: event·versionTag·reason이 최상위)
+ * `source`에 담아 주기도 하므로 둘을 합친다. `$`로 시작하는 키(`$metadata`·`$workers`)는 플랫폼 필드라 뺀다
+ */
+function appFields(raw) {
+  /** @type {Record<string, unknown>} */
+  const top = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (k === "source" || k.startsWith("$")) continue;
+    top[k] = v;
+  }
+  return { ...top, ...parseSource(raw.source) };
+}
+
 function toIso(v) {
   if (typeof v === "number" && Number.isFinite(v)) {
     // 초 단위로 오는 경우도 받는다
@@ -189,11 +203,11 @@ export function extractEvents(body) {
 
 /**
  * 이벤트 하나를 앱 로그 필드 중심의 평평한 객체로 바꾼다.
- * 앱 필드는 source → 최상위 → $metadata 순으로 찾는다. 버전은 앱 필드가 없으면 $workers.scriptVersion을 쓴다.
+ * 앱 필드는 source → 최상위(둘을 합친 appFields) → $metadata 순으로 찾는다. 버전은 앱 필드가 없으면 $workers.scriptVersion을 쓴다.
  * @param {{ withStack?: boolean }} opts stack은 길어서 request 조회에서만 앞부분을 남긴다
  */
 export function normalizeEvent(raw, { withStack = false } = {}) {
-  const src = parseSource(raw.source);
+  const src = appFields(raw);
   const meta = isObj(raw.$metadata) ? raw.$metadata : {};
   const workers = isObj(raw.$workers) ? raw.$workers : {};
   const scriptVersion = isObj(workers.scriptVersion) ? workers.scriptVersion : {};

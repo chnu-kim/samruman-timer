@@ -179,6 +179,35 @@ describe("응답 정규화", () => {
     expect(noSource).toMatchObject({ level: "error", event: "Uncaught TypeError", versionTag: "t1", requestId: "r", error: "boom" });
   });
 
+  it("앱 필드가 source 없이 최상위에 펼쳐진 실제 이벤트 모양에서도 versionTag와 나머지 필드를 꺼낸다", () => {
+    // 2026-10-03 프로덕션 Workers Logs 이벤트(대시보드 JSON)의 모양. requestId·rayId 등은 축약
+    const real = {
+      timestamp: "2026-10-03T01:28:07.881Z",
+      message: "auth.oauth_state_invalid",
+      event: "auth.oauth_state_invalid",
+      versionTag: "12be6a2d8c6b",
+      versionId: "eba3942c-cefa-43d9-98c2-1b834addb649",
+      reason: "missing_cookie",
+      requestId: "aa157573-97c9-44d0-a312-a87380288f12",
+      level: "warn",
+      $workers: {
+        scriptName: SERVICE,
+        scriptVersion: { id: "eba3942c-cefa-43d9-98c2-1b834addb649" },
+        event: { request: { method: "GET", url: "https://example.test/api/auth/callback", path: "/api/auth/callback" } },
+      },
+      $metadata: { id: "01M3", requestId: "6d1c1ceb", service: SERVICE, level: "warn", message: "auth.oauth_state_invalid" },
+    };
+    expect(normalizeEvent(real)).toEqual({
+      timestamp: "2026-10-03T01:28:07.881Z",
+      level: "warn",
+      event: "auth.oauth_state_invalid",
+      requestId: "aa157573-97c9-44d0-a312-a87380288f12",
+      versionTag: "12be6a2d8c6b",
+      versionId: "eba3942c-cefa-43d9-98c2-1b834addb649",
+      reason: "missing_cookie",
+    });
+  });
+
   it("extractEvents는 result.events.events·result.events·배열 모양을 모두 받는다", () => {
     const e = errEvent();
     expect(extractEvents({ result: { events: { events: [e] } } })).toHaveLength(1);
