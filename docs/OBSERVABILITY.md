@@ -62,7 +62,8 @@
 | `auth.logout.revoke_failed` | error | `/api/auth/logout` | requestId, method, path, 오류 필드 |
 | `timer.modify.conflict_exhausted` | warn | `/api/timers/[id]/modify` (409) | requestId, timerId, action |
 | `timer.create.unique_race` | warn | `POST /api/projects/[id]/timers` | requestId, projectId |
-| `health.check` | info | `GET /api/health` (정상일 때만) | requestId, ok(`true`), schemaState(원격이 앞설 때만 `ahead`) |
+| `health.check` | info | `GET /api/health` (200일 때. 원격이 앞선 `ahead`도 포함) | requestId, ok(`true`) |
+| `health.schema_ahead` | warn | `GET /api/health` (200, 원격이 앞설 때만 `health.check`와 함께) | requestId, schemaState(`ahead`), expected, actual(마이그레이션 파일명) |
 | `health.schema_drift` | error | `GET /api/health` (503) | requestId, method, path, ok(`false`), kind(`schema_drift`), schemaState(`behind`·`mismatch`·`missing`), expected, actual(마이그레이션 파일명, 없으면 null) |
 
 refresh 쿠키 없이 보호 라우트를 부른 401은 정상 흐름이고 양이 많아 남기지 않는다. 반면 거부된 refresh 쿠키(폐기된 family = `revoked`, `expired`, `family_expired`, `not_found`)는 쿠키를 로그아웃에서만 지우므로 그 브라우저가 페이지를 열 때마다(Header와 페이지가 각각 `/api/auth/me`를 부르므로 한 화면에 1~2건) `auth.refresh.rejected`가 다시 남는다. 쿠키가 만료(최대 30일)되거나 다시 로그인할 때까지 이어진다. 그래서 `auth.refresh.rejected` 건수는 사건 수가 아니라 페이지 조회 수에 가깝고, 사건 수는 `auth.refresh.reuse_detected`로 센다. `env.invalid`는 검증이 성공했을 때만 캐시되므로 설정을 고칠 때까지 요청마다 한 건씩 남는다.
@@ -121,9 +122,15 @@ refresh 쿠키 없이 보호 라우트를 부른 401은 정상 흐름이고 양�
 - 정상: 드물게(더블 클릭). 비정상: 잦으면 클라이언트 중복 제출 방지 확인.
 
 **`health.check`** (info) — 헬스체크 정상 응답(200). 외부 프로브(`.github/workflows/health.yml`)가 매시 17분에 부르므로 배포된 버전마다 한 시간에 한 건쯤 남는다. 다른 앱 로그는 로그인·거부·오류 때만 남아 조용한 날에는 태그 로그가 0건이라, verify의 "이 버전이 요청을 받았다"는 근거(`--expect-event health.check`)로 쓴다.
-- 정상: 한 시간에 1건 안팎(cron 지연으로 비거나 몰릴 수 있다. 수동 실행·사람의 호출도 섞인다). `schemaState=ahead`는 원격 마이그레이션을 먼저 적용하고 코드를 아직 배포하지 않은 상태라 배포하면 사라진다.
-- 비정상: 몇 시간째 0건. 프로브가 멈췄거나(아래 "외부 프로브"의 60일 비활성화·cron 지연) Worker가 응답하지 않는다. Actions 탭의 `health` 실행 기록을 먼저 본다. `ahead`가 배포 뒤에도 남으면 원인은 둘 중 하나다. `EXPECTED_LATEST_MIGRATION` 갱신을 빠뜨렸거나, 아직 머지되지 않은 브랜치의 마이그레이션이 원격에 적용됐다(작업 트리에 그 파일이 있는 채로 `pnpm db:migrate:remote`를 돌린 경우). `npx wrangler d1 migrations list samrumantimer-db --remote`의 적용 목록을 main의 `migrations/`와 대조해 가린다. 프로브는 200이라 알림이 가지 않으므로 이 상태는 `obs.mjs events health.check`의 `schemaState`로만 보인다.
+- 정상: 한 시간에 1건 안팎(cron 지연으로 비거나 몰릴 수 있다. 수동 실행·사람의 호출도 섞인다). 원격이 앞선 `ahead`에서도 남는다(그 버전이 요청을 받았다는 사실은 스키마가 앞서도 참이라서다). 스키마 상태는 이 이벤트에 넣지 않고 `health.schema_ahead`로 따로 남긴다.
+- 비정상: 몇 시간째 0건. 프로브가 멈췄거나(아래 "외부 프로브"의 60일 비활성화·cron 지연) Worker가 응답하지 않는다. Actions 탭의 `health` 실행 기록을 먼저 본다.
 - 코드: `src/app/api/health/route.ts`, `src/lib/health.ts`(`EXPECTED_LATEST_MIGRATION`, `compareSchema`).
+
+**`health.schema_ahead`** (warn) — 원격 D1의 마지막 적용 마이그레이션이 코드가 기대하는 것보다 번호가 크다(`ahead`). "원격 마이그레이션 먼저, 배포 나중" 롤아웃 사이에도 생기는 상태라 응답은 200이고 프로브 알림은 가지 않는다. 그래서 배포 뒤에도 이어지는 경우를 알림 없이 놓치지 않도록 info인 `health.check`와 나눠 warn으로 남긴다.
+- 정상: 배포 직전 짧은 구간에만(프로브 기준 1~2건). 배포하면 사라진다.
+- 비정상: 24h에 3건 이상(몇 시간째 지속). 원인은 둘 중 하나다. `EXPECTED_LATEST_MIGRATION` 갱신을 빠뜨렸거나(테스트가 `migrations/`와 대조하므로 보통 CI에서 걸린다), 아직 머지되지 않은 브랜치의 마이그레이션이 원격에 적용됐다(작업 트리에 그 파일이 있는 채로 `pnpm db:migrate:remote`를 돌린 경우). 후자는 그 브랜치가 머지되기 전까지 다른 배포의 코드가 모르는 스키마가 원격에 있다는 뜻이다.
+- 조사: `node scripts/obs.mjs events health.schema_ahead --since 24h`로 `actual`을 보고, `npx wrangler d1 migrations list samrumantimer-db --remote`의 적용 목록을 main의 `migrations/`(`git ls-tree --name-only origin/main migrations/`)와 대조한다. main에 없는 파일이 원격에 적용돼 있으면 후자, 있으면 상수 갱신 누락이다.
+- 코드: `src/app/api/health/route.ts`, `src/lib/health.ts`(`compareSchema`).
 
 **`health.schema_drift`** (error) — 원격 D1의 마지막 적용 마이그레이션(`d1_migrations`)이 코드가 기대하는 것보다 뒤처졌다(`behind`), 번호가 같은데 이름이 다르다(`mismatch`), 또는 적용 기록이 없다(`missing`). 응답은 503 `SERVICE_UNAVAILABLE`이고 외부 프로브 job이 실패해 GitHub 알림이 간다. 사용자가 새 스키마를 쓰는 경로를 밟기 전에(`api.unhandled` `kind=schema_drift`보다 먼저) 잡으려는 것이다.
 - 정상: 0건. 비정상: 1건이라도. `expected`·`actual`에 파일명이 있다.
