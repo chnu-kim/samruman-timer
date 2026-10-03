@@ -46,7 +46,7 @@
 
 ## 이벤트 카탈로그
 
-새 이벤트를 만들면 이 표와 아래 상세에 추가한다. 이벤트 키는 영어 dot 표기(`auth.refresh.rejected`)다.
+새 이벤트를 만들면 이 표와 아래 상세에 추가한다. 이벤트 키는 영어 dot 표기(`auth.refresh.rejected`)다. `src/__tests__/observability-catalog.test.ts`가 코드의 `logger` 호출(이벤트 이름·레벨)과 이 표·상세 절을 양방향으로 대조하므로, 어긋나면 `pnpm test`가 실패한다. 이벤트 이름은 문자열 리터럴로 쓴다(레벨이 동적인 `logger[level]("event")`는 같은 파일의 `const level = ...` 선언에 레벨 리터럴이 있으면 허용).
 
 | event | level | 위치 | 주요 필드 |
 |-------|-------|------|-----------|
@@ -62,6 +62,8 @@
 | `auth.logout.revoke_failed` | error | `/api/auth/logout` | requestId, method, path, 오류 필드 |
 | `timer.modify.conflict_exhausted` | warn | `/api/timers/[id]/modify` (409) | requestId, timerId, action |
 | `timer.create.unique_race` | warn | `POST /api/projects/[id]/timers` | requestId, projectId |
+| `health.check` | info | `GET /api/health` (정상일 때만) | requestId, ok(`true`), schemaState(원격이 앞설 때만 `ahead`) |
+| `health.schema_drift` | error | `GET /api/health` (503) | requestId, method, path, ok(`false`), kind(`schema_drift`), schemaState(`behind`·`mismatch`·`missing`), expected, actual(마이그레이션 파일명, 없으면 null) |
 
 refresh 쿠키 없이 보호 라우트를 부른 401은 정상 흐름이고 양이 많아 남기지 않는다. 반면 거부된 refresh 쿠키(폐기된 family = `revoked`, `expired`, `family_expired`, `not_found`)는 쿠키를 로그아웃에서만 지우므로 그 브라우저가 페이지를 열 때마다(Header와 페이지가 각각 `/api/auth/me`를 부르므로 한 화면에 1~2건) `auth.refresh.rejected`가 다시 남는다. 쿠키가 만료(최대 30일)되거나 다시 로그인할 때까지 이어진다. 그래서 `auth.refresh.rejected` 건수는 사건 수가 아니라 페이지 조회 수에 가깝고, 사건 수는 `auth.refresh.reuse_detected`로 센다. `env.invalid`는 검증이 성공했을 때만 캐시되므로 설정을 고칠 때까지 요청마다 한 건씩 남는다.
 
@@ -118,9 +120,20 @@ refresh 쿠키 없이 보호 라우트를 부른 401은 정상 흐름이고 양�
 **`timer.create.unique_race`** (warn) — 타이머 생성 경합을 부분 UNIQUE 인덱스(0009)가 막았다. 사용자는 400을 받았고 데이터는 안전하다.
 - 정상: 드물게(더블 클릭). 비정상: 잦으면 클라이언트 중복 제출 방지 확인.
 
+**`health.check`** (info) — 헬스체크 정상 응답(200). 외부 프로브(`.github/workflows/health.yml`)가 매시 17분에 부르므로 배포된 버전마다 한 시간에 한 건쯤 남는다. 다른 앱 로그는 로그인·거부·오류 때만 남아 조용한 날에는 태그 로그가 0건이라, verify의 "이 버전이 요청을 받았다"는 근거(`--expect-event health.check`)로 쓴다.
+- 정상: 한 시간에 1건 안팎(cron 지연으로 비거나 몰릴 수 있다. 수동 실행·사람의 호출도 섞인다). `schemaState=ahead`는 원격 마이그레이션을 먼저 적용하고 코드를 아직 배포하지 않은 상태라 배포하면 사라진다.
+- 비정상: 몇 시간째 0건. 프로브가 멈췄거나(아래 "외부 프로브"의 60일 비활성화·cron 지연) Worker가 응답하지 않는다. Actions 탭의 `health` 실행 기록을 먼저 본다. `ahead`가 배포 뒤에도 남으면 원인은 둘 중 하나다. `EXPECTED_LATEST_MIGRATION` 갱신을 빠뜨렸거나, 아직 머지되지 않은 브랜치의 마이그레이션이 원격에 적용됐다(작업 트리에 그 파일이 있는 채로 `pnpm db:migrate:remote`를 돌린 경우). `npx wrangler d1 migrations list samrumantimer-db --remote`의 적용 목록을 main의 `migrations/`와 대조해 가린다. 프로브는 200이라 알림이 가지 않으므로 이 상태는 `obs.mjs events health.check`의 `schemaState`로만 보인다.
+- 코드: `src/app/api/health/route.ts`, `src/lib/health.ts`(`EXPECTED_LATEST_MIGRATION`, `compareSchema`).
+
+**`health.schema_drift`** (error) — 원격 D1의 마지막 적용 마이그레이션(`d1_migrations`)이 코드가 기대하는 것보다 뒤처졌다(`behind`), 번호가 같은데 이름이 다르다(`mismatch`), 또는 적용 기록이 없다(`missing`). 응답은 503 `SERVICE_UNAVAILABLE`이고 외부 프로브 job이 실패해 GitHub 알림이 간다. 사용자가 새 스키마를 쓰는 경로를 밟기 전에(`api.unhandled` `kind=schema_drift`보다 먼저) 잡으려는 것이다.
+- 정상: 0건. 비정상: 1건이라도. `expected`·`actual`에 파일명이 있다.
+- `behind`·`missing`: 아래 "kind별 대응"의 `schema_drift` 절차대로 사람에게 `pnpm db:migrate:remote`를 요청한다. `mismatch`: 다른 브랜치의 마이그레이션이 원격에 적용됐거나 파일 이름을 바꿨다. `npx wrangler d1 migrations list samrumantimer-db --remote`와 `migrations/`를 대조한다.
+- 성공 이벤트(`health.check`)와 이름을 나눈 이유: 하나로 두면 `--expect-event health.check`가 드리프트 실패까지 "살아 있다"는 근거로 센다.
+- 헬스체크의 D1 조회가 예외를 내면 이 이벤트가 아니라 500 + `api.unhandled`다(`d1_migrations` 테이블이 없으면 `kind=schema_drift`).
+
 ### kind별 대응
 
-- **`schema_drift`** (`no such table|column`): 코드가 원격 D1에 없는 스키마를 쓴다. 코드만 배포되고 마이그레이션이 빠진 장애 이력이 있다(`0007`).
+- **`schema_drift`** (`no such table|column`, 또는 `health.schema_drift`): 코드가 원격 D1에 없는 스키마를 쓴다. 코드만 배포되고 마이그레이션이 빠진 장애 이력이 있다(`0007`). 헬스체크가 배포 후 첫 프로브(최대 한 시간)에서 먼저 잡는다.
   1. `npx wrangler d1 migrations list samrumantimer-db --remote`로 적용 안 된 마이그레이션을 확인한다(읽기 전용)
   2. 있으면 사람에게 `pnpm db:migrate:remote` 실행을 요청한다. 원격 마이그레이션은 사람 승인 대상이다
   3. 적용 후 `obs.mjs verify --tag <현재 태그> --since <적용 시각>`으로 그친 것을 확인한다
@@ -237,8 +250,9 @@ Claude Code에 Cloudflare 플러그인이 연결돼 있으면 그 `execute` 도�
 - error 후보는 서버에서 태그로 거르지 않고 받아 클라이언트에서 버전을 가린다. 서버 태그 필터를 걸면 `versionTag`가 빠진 로그(버전 조회 실패 등)가 조용히 사라지기 때문이다. 2000건에서 잘리면 `truncated`이므로 `--since`를 좁힌다
 - `--event`는 레벨로 거르지 않는다. warn 이벤트(`timer.modify.conflict_exhausted`, `auth.refresh.reuse_detected` 등)도 대상으로 쓸 수 있다. info 로그는 정상 흐름이라 재발로 세지 않는다
 - `--event`도 `--issue`도 없으면 그 태그의 모든 error와 모든 active Issue가 대상이다. 고친 것과 무관한 오류로 1이 날 수 있으므로, 고친 대상으로 좁히고 1이면 출력된 항목이 대상과 맞는지 먼저 본다
-- `clean`은 "대상 오류가 보이지 않았다"이지 "수정한 경로가 실행됐다"가 아니다. 앱 로그는 로그인·거부·오류 때만 남아 트래픽 근거가 약하다. 수정한 경로에서 남는 이벤트(로그인 수정이면 `auth.login.succeeded`)를 `--expect-event`로 주면 그 이벤트가 태그 로그에 있어야 0이 된다. `--min-events 0`은 근거 없이 0을 만들 수 있으므로 쓰면 보고에 그렇게 적고, Issue resolve는 경로가 실행된 근거가 따로 있을 때 한다
+- `clean`은 "대상 오류가 보이지 않았다"이지 "수정한 경로가 실행됐다"가 아니다. 앱 로그는 로그인·거부·오류 때만 남아 트래픽 근거가 약하다. 수정한 경로에서 남는 이벤트(로그인 수정이면 `auth.login.succeeded`)를 `--expect-event`로 주면 그 이벤트가 태그 로그에 있어야 0이 된다. 수정한 경로가 따로 로그를 남기지 않으면 `--expect-event health.check`로 최소한 그 버전이 요청을 받았다는 근거를 둔다(외부 프로브가 매시 남긴다. 경로 실행의 근거는 아니다). `--min-events 0`은 근거 없이 0을 만들 수 있으므로 쓰면 보고에 그렇게 적고, Issue resolve는 경로가 실행된 근거가 따로 있을 때 한다
 - 태그 로그 0건은 배포가 안 됐거나, 태그가 틀렸거나, 트래픽이 없다는 뜻이다. `npx wrangler deployments list`로 그 태그가 배포됐는지 확인한다
+- 태그 로그에 `health.schema_drift`가 있으면 `--event`와 무관하게 `notes`에 건수를 적는다. 판정은 바꾸지 않는다(대상 오류의 재발 여부와 별개의 문제라서다). `--event` 없이 돌리면 error라 재발 후보에도 들어간다
 - `--event`만 주면 Issues는 보지 않는다(Issue와 event를 대응시킬 방법이 없다). 특정 Issue를 함께 보려면 `--issue <id>`
 - occurrence는 API가 최신순으로 준다(OpenAPI 설명 "newest first"). `result_info.cursors.after`로 넘기며 `--since`보다 오래된 행에서 멈춘다. 페이지 한도(5쪽)를 다 쓰고도 `--since`에 닿지 못하면 `truncated`다
 - Issues 권한이 없는 토큰이면 `--skip-issues`로 로그만 보고 판정한다. 출력의 `notes`에 남는다
@@ -253,7 +267,7 @@ Claude Code에 Cloudflare 플러그인이 연결돼 있으면 그 `execute` 도�
 2. **재현·원인**: `obs.mjs request <requestId>`로 한 요청의 로그를 모으고, 위 카탈로그의 코드 위치와 `kind`별 대응을 따라 원인을 좁힌다. `versionTag`로 어느 배포에서 시작됐는지 보고 `git log <이전 태그>..<태그>`로 의심 변경을 찾는다. 로컬 재현은 `pnpm db:migrate:local` 후 `pnpm dev` 또는 테스트로 한다
 3. **수정 PR**: 실패를 재현하는 테스트를 먼저 쓰고 고친다. `pnpm test`, `pnpm build`를 통과시킨다. PR 본문에 근거와 verify 계획을 적는다. 근거는 위 "PII 규칙"의 공개 저장소 기준(이벤트 이름·`kind`·건수·기간·`versionTag`만, ID·오류 원문 제외)을 따른다
 4. **배포(사람 승인)**: 머지 후 사람이 `pnpm run deploy`를 실행한다. 스크립트가 배포 태그(git short SHA 12자)와, 끝나면 배포 시각(deploy 단계 시작 시각. 새 버전은 그 명령이 끝나기 전부터 요청을 받는다)과 `--since`를 채운 verify 명령을 출력한다. 스키마 변경이 있으면 원격 마이그레이션을 먼저 적용한다(사람)
-5. **재발 판정**: 충분한 시간이 지난 뒤 `obs.mjs verify --tag <태그> --since <배포 시각> --event <e> [--issue <id>] [--expect-event <e>]`. 토큰이 없으면 같은 옵션에 `--print-plugin-code`를 붙여 받은 코드를 플러그인 execute로 돌리고, 그 결과 파일로 `verify --input`을 실행한다("플러그인으로 재발 판정"). 0이면 다음 단계, 1이면 출력이 고친 대상과 맞는지 확인하고 2로 돌아간다, 2면 `reason`(조회 실패·근거 부족)을 해소하고 다시 본다
+5. **재발 판정**: 충분한 시간이 지난 뒤(외부 프로브가 한 번 이상 돈 뒤, 배포 후 1시간 이상) `obs.mjs verify --tag <태그> --since <배포 시각> --event <e> [--issue <id>] --expect-event <e>`. `--expect-event`는 수정한 경로의 성공 이벤트가 있으면 그것을, 없으면 `health.check`를 준다. 다만 `health.check`는 버전이 살아 있다는 근거일 뿐 수정한 경로가 실행됐다는 근거가 아니므로 보고에 그렇게 적는다. `health.schema_drift`가 있으면 그 버전은 원격 마이그레이션이 빠졌다는 뜻이라 먼저 해소한다. `--event`로 좁히면 이 이벤트는 재발 후보에서 빠지므로 판정(exit)에는 반영되지 않고 verify 출력의 `notes`에만 나온다. 따로 볼 때는 `obs.mjs events health.schema_drift --since <배포 시각>`. 토큰이 없으면 같은 옵션에 `--print-plugin-code`를 붙여 받은 코드를 플러그인 execute로 돌리고, 그 결과 파일로 `verify --input`을 실행한다("플러그인으로 재발 판정"). 0이면 다음 단계, 1이면 출력이 고친 대상과 맞는지 확인하고 2로 돌아간다, 2면 `reason`(조회 실패·근거 부족)을 해소하고 다시 본다
 6. **정리**: 해당 Issue를 대시보드에서 resolve하고(사람 또는 권한 있는 도구), 카탈로그의 정상/비정상 기준이 틀렸으면 이 문서를 고친다
 
 ### 배포 태그
@@ -293,6 +307,17 @@ Issues의 알림 목적지로 Claude Code Routine(Routine ID + 토큰)이나 Gen
 - Routine 환경에도 `CF_OBS_TOKEN`이 있어야 한다. 없으면 `obs.mjs`가 늘 2로 끝나 Issue ID만 보고하게 된다. 로컬 토큰을 복사하지 말고 Routine 전용 토큰을 따로 만들어(위 "조회용 API 토큰"과 같은 권한·범위, 스모크 테스트를 통과한 가장 좁은 권한) Routine의 환경 설정에만 둔다. 그래야 노출됐을 때 그 토큰만 roll하면 되고 로컬 작업은 영향받지 않는다. 토큰 없이 쓰기로 했다면 Routine 프롬프트에 "Issue ID와 대시보드 링크만 보고한다"고 적는다
 - 알림 폭주를 막으려면 새 Issue에만 걸고, 재발(regression) 알림은 사람이 보는 채널로 둔다
 
+### 외부 프로브 (`.github/workflows/health.yml`)
+
+GitHub Actions가 매시 17분(정각 혼잡을 피함)과 수동 실행(`workflow_dispatch`)에 `SITE_URL`의 `/api/health`를 curl로 부른다(시간 초과 10초, 일시 오류 재시도 2회). 200이 아니면 job이 실패하고 GitHub이 실패 알림을 보낸다. 추가 비용·계정이 필요 없는 알림 경로다.
+
+- 권한은 `permissions: {}`(GITHUB_TOKEN 권한 없음)다. 저장소를 checkout하지 않는다
+- 주소는 workflow에 적혀 있다. `src/lib/__tests__/health.test.ts`가 `SITE_URL`과 같은지 확인하므로, 도메인을 바꾸면 테스트가 깨진다
+- 공개 저장소라 Actions 로그도 공개다. 상태 코드와 본문(`{ data: { ok } }` 또는 `{ error: { code, message } }`)만 찍고 `x-request-id` 같은 응답 헤더는 찍지 않는다. 실패 원인은 같은 시각의 `health.schema_drift`·`api.unhandled`·`env.invalid` 로그로 본다
+- GitHub 동작(2026-10 기준 문서): schedule은 기본 브랜치에 머지된 뒤에만 돈다. 부하가 높으면 수십 분 늦거나 빠질 수 있다. 실패 알림은 cron을 마지막으로 바꾼 사용자에게 간다(Settings → Notifications → Actions에서 받을지 정한다). 공개 저장소에 60일 동안 활동이 없으면 schedule이 자동으로 꺼진다. Actions 탭에서 다시 켠다
+- Workers 요청이 하루 24건(수동 실행 제외) 늘고, 같은 수만큼 `health.check` 로그가 남는다. 무료 한도에 비하면 무시할 수준이다(`docs/ARCHITECTURE.md` "무료 한도와 초과 시 동작")
+- rate limit은 범위 밖이다. 공개 경로지만 조회 1회·최소 응답이라 다른 공개 GET과 같은 수준이고, rate limit은 보안 감사 후속 항목으로 따로 다룬다
+
 ### invocation log
 
 켜면 요청마다 상태 코드·지연이 남아 조사가 쉬워지지만 `Cookie` 헤더가 남을 수 있다. 켜기 전 마스킹 확인 절차는 `docs/ARCHITECTURE.md` "invocation log를 켜는 절차"를 따른다. 켜기 전에는 5xx를 Issues가 http-status로 잡는지 확인되지 않았다. 앱은 5xx를 낼 때 level=error 로그를 남기므로 structured-log 경로(`errors`, `verify`)로 잡힌다.
@@ -308,7 +333,8 @@ CLI 대신 Cloudflare 대시보드 → Workers & Pages → `samrumantimer` → O
 - 사용자 신고 추적: `requestId` = 응답 헤더 `x-request-id` 값
 - 서버 오류 전체: `level` = `error`
 - 특정 배포: `versionTag` = 배포 태그
-- 마이그레이션 누락 의심: `kind` = `schema_drift`
+- 마이그레이션 누락 의심: `kind` = `schema_drift` (헬스체크가 잡은 것은 `event` = `health.schema_drift`)
+- 버전이 살아 있는지: `event` = `health.check`, `versionTag` = 배포 태그
 - 로그인 장애: `event` = `auth.login.failed`, `stage`·`status`·`timedOut`로 나눠 본다
 - 세션 탈취 의심: `event` = `auth.refresh.reuse_detected`
 - 묶인 오류는 Issues 탭에서 본다
