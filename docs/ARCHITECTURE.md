@@ -144,7 +144,7 @@ migrations/
   0009_timer_unique_and_session_lifetime.sql — 프로젝트당 타이머 유일 인덱스, refresh family 절대 만료
 
 scripts/
-  deploy.mjs                            — pnpm run deploy 진입점 (git short SHA 버전 태그, dirty 트리 거부)
+  deploy.mjs                            — pnpm run deploy 진입점 (git short SHA 버전 태그, dirty 트리·origin/main 밖 HEAD 거부)
   obs.mjs                               — 운영 로그·Issues 읽기 전용 조회 CLI (docs/OBSERVABILITY.md)
   lib/                                  — 위 둘의 순수 로직 (version-tag.mjs, obs.mjs). 테스트는 scripts/__tests__/
 
@@ -273,8 +273,8 @@ wrangler d1 migrations apply samrumantimer-db --remote   # pnpm db:migrate:remot
 npx wrangler d1 migrations list samrumantimer-db --remote
 
 # 배포 (pnpm run deploy → scripts/deploy.mjs)
-# git short SHA(12자)를 버전 태그로 붙인다. 커밋되지 않은 변경이 있으면 거부한다(docs/OBSERVABILITY.md "배포 태그")
-npx opennextjs-cloudflare build && npx opennextjs-cloudflare deploy --tag <git short SHA>
+# git short SHA(12자)를 버전 태그로 붙인다. 커밋되지 않은 변경이 있거나 HEAD가 origin/main에 없으면 거부한다(docs/OBSERVABILITY.md "배포 태그")
+npx opennextjs-cloudflare build && npx opennextjs-cloudflare deploy --tag=<git short SHA>
 ```
 
 ## 운영 로그·관측

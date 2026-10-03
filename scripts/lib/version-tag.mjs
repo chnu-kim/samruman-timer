@@ -57,3 +57,41 @@ export function normalizeVerifyTag(input) {
   }
   return { ok: true, tag: `${hex.slice(0, SHA_LENGTH)}${dirty}` };
 }
+
+/**
+ * 배포 명령. 태그는 `--tag=<값>` 한 인자로 넘긴다.
+ * opennextjs-cloudflare는 yargs `unknown-options-as-args`로 모르는 옵션을 위치 인자 `args..`에 모으는데,
+ * `--tag <값>`처럼 값을 따로 주면 그 값이 숫자로 바뀐다(`1234567890e3` → `1234567890000`). 그러면 커밋과 다른 태그로
+ * 배포된다. `--tag=<값>`은 한 문자열로 그대로 넘어간다(wrangler도 이 형식을 받는다).
+ * @param {string} tag
+ * @returns {[string, string[]][]}
+ */
+export function deploySteps(tag) {
+  return [
+    ["npx", ["opennextjs-cloudflare", "build"]],
+    ["npx", ["opennextjs-cloudflare", "deploy", `--tag=${tag}`]],
+  ];
+}
+
+/**
+ * 배포할 커밋이 공유 이력(origin/main)에 있는지 확인한다.
+ * 기능 브랜치나 push 안 한 커밋을 배포하면 태그가 다른 머신·Routine에 없는 커밋을 가리켜
+ * `git log <이전 태그>..<태그>` 조사가 막힌다.
+ * @param {{ onOriginMain: boolean, allowOffMain?: boolean }} input
+ *   onOriginMain: `git merge-base --is-ancestor HEAD origin/main` 성공 여부
+ * @returns {{ ok: true, warning?: string } | { ok: false, reason: string }}
+ */
+export function checkDeployRef({ onOriginMain, allowOffMain = false }) {
+  if (onOriginMain) return { ok: true };
+  if (allowOffMain) {
+    return {
+      ok: true,
+      warning: "HEAD가 origin/main에 없다. 이 태그의 커밋은 다른 머신에서 찾을 수 없을 수 있다(--allow-off-main)",
+    };
+  }
+  return {
+    ok: false,
+    reason:
+      "HEAD가 origin/main에 없다(기능 브랜치이거나 push하지 않은 커밋). main에 머지·push한 뒤 배포한다. 원격 상태가 오래됐다면 git fetch origin 후 다시 실행한다. 꼭 이 커밋을 배포해야 하면 --allow-off-main",
+  };
+}

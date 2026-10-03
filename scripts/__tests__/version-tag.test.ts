@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveDeployTag, normalizeVerifyTag, TAG_PATTERN, SHA_LENGTH } from "../lib/version-tag.mjs";
+import { resolveDeployTag, normalizeVerifyTag, deploySteps, checkDeployRef, TAG_PATTERN, SHA_LENGTH } from "../lib/version-tag.mjs";
 
 describe("resolveDeployTag", () => {
   it("깨끗한 트리는 12자 short SHA를 태그로 쓴다", () => {
@@ -59,5 +59,31 @@ describe("normalizeVerifyTag", () => {
   it("deploy가 만드는 태그는 verify가 그대로 받는다", () => {
     const deployed = resolveDeployTag({ sha: "abcdef0123456789", porcelain: "" });
     expect(deployed.ok && normalizeVerifyTag(deployed.tag)).toEqual({ ok: true, tag: "abcdef012345" });
+  });
+});
+
+describe("deploySteps", () => {
+  it("태그를 --tag=값 한 인자로 넘긴다(yargs가 1234567890e3 같은 값을 숫자로 바꾸지 못하게)", () => {
+    for (const tag of ["abcdef012345", "1234567890e3", "123456789e05-dirty"]) {
+      const [, deploy] = deploySteps(tag);
+      expect(deploy).toEqual(["npx", ["opennextjs-cloudflare", "deploy", `--tag=${tag}`]]);
+      expect(deploy[1]).not.toContain("--tag");
+    }
+    expect(deploySteps("abcdef012345")[0]).toEqual(["npx", ["opennextjs-cloudflare", "build"]]);
+  });
+});
+
+describe("checkDeployRef", () => {
+  it("HEAD가 origin/main에 있으면 통과", () => {
+    expect(checkDeployRef({ onOriginMain: true })).toEqual({ ok: true });
+  });
+
+  it("없으면 git fetch·머지 안내와 함께 거부하고, --allow-off-main이면 경고만 한다", () => {
+    const r = checkDeployRef({ onOriginMain: false });
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.reason).toContain("git fetch");
+    expect(!r.ok && r.reason).toContain("--allow-off-main");
+    const allowed = checkDeployRef({ onOriginMain: false, allowOffMain: true });
+    expect(allowed).toEqual({ ok: true, warning: expect.stringContaining("origin/main") });
   });
 });
