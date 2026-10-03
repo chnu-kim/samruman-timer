@@ -21,6 +21,8 @@ const nextConfig: NextConfig = {
       },
       {
         // 오버레이 페이지만 정확히 제외하고 프레이밍을 막는다. `$`가 없으면 /timers/x/overlayfoo 같은 경로도 빠진다.
+        // 끝 슬래시(/timers/x/overlay/)는 Next가 기본값 trailingSlash: false로 슬래시 없는 주소로 308 리다이렉트하고,
+        // 브라우저는 최종 응답의 헤더로 프레이밍을 판정하므로 따로 제외하지 않는다(trailingSlash를 켜면 이 규칙도 고쳐야 한다).
         // script-src는 Next 인라인 스크립트·테마 초기화 스크립트 때문에 nonce 도입 전까지 두지 않는다.
         source: "/((?!timers/[^/]+/overlay$).*)",
         headers: [

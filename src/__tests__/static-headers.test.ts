@@ -42,3 +42,12 @@ describe("public/_headers", () => {
     }
   });
 });
+
+describe("오버레이 프레이밍", () => {
+  // 프레이밍 차단 규칙은 끝 슬래시 없는 /timers/<id>/overlay만 제외한다. 끝 슬래시 주소가 OBS에서 막히지 않는 것은
+  // Next가 그 주소를 슬래시 없는 주소로 308 리다이렉트하기 때문이므로, trailingSlash를 켜면 이 전제가 깨진다
+  it("trailingSlash를 켜지 않아 끝 슬래시 오버레이 주소가 프레이밍 허용 주소로 리다이렉트된다", async () => {
+    const { default: config } = await import("../../next.config");
+    expect(config.trailingSlash).not.toBe(true);
+  });
+});

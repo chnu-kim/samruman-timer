@@ -2,8 +2,8 @@
 // 같은 규칙을 sw.js에도 둔다. 둘이 어긋나지 않는지는 src/__tests__/sw.test.ts가 같은 경로 표로 확인한다.
 
 /**
- * OBS 브라우저 소스로 쓰이는 오버레이 경로. next.config.ts의 오버레이 CSP 분기와 같은 경로를 대상으로 하되,
- * 그쪽(`overlay$`)과 달리 끝 슬래시도 포함한다.
+ * OBS 브라우저 소스로 쓰이는 오버레이 경로. next.config.ts의 오버레이 헤더 규칙(`overlay$`)과 달리 끝 슬래시도 포함한다.
+ * 서버는 끝 슬래시 주소를 슬래시 없는 주소로 리다이렉트하지만, 서비스워커는 리다이렉트 전 원래 요청 URL을 보기 때문이다.
  */
 export const OVERLAY_PATH_PATTERN = /^\/timers\/[^/]+\/overlay\/?$/;
 
