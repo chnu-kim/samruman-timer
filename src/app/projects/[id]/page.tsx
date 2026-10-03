@@ -461,7 +461,6 @@ export default function ProjectDetailPage() {
                 remainingSeconds={timers[0].remainingSeconds}
                 status={timers[0].status}
                 scheduledStartAt={timers[0].scheduledStartAt}
-                createdAt={timers[0].createdAt}
                 size="large"
               />
               {/* 타이머 화면으로 가는 유일한 링크이므로 터치 기기에서도 보이는 이동 단서를 둔다 */}

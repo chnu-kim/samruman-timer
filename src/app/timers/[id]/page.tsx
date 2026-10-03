@@ -493,7 +493,6 @@ export default function TimerDetailPage() {
             remainingSeconds={timer.remainingSeconds}
             status={timer.status}
             scheduledStartAt={timer.scheduledStartAt}
-            createdAt={timer.createdAt}
             size="large"
           />
         </div>
