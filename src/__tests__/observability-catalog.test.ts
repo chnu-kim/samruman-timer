@@ -10,19 +10,19 @@
  * 단 레벨이 동적인 `logger[level]("literal")`은 이벤트가 리터럴이면 허용한다(auth/callback이 쓴다).
  * 이때 레벨은 `const level = ...` 선언문(같은 이름이 여럿이면 합집합)이나 인라인 삼항 안의
  * "info"|"warn"|"error" 리터럴로 추출하고, 못 찾으면 실패한다.
- * 한계: `logger`를 별칭 import하거나 다른 변수에 대입하면 호출을 못 찾으므로 그 형태 자체를 금지·검사한다.
+ * 한계: 호출을 못 찾게 만드는 형태(별칭 import, 대입·인자 전달·구조분해, `const w = logger.warn` 같은 메서드 참조,
+ * `import * as X`·default import·re-export·`require`·동적 `import()`)는 그 형태 자체를 problems로 실패시킨다.
+ * 스캐너는 logger-scan.ts에 있고 우회 형태별 픽스처 테스트는 logger-scan.test.ts에 있다.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { LEVELS, scanLoggerSource, type LogCall } from "./logger-scan";
 
 const ROOT = path.resolve(__dirname, "../..");
 const SRC = path.join(ROOT, "src");
 const DOC = path.join(ROOT, "docs/OBSERVABILITY.md");
 const DOC_REL = "docs/OBSERVABILITY.md";
-const LEVELS = ["info", "warn", "error"];
-
-type LogCall = { event: string; levels: string[]; file: string; line: number };
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -36,77 +36,13 @@ function isProductionSource(file: string): boolean {
   return /\.tsx?$/.test(file) && !/\.(test|stories)\.tsx?$/.test(file);
 }
 
-/** 주석(줄·블록·줄 끝 인라인, JSX 주석 포함)에 적힌 예시 호출이 호출로 잡히지 않도록 지운다. 줄 번호는 유지한다 */
-function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, ""))
-    .replace(/\/\/.*$/gm, (c, offset: number) => (source[offset - 1] === ":" ? c : ""));
-}
-
-function lineOf(source: string, index: number): number {
-  return source.slice(0, index).split("\n").length;
-}
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-const LEVEL_LITERAL = /["'](info|warn|error)["']/g;
-
-/** `const level = cond ? "info" : "warn";` 같은 선언문에서 레벨 리터럴을 모은다. 같은 이름의 선언이 여럿이면 합집합 */
-function dynamicLevels(source: string, name: string): string[] {
-  const decl = new RegExp(`\\b(?:const|let)\\s+${escapeRegExp(name)}\\b[^;]*;`, "g");
-  return [...source.matchAll(decl)].flatMap((d) => [...d[0].matchAll(LEVEL_LITERAL)].map((m) => m[1]));
-}
-
 function collectCalls(): { calls: LogCall[]; problems: string[] } {
   const calls: LogCall[] = [];
   const problems: string[] = [];
-  const files = walk(SRC).filter(isProductionSource);
-  for (const file of files) {
-    const rel = path.relative(ROOT, file);
-    const source = stripComments(readFileSync(file, "utf8"));
-    // 별칭·재대입은 호출 스캔이 놓치므로 형태 자체를 막는다(logger.ts 정의 파일은 제외)
-    if (!/lib\/logger\.tsx?$/.test(rel) && (/\blogger\s+as\b/.test(source) || /[=,]\s*logger\s*[;,)\n]/.test(source))) {
-      problems.push(
-        `${rel}: logger를 별칭 import하거나 다른 변수에 대입했다. 이 테스트가 호출을 찾지 못하므로 \`logger.info(...)\`처럼 직접 호출하라.`,
-      );
-    }
-    // logger.info( / logger["info"]( / logger[level]( / 줄바꿈 체인(logger\n .info()
-    const re = /\blogger\s*(?:\.\s*(\w+)|\[([^\]]+)\])\s*\(\s*([^),]*)/g;
-    for (const m of source.matchAll(re)) {
-      const line = lineOf(source, m.index!);
-      const where = `${rel}:${line}`;
-      const lit = /^(["'`])([^"'`$]*)\1$/.exec(m[3].trim());
-      if (!lit) {
-        problems.push(
-          `${where}: logger 호출의 이벤트 이름이 문자열 리터럴이 아니다(\`${m[0].trim()}\`). ` +
-            `카탈로그와 정적으로 대조할 수 없으므로 리터럴로 쓰거나, 이 테스트의 스캔 방식을 확장하라.`,
-        );
-        continue;
-      }
-      let levels: string[];
-      if (m[1]) {
-        levels = [m[1]];
-      } else {
-        const expr = m[2].trim();
-        const quoted = /^["'](\w+)["']$/.exec(expr);
-        const inline = [...expr.matchAll(LEVEL_LITERAL)].map((x) => x[1]);
-        levels = quoted ? [quoted[1]] : inline.length > 0 ? inline : dynamicLevels(source, expr);
-        if (levels.length === 0) {
-          problems.push(
-            `${where}: logger[${expr}]의 레벨을 알 수 없다. \`const ${expr} = cond ? "info" : "warn";\`처럼 ` +
-              `같은 파일의 선언문에 레벨 리터럴을 두어라.`,
-          );
-          continue;
-        }
-      }
-      if (!levels.every((l) => LEVELS.includes(l))) {
-        problems.push(`${where}: logger.${levels.join("/")}는 지원하는 레벨(${LEVELS.join("·")})이 아니다.`);
-        continue;
-      }
-      calls.push({ event: lit[2], levels, file: rel, line });
-    }
+  for (const file of walk(SRC).filter(isProductionSource)) {
+    const scanned = scanLoggerSource(readFileSync(file, "utf8"), path.relative(ROOT, file));
+    calls.push(...scanned.calls);
+    problems.push(...scanned.problems);
   }
   return { calls, problems };
 }

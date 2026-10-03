@@ -23,17 +23,20 @@ function logsOf(spy: MockInstance<typeof console.log>) {
 let db: ReturnType<typeof createMockDB>;
 let consoleLog: MockInstance<typeof console.log>;
 let consoleError: MockInstance<typeof console.error>;
+let consoleWarn: MockInstance<typeof console.warn>;
 
 beforeEach(() => {
   db = createMockDB();
   vi.mocked(getDB).mockResolvedValue(db as unknown as D1Database);
   consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
   consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+  consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 
 afterEach(() => {
   consoleLog.mockRestore();
   consoleError.mockRestore();
+  consoleWarn.mockRestore();
 });
 
 describe("GET /api/health", () => {
@@ -52,15 +55,34 @@ describe("GET /api/health", () => {
     expect(logs).toHaveLength(1);
     expect(logs[0]).toMatchObject({ level: "info", event: "health.check", requestId: REQUEST_ID, ok: true });
     expect(consoleError).not.toHaveBeenCalled();
+    expect(consoleWarn).not.toHaveBeenCalled();
   });
 
-  it("원격이 앞서 있으면(마이그레이션 먼저 적용 후 배포 전) 200 + schemaState=ahead", async () => {
+  it("원격이 앞서 있으면(마이그레이션 먼저 적용 후 배포 전) 200 + health.check(info) + health.schema_ahead(warn)", async () => {
     db._stmt.first.mockResolvedValue({ name: "9999_future.sql" });
 
     const res = await GET(healthRequest());
 
+    // 정상 롤아웃 중에도 생기는 상태라 프로브 알림이 가지 않게 200을 유지한다
     expect(res.status).toBe(200);
-    expect(logsOf(consoleLog)[0]).toMatchObject({ event: "health.check", ok: true, schemaState: "ahead" });
+    expect(await parseJson(res)).toEqual({ data: { ok: true } });
+
+    // health.check는 그대로 남고(버전이 요청을 받았다는 근거) 스키마 상태는 섞지 않는다
+    const logs = logsOf(consoleLog);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({ level: "info", event: "health.check", requestId: REQUEST_ID, ok: true });
+    expect(logs[0]).not.toHaveProperty("schemaState");
+
+    const warns = logsOf(consoleWarn);
+    expect(warns).toHaveLength(1);
+    expect(warns[0]).toMatchObject({
+      level: "warn",
+      event: "health.schema_ahead",
+      requestId: REQUEST_ID,
+      schemaState: "ahead",
+      expected: EXPECTED_LATEST_MIGRATION,
+      actual: "9999_future.sql",
+    });
     expect(consoleError).not.toHaveBeenCalled();
   });
 
