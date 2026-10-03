@@ -409,29 +409,41 @@ describe("조회 경로도 근거가 애매하면 0으로 끝내지 않는다", 
   });
 });
 
-describe("severity: debt는 보고만 하고 exit code를 올리지 않는다", () => {
+describe("severity: debt는 따로 verdict debt(exit 3)로 낸다", () => {
   const weak = () => warn("env.weak_jwt_secret", { variable: "JWT_SECRET", minBytes: 32 });
 
-  it("debt만 있으면 0(normal)이고 debt 칸에 남는다", async () => {
+  it("debt만 있으면 3(debt)이고 debt 칸에 남는다. 정상(0)으로 보고되지 않는다", async () => {
     const r = await exec(["triage", "--json"], { route: route({ warns: [weak()] }) });
-    expect(r.code).toBe(EXIT.OK);
+    expect(r.code).toBe(EXIT.DEBT);
+    expect(EXIT.DEBT).toBe(3);
     const rep = full(r);
-    expect(rep).toMatchObject({ verdict: "normal", exitCode: 0, abnormal: [] });
+    expect(rep).toMatchObject({ verdict: "debt", exitCode: 3, abnormal: [] });
     expect(rep.debt).toHaveLength(1);
     expect(rep.debt[0]).toMatchObject({ event: "env.weak_jwt_secret", severity: "debt" });
     const plain = await exec(["triage"], { route: route({ warns: [weak()] }) });
-    expect(summary(plain)).toMatchObject({ verdict: "normal", debt: 1, abnormal: 0 });
+    expect(plain.code).toBe(EXIT.DEBT);
+    expect(summary(plain)).toMatchObject({ verdict: "debt", debt: 1, abnormal: 0 });
     expect(plain.out.slice(1).map((l) => JSON.parse(l))).toContainEqual({ debt: expect.objectContaining({ event: "env.weak_jwt_secret" }) });
     expect(plain.err.join("\n")).toContain("부채");
   });
 
-  it("debt가 unknown·truncated를 가리지 않는다(2), 실제 비정상이 함께 있으면 1", async () => {
+  it("우선순위: abnormal(1) > 조회 실패·근거 부족(2) > debt(3)", async () => {
     const withUnknown = await exec(["triage"], { route: route({ warns: [weak(), warn("brand.new_warning")] }) });
     expect(withUnknown.code).toBe(EXIT.FAILED);
-    expect(summary(withUnknown)).toMatchObject({ verdict: "insufficient", reason: "unknown" });
+    expect(summary(withUnknown)).toMatchObject({ verdict: "insufficient", reason: "unknown", debt: 1 });
+    const pages = Array.from({ length: 6 }, (_, i) => [{ id: `i${i}`, lastObserved: Date.parse("2026-09-30T10:00:00Z") }]);
+    const withTruncated = await exec(["triage"], { route: route({ warns: [weak()], issuePages: pages }) });
+    expect(withTruncated.code).toBe(EXIT.FAILED);
+    expect(summary(withTruncated)).toMatchObject({ verdict: "insufficient", reason: "truncated", debt: 1 });
     const withAbnormal = await exec(["triage"], { route: route({ warns: [weak()], errors: [error("api.unhandled")] }) });
     expect(withAbnormal.code).toBe(EXIT.RECURRED);
-    expect(summary(withAbnormal)).toMatchObject({ abnormal: 1, debt: 1 });
+    expect(summary(withAbnormal)).toMatchObject({ verdict: "abnormal", abnormal: 1, debt: 1 });
+  });
+
+  it("플러그인 경로(--input)도 debt만 있으면 3", async () => {
+    const { judged } = await viaPlugin(WINDOW, route({ warns: [weak()] }));
+    expect(judged.code).toBe(EXIT.DEBT);
+    expect(summary(judged).verdict).toBe("debt");
   });
 });
 

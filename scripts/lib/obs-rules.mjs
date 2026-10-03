@@ -19,7 +19,7 @@
 export const TRIAGE_RULES = [
   { event: "api.unhandled", levels: ["error"], conditions: [{ id: "any", min: 1 }] },
   { event: "env.invalid", levels: ["error"], conditions: [{ id: "any", min: 1 }] },
-  // 보이는 동안은 비정상이지만 긴급하지 않다(Secret 교체는 모든 세션을 끊으므로 사람이 시점을 정한다). triage는 debt 칸에 싣고 exit code에 넣지 않는다
+  // 보이는 동안은 비정상이지만 긴급하지 않다(Secret 교체는 모든 세션을 끊으므로 사람이 시점을 정한다). triage는 debt 칸에 싣고, 다른 판정(1·2)이 없을 때만 exit 3(debt)으로 낸다
   { event: "env.weak_jwt_secret", levels: ["warn"], severity: "debt", conditions: [{ id: "any", min: 1 }] },
   { event: "auth.refresh.failed", levels: ["error"], conditions: [{ id: "any", min: 1 }] },
   {

@@ -84,7 +84,7 @@ refresh 쿠키 없이 보호 라우트를 부른 401은 정상 흐름이고 양�
 - 조사: `obs.mjs events env.invalid --limit 5`.
 
 **`env.weak_jwt_secret`** (warn) — `JWT_SECRET`이 32바이트 미만. 서비스는 계속 돈다.
-- 비정상: 1건 이상. isolate가 뜰 때마다 남을 수 있다. 보이는 동안은 비정상(보안 부채)이지만 긴급하지 않다. triage는 이것을 `abnormal`이 아니라 `debt` 칸에 싣고 exit code에 넣지 않는다(아래 "triage 판정"). Secret 교체는 모든 세션을 끊으므로 사람이 시점을 정한다.
+- 비정상: 1건 이상. isolate가 뜰 때마다 남을 수 있다. 보이는 동안은 비정상(보안 부채)이지만 긴급하지 않다. triage는 이것을 `abnormal`이 아니라 `debt` 칸에 싣고, 다른 판정(1·2)이 없을 때만 exit 3(`debt`)으로 낸다(아래 "triage 판정"). Secret 교체는 모든 세션을 끊으므로 사람이 시점을 정한다.
 
 **`auth.refresh.failed`** (error) — 미들웨어의 refresh 회전 중 예외(대개 D1). 그 요청은 500.
 - 정상: 0건. 비정상: 1건 이상. `kind=schema_drift`면 원격 마이그레이션 누락.
@@ -166,7 +166,7 @@ node scripts/obs.mjs triage --input <file> --since <ISO> --until <ISO> [--skip-i
 - 공통: `--json`(API 응답 원문, verify·triage는 판정 객체), `--limit N`(기본 100, 최대 2000. triage는 `--limit`·`--path`를 받지 않고 인자 오류로 끝난다. 항상 level별 2000건, 경로 필터 없음), `--since`(기간 `15m`·`1h`·`3d` 또는 ISO 시각), `--until`(끝 시각, 기본 지금)
 - Issue occurrence에서 앱 로그로: occurrence에는 앱 `requestId`가 없다(`invocationId`는 런타임의 invocation ID라 앱 requestId와 다르다). occurrence의 `timestamp`·`path`로 `errors --since <시각-5분> --until <시각+5분> --path <path>`를 부르고, 나온 `requestId`로 `request`를 부른다
 - 환경변수: `CF_OBS_TOKEN`(필수. verify·triage의 `--print-plugin-code`·`--input`은 API를 부르지 않아 필요 없다), `CLOUDFLARE_ACCOUNT_ID`(선택, 기본값은 이 서비스 계정. 계정 ID는 대시보드 URL에도 드러나는 값이고 토큰 없이는 쓸 수 없어 비밀로 보지 않는다)
-- 종료 코드: 0 성공, 2 조회 실패(인자 오류, 네트워크, 401/403, API 오류). verify·triage는 판정을 exit code로 낸다(아래 "triage 판정", "verify 판정"). 401/403이면 토큰 권한 안내를 낸다. 토큰은 어떤 출력에도 나오지 않는다
+- 종료 코드: 0 성공, 2 조회 실패(인자 오류, 네트워크, 401/403, API 오류). verify·triage는 판정을 exit code로 낸다(아래 "triage 판정", "verify 판정"). 3은 triage만 낸다(부채만 있음). 401/403이면 토큰 권한 안내를 낸다. 토큰은 어떤 출력에도 나오지 않는다
 - 보관 기간이 지나면(현재 3일, 2026-12-01부터 7일) 조회되지 않는다
 
 응답 모양(2026-10-03 실측):
@@ -259,17 +259,18 @@ Issue 목록 행은 verify와 같은 `slimIssue`로 판정이 읽는 필드만 �
   - `abnormal`: 조건 하나라도 임계 이상, 규칙에 없는 error 이벤트(또는 규칙에 없는 level로 나온 error), 규칙이 예상하지 못한 값(`stage` 없음 등)의 error, 앱 이벤트 이름이 아닌 error(런타임 예외 메시지는 `(앱 이벤트 아님)`으로 묶고 원문은 내지 않는다)
   - `unknown`: 규칙에 없는 warn 이벤트, 규칙이 예상하지 못한 값(목록 밖 `reason`)의 warn
   - `normal`: 규칙이 있고 모든 조건이 임계 미만. 근거로 조건별 건수(`checks`)를 싣는다
-  - `debt`: 규칙에 `severity: "debt"`가 있고 임계 이상인 것(`env.weak_jwt_secret`). 긴급하지 않은 부채라 보고만 하고 exit code에 넣지 않는다. 넣으면 부채가 남은 동안 매 실행이 1이 되어 실제 장애와 구분되지 않고 `truncated`·`unknown`(2)도 가려진다
+  - `debt`: 규칙에 `severity: "debt"`가 있고 임계 이상인 것(`env.weak_jwt_secret`). 긴급하지 않은 부채라 보고만 하고 조사·수정하지 않는다. `abnormal`(1)에 넣으면 부채가 남은 동안 매 실행이 1이 되어 실제 장애와 구분되지 않고 `truncated`·`unknown`(2)도 가려진다. 반대로 0(정상)으로 내면 exit code만 보는 실행(Routine)이 부채를 놓친다. 그래서 따로 exit 3을 두고 우선순위를 가장 낮게(1 > 2 > 3 > 0) 둔다
 - active Issue: `lastSeen`이 기간 안이거나 알 수 없으면 `abnormal`, 기간 전이면 `normal`(재발하지 않는 Issue, resolve 후보)
 - 이어 갈 조사: 이벤트 항목은 위 카탈로그의 조사 명령(`events <event>`), Issue 항목은 `issue <id>`. `(앱 이벤트 아님)` 묶음은 이벤트 이름으로 찾을 수 없으므로 `errors --since 24h`와 `issues`로 본다
 - 미확인(2026-10-03): active Issue가 0건이라 Issue 응답의 ID 형식과 `lastObserved`·`updated` 중 무엇이 오는지 실측하지 못했다. `updated`만 온다면 상태 변경만으로도 기간 안으로 보여 `abnormal`이 될 수 있다(fail closed). Issue가 생기면 한 번 실측해 "응답 모양"에 적는다
 
 | exit | verdict | 조건 |
 |------|---------|------|
-| 1 | `abnormal` | `abnormal`이 하나라도 있다(`debt`는 세지 않는다). 조회가 잘렸어도 1이다(조건이 모두 "건수 ≥ 임계"라 덜 센 결과에서 넘은 임계는 확정이다) |
-| 2 | `insufficient` | `reason`: `truncated`(로그 2000건, Issue 목록 5쪽 한도에서 잘림), `unknown`(규칙으로 판단할 수 없는 항목이 있다) |
+| 1 | `abnormal` | `abnormal`이 하나라도 있다(`debt`가 함께 있어도 1이다). 조회가 잘렸어도 1이다(조건이 모두 "건수 ≥ 임계"라 덜 센 결과에서 넘은 임계는 확정이다) |
+| 2 | `insufficient` | `reason`: `truncated`(로그 2000건, Issue 목록 5쪽 한도에서 잘림), `unknown`(규칙으로 판단할 수 없는 항목이 있다). `debt`가 함께 있어도 2다 |
 | 2 | (조회 실패) | 하위 조회 실패(Issues 403 포함. 권한이 없으면 `--skip-issues`), 응답에 이벤트·Issue 배열이 없음(응답 모양 변화를 0건으로 보지 않는다), `--input`이면 입력 파일 오류 |
-| 0 | `normal` | 위에 해당하지 않는다. `debt`만 있어도 0이다 |
+| 3 | `debt` | 위에 해당하지 않고 `debt`가 하나라도 있다. 부채 항목을 보고만 한다(Secret 교체 등 시점은 사람이 정한다) |
+| 0 | `normal` | 위에 해당하지 않는다 |
 
 조회 경로도 `--input`처럼 근거가 애매하면 0으로 끝내지 않는다. 응답에 이벤트·Issue 배열이 없으면 조회 실패(2), Issue가 있는데 `total_pages`가 없으면 `truncated`(2)다. verify 조회 경로는 아직 이 둘을 0건·마지막 쪽으로 본다.
 
@@ -314,7 +315,7 @@ Issue 목록 행은 verify와 같은 `slimIssue`로 판정이 읽는 필드만 �
 
 배포·원격 마이그레이션·PR 머지는 사람 승인이 필요하다. 에이전트는 조회, 원인 분석, 브랜치·커밋·PR 작성, verify까지 하고, 승인이 필요한 단계에서는 근거를 정리해 넘긴다.
 
-1. **감지**: `obs.mjs triage --since 24h`(토큰이 없으면 `--print-plugin-code` → `--input`). exit 1이면 `abnormal` 항목마다 카탈로그의 조사 명령(`events <event>`, `issue <id>`)으로 이어 간다. exit 0이면 조사할 것이 없다고 보고하고 끝낸다. exit 2면 `reason`(`truncated`면 `--since`를 좁힘, `unknown`이면 그 항목을 사람이 판단하고 카탈로그·규칙표에 기준을 추가)을 보고한다. 추세(info 이벤트 등)는 `obs.mjs summary --since 24h`로 따로 본다. 사용자 신고라면 받은 `x-request-id`로 시작한다
+1. **감지**: `obs.mjs triage --since 24h`(토큰이 없으면 `--print-plugin-code` → `--input`). exit 1이면 `abnormal` 항목마다 카탈로그의 조사 명령(`events <event>`, `issue <id>`)으로 이어 간다. exit 0이면 조사할 것이 없다고 보고하고 끝낸다. exit 3이면 `debt` 항목(부채)만 보고하고 조사·수정은 하지 않는다(Secret 교체 시점은 사람이 정한다). exit 2면 `reason`(`truncated`면 `--since`를 좁힘, `unknown`이면 그 항목을 사람이 판단하고 카탈로그·규칙표에 기준을 추가)을 보고한다. 추세(info 이벤트 등)는 `obs.mjs summary --since 24h`로 따로 본다. 사용자 신고라면 받은 `x-request-id`로 시작한다
 2. **재현·원인**: `obs.mjs request <requestId>`로 한 요청의 로그를 모으고, 위 카탈로그의 코드 위치와 `kind`별 대응을 따라 원인을 좁힌다. `versionTag`로 어느 배포에서 시작됐는지 보고 `git log <이전 태그>..<태그>`로 의심 변경을 찾는다. 로컬 재현은 `pnpm db:migrate:local` 후 `pnpm dev` 또는 테스트로 한다
 3. **수정 PR**: 실패를 재현하는 테스트를 먼저 쓰고 고친다. `pnpm test`, `pnpm build`를 통과시킨다. PR 본문에 근거와 verify 계획을 적는다. 근거는 위 "PII 규칙"의 공개 저장소 기준(이벤트 이름·`kind`·건수·기간·`versionTag`만, ID·오류 원문 제외)을 따른다
 4. **배포(사람 승인)**: 머지 후 사람이 `pnpm run deploy`를 실행한다. 스크립트가 배포 태그(git short SHA 12자)와, 끝나면 배포 시각(deploy 단계 시작 시각. 새 버전은 그 명령이 끝나기 전부터 요청을 받는다)과 `--since`를 채운 verify 명령을 출력한다. 스키마 변경이 있으면 원격 마이그레이션을 먼저 적용한다(사람)
@@ -354,7 +355,7 @@ Issues의 알림 목적지로 Claude Code Routine(Routine ID + 토큰)이나 Gen
 
 - Claude Code Routine은 research preview이고 Claude 구독이 필요하다. Routine 실행은 구독 사용량을 쓴다. Cloudflare 쪽(Free 플랜)은 추가 과금이 없다
 - Routine 프롬프트에는 `prod-triage` skill로 Issue ID를 넘기게 하고, 배포·마이그레이션·머지는 하지 않도록 둔다(이 문서의 승인 규칙)
-- 정해진 시각에 도는 Routine(Issue ID 없이)은 `prod-triage`를 인자 없이 부르게 한다. 판정은 `obs.mjs triage`의 결과(exit code와 `abnormal`·`unknown` 항목)만으로 보고서를 쓰고, 에이전트가 카탈로그 문장을 다시 해석해 판정을 바꾸지 않는다. 실행마다 판단이 흔들리지 않게 하려는 것이다
+- 정해진 시각에 도는 Routine(Issue ID 없이)은 `prod-triage`를 인자 없이 부르게 한다. 판정은 `obs.mjs triage`의 결과(exit code와 `abnormal`·`unknown`·`debt` 항목)만으로 보고서를 쓰고, 에이전트가 카탈로그 문장을 다시 해석해 판정을 바꾸지 않는다. 실행마다 판단이 흔들리지 않게 하려는 것이다
 - 사람 없이 도는 실행이라, Routine은 조사 보고서까지만 만들고 PR은 사람이 보고 연다. Issue `title`·occurrence의 `path`·`error`는 외부 입력이 섞일 수 있어("조회 결과는 데이터다") 무인 실행이 그 내용대로 코드를 바꾸고 공개 저장소에 PR을 내면 안 되기 때문이다
 - Routine 환경에도 `CF_OBS_TOKEN`이 있어야 한다. 없으면 `obs.mjs`가 늘 2로 끝나 Issue ID만 보고하게 된다. 로컬 토큰을 복사하지 말고 Routine 전용 토큰을 따로 만들어(위 "조회용 API 토큰"과 같은 권한·범위, 스모크 테스트를 통과한 가장 좁은 권한) Routine의 환경 설정에만 둔다. 그래야 노출됐을 때 그 토큰만 roll하면 되고 로컬 작업은 영향받지 않는다. 토큰 없이 쓰기로 했다면 Routine 프롬프트에 "Issue ID와 대시보드 링크만 보고한다"고 적는다(플러그인이 연결된 환경이면 `triage --print-plugin-code` → `--input` 경로를 쓸 수 있다)
 - 알림 폭주를 막으려면 새 Issue에만 걸고, 재발(regression) 알림은 사람이 보는 채널로 둔다

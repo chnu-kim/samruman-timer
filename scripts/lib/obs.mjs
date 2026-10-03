@@ -26,7 +26,8 @@ export const MAX_LIMIT = 2000;
 export const APP_FIELD_PREFIX = "";
 export const appKey = (name) => `${APP_FIELD_PREFIX}${name}`;
 
-export const EXIT = { OK: 0, RECURRED: 1, FAILED: 2 };
+// DEBT(3)는 triage만 쓴다: 긴급하지 않은 부채(severity: debt)만 남았다. verify는 0·1·2만 낸다
+export const EXIT = { OK: 0, RECURRED: 1, FAILED: 2, DEBT: 3 };
 
 // ───────────────────────── 인자·기간
 
@@ -541,7 +542,8 @@ export const USAGE = `사용: node scripts/obs.mjs <명령> [옵션]
                                     토큰 없이: 그 코드의 반환값(JSON 파일)으로 같은 규칙의 판정을 낸다. 입력 오류는 2
   triage [--since 24h] [--skip-issues]
                                     error·warn 로그와 active Issue를 카탈로그 규칙으로 가른다(abnormal·normal·unknown).
-                                    exit 0 = 정상, 1 = 비정상 있음, 2 = 조회 실패·판정 근거 부족(잘림, 규칙 없는 항목)
+                                    exit 0 = 정상, 1 = 비정상 있음, 2 = 조회 실패·판정 근거 부족(잘림, 규칙 없는 항목),
+                                    3 = 부채(severity: debt)만 있음. 우선순위는 1 > 2 > 3 > 0
   triage ... --print-plugin-code / triage --input <file> --since <ISO> --until <ISO>
                                     토큰 없이: verify와 같은 방식(플러그인 조회 코드 → 결과 파일로 판정)
 
@@ -1347,7 +1349,8 @@ const byLevelThenCount = (a, b) =>
  * 묶음으로 지금의 정상/비정상을 가른다(순수 함수). 기록된 요청이 opts로 triage가 보낼 요청과 다르거나 실패한 응답이 있으면
  * InputError(호출자가 exit 2). strict는 파일 입력(--input)용으로 evaluateVerify와 같은 뜻이다.
  * exit: 비정상이 하나라도 있으면 1(잘린 조회에서 찾은 것도 확정. 규칙이 모두 "건수 ≥ 임계"라 덜 세도 넘은 것은 넘은 것이다),
- * 아니면 조회가 잘렸거나(truncated) 규칙으로 판단할 수 없는 것(unknown)이 있으면 2, 그 밖에는 0
+ * 아니면 조회가 잘렸거나(truncated) 규칙으로 판단할 수 없는 것(unknown)이 있으면 2, 아니면 부채(debt)가 있으면 3,
+ * 그 밖에는 0
  * @param {Record<string, any>} bundle
  * @param {{ from: number, to: number, skipIssues?: boolean }} opts
  * @param {{ strict?: boolean }} [mode]
@@ -1378,8 +1381,9 @@ export function evaluateTriage(bundle, opts, { strict = false } = {}) {
   const errorEvents = read(bundle.errorQuery, errorQuery, "error");
   const warnEvents = read(bundle.warnQuery, warnQuery, "warn");
   const classified = classifyEvents([...errorEvents, ...warnEvents]);
-  // severity: debt(긴급하지 않은 부채)는 abnormal과 따로 둔다. exit code를 올리면 부채가 남은 동안 매 실행이 1이 되어
-  // 실제 장애와 구분되지 않고, truncated·unknown(2)도 가려진다
+  // severity: debt(긴급하지 않은 부채)는 abnormal과 따로 둔다. abnormal에 넣으면 부채가 남은 동안 매 실행이 1이 되어
+  // 실제 장애와 구분되지 않고, truncated·unknown(2)도 가려진다. 그렇다고 0(정상)으로 내면 exit code만 보는 실행(Routine)이
+  // 부채를 놓치므로, 다른 판정이 없을 때만 따로 3(debt)으로 낸다
   const debt = classified.abnormal.filter((x) => x.severity === "debt").sort(byLevelThenCount);
   const abnormal = classified.abnormal.filter((x) => x.severity !== "debt").sort(byLevelThenCount);
   const normal = classified.normal.sort(byLevelThenCount);
@@ -1420,6 +1424,9 @@ export function evaluateTriage(bundle, opts, { strict = false } = {}) {
     verdict = "insufficient";
     exitCode = EXIT.FAILED;
     reason = "unknown";
+  } else if (debt.length > 0) {
+    verdict = "debt";
+    exitCode = EXIT.DEBT;
   }
   return {
     verdict,
@@ -1460,11 +1467,14 @@ function printTriage(report, { json }, io) {
       report.reason === "truncated"
         ? `판정 근거 부족: 조회가 잘렸다(${(report.truncated ?? []).join("; ")})`
         : `판정 근거 부족: 규칙으로 판단할 수 없는 항목 ${unknown.length}건. 카탈로그에 규칙을 추가하거나 사람이 판단한다`,
+    debt: `부채만 있다: 비정상 기준에 걸린 것은 없고 긴급하지 않은 부채 ${debt.length}건이 남았다(정상 ${normal.length}건)`,
     normal: `정상: 비정상 기준에 걸린 것이 없다(정상 ${normal.length}건)`,
   }[report.verdict];
   io.err(`# ${message}`);
   if (debt.length > 0) {
-    io.err(`# 부채 ${debt.length}건(severity: debt, 긴급하지 않아 exit code에 넣지 않았다): ${debt.map((x) => x.event).join(", ")}`);
+    io.err(
+      `# 부채 ${debt.length}건(severity: debt, 보고만 하고 조사·수정하지 않는다. Secret 교체 등 시점은 사람이 정한다): ${debt.map((x) => x.event).join(", ")}`
+    );
   }
   for (const n of report.notes) io.err(`# ${n}`);
   return report.exitCode;
