@@ -220,7 +220,7 @@ Claude Code에 Cloudflare 플러그인이 연결돼 있으면 그 `execute` 도�
   occurrences: { "<issueId>": [ { request: { query: { per_page: 100, cursor? } }, response }, ... ] } }    // Issues를 볼 때만
 ```
 
-응답의 이벤트·occurrence는 `slimEvent`·`slimOccurrence`로 stack 본문, `$workers.event` 같은 verify가 읽지 않는 필드를 덜어 낸 것이다(결과가 대화로 돌아오므로). `telemetry/query` 응답은 `result`에서 이벤트 배열만 남기고 `run`(계정·사용자 ID)·`events.series`(빈 버킷)·`events.fields`는 버린다. 그래도 태그 로그가 많으면 결과가 크다. `--since`를 배포 시각으로 좁힌다.
+응답의 이벤트·occurrence는 `slimEvent`·`slimOccurrence`로 stack 본문, `$workers.event` 같은 verify가 읽지 않는 필드를 덜어 낸 것이다(결과가 대화로 돌아오므로). `source`가 JSON 문자열이면 객체로 풀어 stack을 비우고, 풀 수 없는 문자열은 verify가 읽지 않으므로 300자로 자른다. `telemetry/query` 응답은 `result`에서 이벤트 배열만 남기고 `run`(계정·사용자 ID)·`events.series`(빈 버킷)·`events.fields`는 버린다. 그래도 태그 로그가 많으면 결과가 크다. `--since`를 배포 시각으로 좁힌다.
 
 판정은 토큰 경로와 같은 함수(`evaluateVerify`)가 한다. 파일은 누가 어떻게 모았는지 코드가 보지 못하므로 근거가 애매한 곳을 더 좁게 본다:
 

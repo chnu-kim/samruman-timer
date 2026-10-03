@@ -1035,13 +1035,25 @@ const SLIM_EVENT_SOURCE = `function slimEvent(raw) {
     for (const k of keys) if (k in v) o[k] = v[k];
     return o;
   };
+  const noStack = (v) => (typeof v.stack === "string" ? { ...v, stack: "" } : v);
+  // normalizeEvent는 source를 객체로도 JSON 문자열로도 받는다. 문자열이면 풀어서 객체로 넣는다(같은 필드로 읽힌다).
+  // 객체가 아닌 문자열은 normalizeEvent가 읽지 않으므로 앞부분만 남긴다
+  const slimSource = (v) => {
+    if (isObj(v)) return noStack(v);
+    if (typeof v !== "string") return v;
+    try {
+      const parsed = JSON.parse(v);
+      if (isObj(parsed)) return noStack(parsed);
+    } catch {}
+    return v.length > 300 ? v.slice(0, 300) + "…" : v;
+  };
   if (!isObj(raw)) return raw;
   const out = {};
   for (const [k, v] of Object.entries(raw)) {
     if (k === "$metadata") out[k] = only(v, ["level", "message", "error", "timestamp", "requestId"]);
     else if (k === "$workers") out[k] = only(v, ["scriptVersion", "requestId"]);
     else if (k.startsWith("$")) continue;
-    else if (k === "source" && isObj(v) && typeof v.stack === "string") out[k] = { ...v, stack: "" };
+    else if (k === "source") out[k] = slimSource(v);
     else if (k === "stack" && typeof v === "string") out[k] = "";
     else out[k] = v;
   }
