@@ -102,7 +102,7 @@ CHZZK OAuth 로그인 진입 페이지. OAuth 콜백은 `/api/auth/callback`이 
 ### 렌더 오류 경계
 
 - `src/app/error.tsx`: 루트 레이아웃 아래 페이지의 렌더 오류. 헤더·푸터는 그대로 두고 본문을 `ErrorState` 안내로 바꾸며, 서버 로그와 맞춰 볼 수 있게 `digest`를 '오류 코드'로 보여 준다. '다시 시도'는 서버 컴포넌트까지 다시 받는 `retry()`를 쓴다.
-- `src/app/global-error.tsx`: 루트 레이아웃(Header·Provider)에서 난 오류. 루트 레이아웃을 대신하므로 자체 `html`/`body`와 인라인 스타일을 쓴다. 오버레이 경로에서는 빈 화면만 그린다.
+- `src/app/global-error.tsx`: 루트 레이아웃(Header·Provider)에서 난 오류. 루트 레이아웃을 대신하므로 자체 `html`/`body`와 인라인 스타일을 쓴다. 오버레이 경로에서는 투명한 빈 화면만 보이게 한다. 서버 렌더에서도 문구가 비치지 않도록 head 인라인 스크립트(클라이언트 렌더에서는 `useLayoutEffect`)가 `html[data-overlay]`를 붙이고 CSS로 숨긴다.
 - 오버레이는 자체 경계를 둔다(5절).
 - 렌더 오류는 브라우저에서만 일어나 서버 로그에 남지 않는다.
 
