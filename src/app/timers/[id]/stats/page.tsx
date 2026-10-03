@@ -71,7 +71,7 @@ export default function TimerStatsPage() {
     fetchData();
   }, [fetchData]);
 
-  useDocumentTitle(timer ? `${timer.title} 통계 · ${APP_TITLE}` : null);
+  useDocumentTitle(timer ? `${timer.projectName} 통계 · ${APP_TITLE}` : null);
 
   if (loading) {
     return (
@@ -101,13 +101,13 @@ export default function TimerStatsPage() {
       {/* 헤더 */}
       <div>
         <Link
-          href={`/timers/${timerId}`}
+          href={`/projects/${timer.projectId}`}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ChevronLeftIcon className="w-4 h-4" />
-          타이머로 돌아가기
+          프로젝트로 돌아가기
         </Link>
-        <h1 className="mt-2 text-2xl font-bold">{timer.title} 통계</h1>
+        <h1 className="mt-2 text-2xl font-bold">{timer.projectName} 통계</h1>
       </div>
 
       {!hasData ? (

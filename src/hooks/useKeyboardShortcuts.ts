@@ -50,8 +50,10 @@ export function useKeyboardShortcuts({ enabled, onPreset, onToggleAction, onRefr
     const action: ShortcutAction | undefined = SHORTCUTS[e.key] ?? CODE_SHORTCUTS[e.code];
     if (!action) return;
 
-    // 도움말이 열려 있는 동안에는 시간을 바꾸는 단축키를 막는다('?', R은 유지)
-    if (showHelp && (action.presetSeconds || action.toggleAction)) return;
+    // 도움말이나 다른 모달(목표 폼, 삭제 확인, 오버레이 설정 등)이 열려 있는 동안에는
+    // 뒤쪽 화면의 시간을 바꾸는 단축키를 막는다('?', R은 유지)
+    const modalOpen = showHelp || !!document.querySelector('dialog[open], [aria-modal="true"]');
+    if (modalOpen && (action.presetSeconds || action.toggleAction)) return;
 
     if (action.presetSeconds) {
       e.preventDefault();

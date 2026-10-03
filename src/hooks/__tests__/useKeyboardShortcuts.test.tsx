@@ -139,6 +139,23 @@ describe("useKeyboardShortcuts", () => {
     expect(onPreset).toHaveBeenCalledWith(3600);
   });
 
+  it("화면에 열린 모달이 있으면 프리셋과 전환을 무시한다", () => {
+    const { onPreset, onToggleAction } = setup();
+    const dialog = document.createElement("dialog");
+    dialog.setAttribute("open", "");
+    document.body.appendChild(dialog);
+    try {
+      press({ key: "1", code: "Digit1" });
+      press({ key: "x", code: "KeyX" });
+      expect(onPreset).not.toHaveBeenCalled();
+      expect(onToggleAction).not.toHaveBeenCalled();
+    } finally {
+      dialog.remove();
+    }
+    press({ key: "1", code: "Digit1" });
+    expect(onPreset).toHaveBeenCalledWith(3600);
+  });
+
   it("도움말 목록에 Tab이 없고 X가 있다", () => {
     const keys = SHORTCUT_HELP.map((item) => item.key);
     expect(keys).not.toContain("Tab");

@@ -1,26 +1,25 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { CountdownDisplay } from "@/components/timer/CountdownDisplay";
+import Link from "next/link";
 import { CreateTimerForm } from "@/components/timer/CreateTimerForm";
-import { Badge } from "@/components/ui/Badge";
+import { TimerConsole } from "@/components/timer/TimerConsole";
+import { OverlaySettings } from "@/components/timer/OverlaySettings";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EditableText } from "@/components/ui/EditableText";
 import { FormDialog } from "@/components/ui/FormDialog";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { PlusIcon, TimerIcon, TrashIcon, LinkIcon, ChartBarIcon, ChevronRightIcon } from "@/components/ui/Icons";
+import { MoreMenu } from "@/components/ui/MoreMenu";
+import { PlusIcon, TimerIcon, LinkIcon, ChartBarIcon, SettingsIcon } from "@/components/ui/Icons";
 import { ProjectDetailSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
-import { reconcilePolledTimer, type SyncedTimerSnapshot } from "@/lib/timer-sync";
 import { GoalCard } from "@/components/goal/GoalCard";
 import { GoalForm } from "@/components/goal/GoalForm";
-import Link from "next/link";
 import { authFetch } from "@/lib/auth-fetch";
+import { cn } from "@/lib/utils";
 import { useDocumentTitle, APP_TITLE } from "@/hooks/useDocumentTitle";
-import { usePolling } from "@/hooks/usePolling";
-import { useCountdownEnded } from "@/hooks/useCountdownEnded";
 import type {
   ApiSuccessResponse,
   ProjectDetailResponse,
@@ -38,6 +37,7 @@ function GoalSection({
   onShowGoalForm,
   onHideGoalForm,
   onGoalUpdate,
+  className,
 }: {
   goals: GoalResponse[];
   projectId: string;
@@ -47,6 +47,7 @@ function GoalSection({
   onShowGoalForm: () => void;
   onHideGoalForm: () => void;
   onGoalUpdate: () => void;
+  className?: string;
 }) {
   const [goalTab, setGoalTab] = useState<"active" | "completed">("active");
   const [goalFormKey, setGoalFormKey] = useState(0);
@@ -62,7 +63,7 @@ function GoalSection({
     }`;
 
   return (
-    <section className="mt-6 space-y-4" aria-label="목표">
+    <section className={cn("space-y-4", className)} aria-label="목표">
       {/* 헤더 — 제목 + 추가 버튼 */}
       <div className="flex items-center justify-between gap-4">
         <h2 className="border-l-2 border-accent pl-3 text-lg font-bold">목표</h2>
@@ -181,6 +182,9 @@ function GoalSection({
   );
 }
 
+// 프로젝트와 타이머는 1:1이라 이 화면 하나가 방송 중 조작 콘솔이다.
+// 프로젝트 정보·목표는 여기서, 카운트다운·시간 조작·기록·그래프는 TimerConsole이 맡는다.
+// (/timers/[id]는 이 화면으로 보내고, OBS 오버레이와 통계만 타이머 주소에 남는다)
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -189,6 +193,7 @@ export default function ProjectDetailPage() {
 
   const [project, setProject] = useState<ProjectDetailResponse | null>(null);
   const [timers, setTimers] = useState<TimerListItem[]>([]);
+  const [timersLoaded, setTimersLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   // 404는 다시 시도해도 같으므로 일시적 오류와 구분한다
@@ -198,6 +203,8 @@ export default function ProjectDetailPage() {
   const [formKey, setFormKey] = useState(0);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showTimerDeleteDialog, setShowTimerDeleteDialog] = useState(false);
+  const [showOverlaySettings, setShowOverlaySettings] = useState(false);
   const [goals, setGoals] = useState<GoalResponse[]>([]);
   const [showGoalForm, setShowGoalForm] = useState(false);
 
@@ -229,26 +236,18 @@ export default function ProjectDetailPage() {
     }
   }, [projectId]);
 
-  // 타이머별로 화면에 반영한 값과 그 시각. 폴링마다 카운트다운이 다시 시작되지 않도록 비교 기준으로 쓴다
-  const syncedRef = useRef(new Map<string, SyncedTimerSnapshot>());
-
+  // 타이머가 있는지와 그 ID만 쓴다. 남은 시간과 상태의 폴링은 TimerConsole이 한 곳에서 한다
   const fetchTimers = useCallback(async () => {
     try {
       const res = await fetch(`/api/projects/${projectId}/timers`);
       if (res.ok) {
         const json = (await res.json()) as ApiSuccessResponse<TimerListItem[]>;
-        const now = Date.now();
-        const nextSynced = new Map<string, SyncedTimerSnapshot>();
-        const items = json.data.map((server) => {
-          const { item, snapshot } = reconcilePolledTimer(syncedRef.current.get(server.id), server, now);
-          nextSynced.set(server.id, snapshot);
-          return item;
-        });
-        syncedRef.current = nextSynced;
-        setTimers(items);
+        setTimers(json.data);
       }
     } catch {
       // ignore
+    } finally {
+      setTimersLoaded(true);
     }
   }, [projectId]);
 
@@ -270,19 +269,7 @@ export default function ProjectDetailPage() {
       .catch(() => {});
   }, [projectId, fetchProject, fetchTimers, fetchGoals]);
 
-  // 예약·실행 중이면 5초마다 서버 값으로 맞춘다(다른 곳에서 추가한 시간, 만료 반영). 화면이 숨겨지면 멈춘다
-  const firstTimerStatus = timers[0]?.status;
-  usePolling({
-    fn: fetchTimers,
-    interval: 5_000,
-    enabled: firstTimerStatus === "SCHEDULED" || firstTimerStatus === "RUNNING",
-  });
-
-  // 카운트다운이 0에 닿으면 다음 폴링을 기다리지 않고 배지를 '만료'로 보여 준다
-  const countdownEnded = useCountdownEnded(timers[0]?.remainingSeconds, firstTimerStatus);
-  const displayStatus = countdownEnded ? "EXPIRED" : firstTimerStatus;
-
-  // ACTIVE 목표가 있으면 30초 간격 폴링
+  // ACTIVE 목표가 있으면 30초 간격으로도 맞춘다. 시간이 바뀐 직후의 갱신은 TimerConsole의 onTimeChanged가 한다
   useEffect(() => {
     const hasActiveGoal = goals.some((g) => g.status === "ACTIVE");
     if (!hasActiveGoal) return;
@@ -343,8 +330,9 @@ export default function ProjectDetailPage() {
   }
 
   const isOwner = user?.id === project.owner.id;
-  const iconBtnBase =
-    "rounded-lg p-1.5 min-h-11 min-w-11 flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  const timer = timers[0] ?? null;
+  const headerButton =
+    "inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium text-foreground transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
   function handleCreateSuccess() {
     setShowForm(false);
@@ -368,113 +356,141 @@ export default function ProjectDetailPage() {
     }
   }
 
+  // 타이머만 지우면 이 화면에 남아 '타이머 없음' 상태와 남은 목표 기록을 보여 준다
+  async function handleDeleteTimer() {
+    if (!timer) return;
+    setShowTimerDeleteDialog(false);
+    setDeleting(true);
+    try {
+      const res = await authFetch(`/api/timers/${timer.id}`, { method: "DELETE" });
+      if (res.ok) {
+        setTimers([]);
+        toast("타이머가 삭제되었습니다", "success");
+        fetchTimers();
+        fetchGoals();
+      } else {
+        toast("타이머 삭제에 실패했습니다", "error");
+      }
+    } catch {
+      toast("타이머 삭제에 실패했습니다", "error");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  const goalSection = (className?: string) => (
+    <GoalSection
+      goals={goals}
+      projectId={projectId}
+      isOwner={isOwner}
+      hasTimer={!!timer}
+      showGoalForm={showGoalForm}
+      onShowGoalForm={() => setShowGoalForm(true)}
+      onHideGoalForm={() => setShowGoalForm(false)}
+      onGoalUpdate={fetchGoals}
+      className={className}
+    />
+  );
+
   return (
     <section>
-      <div>
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+        <div className="min-w-0 flex-1 basis-64">
+          <EditableText
+            value={project.name}
+            onSave={handleSaveName}
+            editable={isOwner}
+            as="h1"
+            className="text-2xl font-bold"
+          />
+          {(project.description || isOwner) && (
             <EditableText
-              value={project.name}
-              onSave={handleSaveName}
+              value={project.description || ""}
+              onSave={handleSaveDescription}
               editable={isOwner}
-              as="h1"
-              className="text-2xl font-bold"
+              as="p"
+              className="mt-1 text-muted-foreground"
+              placeholder="설명 추가..."
             />
-            {(project.description || isOwner) && (
-              <EditableText
-                value={project.description || ""}
-                onSave={handleSaveDescription}
-                editable={isOwner}
-                as="p"
-                className="mt-1 text-muted-foreground"
-                placeholder="설명 추가..."
-              />
-            )}
+          )}
+          {!isOwner && (
             <p className="mt-1 text-sm text-muted-foreground">
               {project.owner.nickname}
             </p>
-          </div>
-          <div className="flex items-center gap-1 shrink-0 mt-1">
-            {isOwner && timers.length > 0 && (
-              <Link
-                href={`/timers/${timers[0].id}/stats`}
-                aria-label="통계"
-                title="통계"
-                className={`${iconBtnBase} text-muted-foreground hover:text-foreground hover:bg-foreground/10`}
-              >
-                <ChartBarIcon className="w-5 h-5" />
+          )}
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {isOwner && timer && (
+            <>
+              <button type="button" onClick={() => setShowOverlaySettings(true)} className={headerButton}>
+                <SettingsIcon className="w-4 h-4" />
+                OBS 오버레이
+              </button>
+              <Link href={`/timers/${timer.id}/stats`} className={headerButton}>
+                <ChartBarIcon className="w-4 h-4" />
+                통계
               </Link>
-            )}
+            </>
+          )}
+          {isOwner ? (
+            <MoreMenu
+              label="더보기"
+              items={[
+                { label: "링크 복사", onSelect: handleCopyLink },
+                ...(timer ? [{ label: "타이머 삭제", onSelect: () => setShowTimerDeleteDialog(true), danger: true, disabled: deleting }] : []),
+                { label: "프로젝트 삭제", onSelect: () => setShowDeleteDialog(true), danger: true, disabled: deleting },
+              ]}
+            />
+          ) : (
             <button
               onClick={handleCopyLink}
               aria-label="링크 복사"
               title="링크 복사"
-              className={`${iconBtnBase} text-muted-foreground hover:text-foreground hover:bg-foreground/10`}
+              className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <LinkIcon className="w-5 h-5" />
             </button>
-            {isOwner && (
-              <button
-                disabled={deleting}
-                aria-label="프로젝트 삭제"
-                title="프로젝트 삭제"
-                onClick={() => setShowDeleteDialog(true)}
-                className={
-                  deleting
-                    ? `${iconBtnBase} opacity-50 cursor-not-allowed`
-                    : `${iconBtnBase} text-muted-foreground hover:text-red-500 hover:bg-red-500/10`
-                }
-              >
-                <TrashIcon className="w-5 h-5" />
-              </button>
-            )}
-          </div>
+          )}
         </div>
       </div>
 
-      {/* 타이머 섹션 (핵심 기능 — 항상 상단) */}
-      <div className="mt-4">
-        {timers.length === 0 ? (
-          <div className="py-16 text-center">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-              <TimerIcon className="w-8 h-8 text-muted-foreground" />
-            </div>
-            <p className="mt-4 text-muted-foreground">아직 타이머가 없습니다.</p>
-            {isOwner && (
-              <Button
-                size="sm"
-                className="mt-4"
-                onClick={() => { setFormKey((k) => k + 1); setShowForm(true); }}
-              >
-                <PlusIcon className="w-4 h-4 mr-1" />
-                타이머 만들기
-              </Button>
-            )}
-          </div>
+      <div className="mt-6">
+        {!timersLoaded ? (
+          <div className="h-40" aria-busy="true" />
+        ) : timer ? (
+          <TimerConsole
+            key={timer.id}
+            timerId={timer.id}
+            isOwner={isOwner}
+            onTimeChanged={fetchGoals}
+            aside={
+              // 시청자에게 빈 목표 영역은 의미가 없으므로 목표가 있을 때만 보여 준다
+              isOwner || goals.length > 0
+                ? goalSection("rounded-xl border border-border p-5")
+                : undefined
+            }
+          />
         ) : (
-          <Link
-            href={`/timers/${timers[0].id}`}
-            className="block rounded-xl border border-accent/30 bg-accent-light/10 p-5 transition-colors hover:bg-accent-light/20"
-          >
-            <div className="flex items-center justify-between gap-4">
-              <CountdownDisplay
-                remainingSeconds={timers[0].remainingSeconds}
-                status={timers[0].status}
-                scheduledStartAt={timers[0].scheduledStartAt}
-                size="large"
-              />
-              {/* 타이머 화면으로 가는 유일한 링크이므로 터치 기기에서도 보이는 이동 단서를 둔다 */}
-              <div className="flex shrink-0 items-center gap-1">
-                <Badge variant={displayStatus === "SCHEDULED" ? "scheduled" : displayStatus === "RUNNING" ? "running" : "expired"}>
-                  {displayStatus === "SCHEDULED" ? "예약됨" : displayStatus === "RUNNING" ? "실행 중" : "만료"}
-                </Badge>
-                <ChevronRightIcon className="w-5 h-5 text-muted-foreground" />
+          <>
+            <div className="py-16 text-center">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+                <TimerIcon className="w-8 h-8 text-muted-foreground" />
               </div>
+              <p className="mt-4 text-muted-foreground">아직 타이머가 없습니다.</p>
+              {isOwner && (
+                <Button
+                  size="sm"
+                  className="mt-4"
+                  onClick={() => { setFormKey((k) => k + 1); setShowForm(true); }}
+                >
+                  <PlusIcon className="w-4 h-4 mr-1" />
+                  타이머 만들기
+                </Button>
+              )}
             </div>
-            {timers[0].title && (
-              <p className="mt-2 text-sm text-muted-foreground">{timers[0].title}</p>
-            )}
-          </Link>
+            {/* 타이머를 삭제한 뒤에도 남은 목표 기록은 볼 수 있게 목표가 있으면 보여 준다 */}
+            {goals.length > 0 && goalSection("mt-6")}
+          </>
         )}
       </div>
 
@@ -487,20 +503,22 @@ export default function ProjectDetailPage() {
         />
       </FormDialog>
 
-      {/* 목표 섹션. 타이머가 없으면 누를 수 없는 버튼과 빈 탭만 보이므로 숨긴다.
-          타이머를 삭제한 뒤에도 남은 목표 기록은 볼 수 있게 목표가 있으면 보여 준다 */}
-      {(timers.length > 0 || goals.length > 0) && (
-        <GoalSection
-          goals={goals}
-          projectId={projectId}
-          isOwner={isOwner}
-          hasTimer={timers.length > 0}
-          showGoalForm={showGoalForm}
-          onShowGoalForm={() => setShowGoalForm(true)}
-          onHideGoalForm={() => setShowGoalForm(false)}
-          onGoalUpdate={fetchGoals}
+      {showOverlaySettings && timer && (
+        <OverlaySettings
+          timerId={timer.id}
+          onClose={() => setShowOverlaySettings(false)}
         />
       )}
+
+      <ConfirmDialog
+        open={showTimerDeleteDialog}
+        title="타이머 삭제"
+        description="삭제하면 OBS 오버레이가 즉시 표시되지 않으며 되돌릴 수 없습니다. 목표 기록은 남습니다."
+        confirmLabel="삭제"
+        variant="danger"
+        onConfirm={handleDeleteTimer}
+        onCancel={() => setShowTimerDeleteDialog(false)}
+      />
 
       <ConfirmDialog
         open={showDeleteDialog}
