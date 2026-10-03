@@ -147,7 +147,34 @@ node scripts/obs.mjs verify --tag <sha> [--since 3d] [--event <e>] [--issue <id>
 - 종료 코드: 0 성공, 2 조회 실패(인자 오류, 네트워크, 401/403, API 오류). 401/403이면 토큰 권한 안내를 낸다. 토큰은 어떤 출력에도 나오지 않는다
 - 보관 기간이 지나면(현재 3일, 2026-12-01부터 7일) 조회되지 않는다
 
-2026-10-03 프로덕션 이벤트(대시보드 JSON) 실측: 앱 필드(`event`·`level`·`requestId`·`versionTag`·`versionId`·`reason` 등)는 이벤트 **최상위**에 펼쳐지고, 플랫폼 필드는 `$metadata`(`service`·`requestId`(런타임 ID, 앱의 requestId와 다름)·`rayId`·`trigger`)와 `$workers`(`scriptVersion.id`·`event.request.path`, 쿼리스트링 제거됨)에 담긴다. 그래서 정규화는 최상위와 `source`를 함께 읽는다. 배포된 Worker에서 `versionTag`가 붙는 것도 이때 확인했다. API(`telemetry/query`) 응답의 봉투 모양은 아직 토큰으로 확인하지 못했다. 정규화가 이상하면(필드가 비거나 0건인데 대시보드에는 있음) `--json`으로 원문을 보고 `scripts/lib/obs.mjs`의 정규화 함수를 고친다. 앱 필드의 필터 키 형식이 다르면 `APP_FIELD_PREFIX` 한 줄을 고친다.
+응답 모양(2026-10-03 실측):
+- API(`telemetry/query`, `view: "events"`): 봉투는 `result.events.events[]`다. 이벤트마다 앱 필드(`event`·`level`·`requestId`·`versionTag`·`versionId`·`reason`·`kind` 등)가 `source` 객체에 들어 있고, 최상위에는 `dataset`·`timestamp`·`$metadata`·`$workers`가 있다. 앱 필드는 `event`·`level`처럼 접두 없이 필터 키로 쓴다(`APP_FIELD_PREFIX = ""`)
+- 대시보드에서 복사한 JSON: 앱 필드가 `source` 없이 최상위에 펼쳐진다. 정규화는 두 모양을 모두 받는다
+- 공통: `$metadata.requestId`는 런타임 ID라 앱의 `requestId`와 다르다. `$workers.event.request.path`에는 쿼리스트링이 없다
+- Issues API(`GET .../workers/observability/issues`): 활성 이슈가 없으면 `result`가 빈 배열이다
+
+정규화가 이상하면(필드가 비거나 0건인데 대시보드에는 있음) `--json`으로 원문을 보고 `scripts/lib/obs.mjs`의 정규화 함수를 고친다.
+
+### Cloudflare 플러그인으로 조회 (토큰이 없을 때)
+
+Claude Code에 Cloudflare 플러그인이 연결돼 있으면 그 `execute` 도구(`mcp__plugin_cloudflare_cloudflare__execute`, `account_id`는 이 서비스 계정)로 같은 API를 부를 수 있다. 플러그인은 사용자의 Cloudflare 로그인으로 인증하므로 `CF_OBS_TOKEN`이 필요 없다. 2026-10-03에 이 경로로 로그 쿼리와 Issues 조회가 되는 것을 확인했다.
+
+- **부르는 엔드포인트는 아래 조회용으로 한정한다.** 플러그인 인증은 계정의 쓰기 권한(배포·삭제·설정 변경)까지 가질 수 있어서, `obs.mjs`처럼 코드로 막혀 있지 않다
+  - `POST /accounts/{account_id}/workers/observability/telemetry/query` (쿼리 실행. 저장하지 않게 `dry: true`)
+  - `GET /accounts/{account_id}/workers/observability/issues`, `.../issues/{id}`, `.../issues/{id}/occurrences`
+- 요청 바디는 `obs.mjs`와 같은 형식이다. 서비스 필터를 항상 넣는다:
+
+```js
+{ queryId: "adhoc", view: "events", limit: 100, dry: true,
+  timeframe: { from: <ms>, to: <ms> },
+  parameters: { datasets: ["cloudflare-workers"], filterCombination: "and",
+    filters: [
+      { key: "$metadata.service", operation: "eq", type: "string", value: "samrumantimer" },
+      { key: "level", operation: "eq", type: "string", value: "error" } ] } }
+```
+
+- 결과에서는 `source`의 앱 필드만 꺼내 요약해서 돌려받는다. 이벤트 원문 전체를 대화로 가져오지 않는다(PII 규칙, 컨텍스트 낭비)
+- `verify`의 판정 규칙(태그 귀속, `unattributed`·`truncated` 처리, 근거 부족을 "재발 없음"으로 보지 않음)은 `scripts/lib/obs.mjs`에만 구현돼 있다. 플러그인으로 재발을 판정할 때는 위 "verify 판정" 규칙을 손으로 따르고, 보고에 "플러그인으로 수동 판정"이라고 적는다. 반복해서 쓸 거라면 토큰을 만들어 `verify`를 쓰는 편이 정확하다
 
 ### verify 판정
 
