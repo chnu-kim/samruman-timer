@@ -80,7 +80,7 @@ refresh까지 실패해 `authFetch()`가 세션 만료를 알리면 `SessionExpi
 5. Access JWT 생성, 새 `family_id`로 refresh token 발급·DB 저장, `session`·`refresh` 쿠키 설정, state 쿠키 삭제
 6. `oauth_next` 쿠키의 경로로 리다이렉트(다시 검증, 없거나 허용되지 않으면 메인 페이지 `/`). 성공·실패 모두 `oauth_next`를 지운다
 
-토큰 교환·사용자 조회 등에서 예외가 나면 `/login?error=auth_failed`로 보낸다. 로그인 화면은 `error` 쿼리가 있으면 실패 메시지를 보여 준다. `src/app/(auth)/callback/page.tsx`는 실제 콜백을 처리하지 않고 `/`로 보내기만 한다(실제 콜백은 `/api/auth/callback`).
+토큰 교환·사용자 조회 등에서 예외가 나면 `/login?error=auth_failed`로 보낸다. 운영 로그는 state 검증 실패 시 warn `auth.oauth_state_invalid` {reason: `missing_code`·`missing_state`·`missing_cookie`·`mismatch`}(code·state 값은 남기지 않음), 실패 시 error `auth.login.failed` {stage: `token`·`user`·`db`, status, timedOut, durationMs}, 성공 시 info `auth.login.succeeded` {userId, durationMs}다. CHZZK 실패 응답 본문은 버리고 JSON `code` 필드만 오류 메시지에 붙인다(`ChzzkApiError`). 로그인 화면은 `error` 쿼리가 있으면 실패 메시지를 보여 준다. `src/app/(auth)/callback/page.tsx`는 실제 콜백을 처리하지 않고 `/`로 보내기만 한다(실제 콜백은 `/api/auth/callback`).
 
 ### 3단계: 토큰 교환
 
@@ -242,11 +242,21 @@ Next 16 관례상 `proxy.ts`가 표준이지만 이 프로젝트는 `middleware.
 
 ### 미들웨어 동작
 
-1. `validateEnv()`로 필수 환경변수(`JWT_SECRET`, `CHZZK_CLIENT_ID`, `CHZZK_CLIENT_SECRET`, `BASE_URL`)를 확인한다 (최초 1회)
-2. 모든 요청에서 내부 헤더 `x-user-id`, `x-user-chzzk-id`, `x-user-nickname`를 지워 외부 위조를 막고, 요청 추적용 `x-request-id`(UUID)를 넣는다
-3. 보호 대상이 아니면 그대로 통과
-4. `session` 쿠키의 JWT를 검증해 유효하면 `x-user-id`(userId), `x-user-chzzk-id`(chzzkUserId), `x-user-nickname`(`encodeURIComponent`한 nickname)을 주입하고 통과
-5. 무효하면 위 투명 갱신 흐름을 탄다. 실패 시 `{ "error": { "code": "UNAUTHORIZED", ... } }` 401
+1. 요청마다 `x-request-id`(`crypto.randomUUID()`)를 만든다. 클라이언트가 보낸 값은 쓰지 않는다. 이 값은 라우트로 넘기는 요청 헤더와 **모든 응답 헤더**에 들어가므로, 사용자가 신고한 응답의 `x-request-id`로 운영 로그를 찾을 수 있다
+2. `validateEnv()`로 필수 환경변수(`JWT_SECRET`, `CHZZK_CLIENT_ID`, `CHZZK_CLIENT_SECRET`, `BASE_URL`)를 확인한다. 성공했을 때만 결과를 캐시한다. 실패하면 `env.invalid` 오류 로그(변수 이름만)를 남기고 `500 INTERNAL_ERROR` JSON을 돌려준다. 설정을 고칠 때까지 요청마다 한 건씩 남는다
+3. 모든 요청에서 내부 헤더 `x-user-id`, `x-user-chzzk-id`, `x-user-nickname`를 지워 외부 위조를 막는다
+4. 보호 대상이 아니면 그대로 통과
+5. `session` 쿠키의 JWT를 검증해 유효하면 `x-user-id`(userId), `x-user-chzzk-id`(chzzkUserId), `x-user-nickname`(`encodeURIComponent`한 nickname)을 주입하고 통과
+6. 무효하면 위 투명 갱신 흐름을 탄다. 결과별 응답과 운영 로그는 아래와 같다
+
+| 상황 | 응답 | 운영 로그 |
+|------|------|-----------|
+| `refresh` 쿠키 없음 | 401 `UNAUTHORIZED` | 없음 (로그아웃 상태의 정상 흐름이라 양이 많다) |
+| 재사용 감지(`reuse_detected`) | 401 `UNAUTHORIZED` | warn `auth.refresh.reuse_detected` {userId, familyId} |
+| 그 밖의 거부(`not_found`·`expired`·`family_expired`·`user_missing`) | 401 `UNAUTHORIZED` | info `auth.refresh.rejected` {reason} |
+| 갱신 중 D1 장애·JWT 서명 실패 등 예외 | **500 `INTERNAL_ERROR`** | error `auth.refresh.failed` {method, path, ...오류 필드} |
+
+D1 장애를 401로 내면 "세션 만료"로 가려져 사용자가 로그인 화면으로 튕기고 운영자는 장애를 알아채지 못한다. 그래서 500으로 낸다. 클라이언트의 `authFetch`·`SessionExpiredHandler`는 401에만 반응하므로, 이때는 로그인 화면으로 이동하지 않고 화면별 오류 처리(토스트 등)를 탄다
 
 ### 인증 헬퍼 (`lib/auth.ts`)
 
@@ -260,8 +270,10 @@ async function verifyJwt(token: string): Promise<JwtPayload | null>
 // session 쿠키에서 현재 사용자 추출
 async function getCurrentUser(request: NextRequest): Promise<JwtPayload | null>
 
-// refresh token rotation (실패 시 null)
-async function rotateRefreshToken(db: D1Database, rawToken: string): Promise<RotateResult | null>
+// refresh token rotation. 실패하면 사유를 돌려준다(로깅은 미들웨어가 한다)
+async function rotateRefreshToken(db: D1Database, rawToken: string): Promise<RotateOutcome>
+// RotateOutcome = { ok: true, ...RotateResult }
+//   | { ok: false, reason: "not_found" | "expired" | "family_expired" | "reuse_detected" | "user_missing", userId?, familyId? }
 ```
 
 그 밖에 `createSessionCookie`/`deleteSessionCookie`, `createRefreshCookie`/`deleteRefreshCookie`, `generateRefreshToken`, `hashToken`, `createRefreshTokenInDB`, `revokeRefreshTokenFamily`를 내보낸다.
@@ -276,7 +288,7 @@ POST /api/auth/logout
 → 200 OK
 ```
 
-1. Refresh token의 family를 전체 `REVOKED` 처리 (폐기에 실패해도 로그아웃은 진행)
+1. Refresh token의 family를 전체 `REVOKED` 처리 (폐기에 실패해도 로그아웃은 진행하고, family가 살아남으므로 error `auth.logout.revoke_failed`를 남긴다)
 2. `session` + `refresh` 두 쿠키를 삭제 (`HttpOnly; SameSite=Lax; Path=/; Max-Age=0`, development 외 `Secure`). 응답 본문은 `{ "data": null }`
 3. `session`과 `refresh` 쿠키가 모두 없으면 401. 하나라도 있으면 토큰이 무효해도 쿠키를 지운다
 4. 보호 라우트가 아니므로 미들웨어가 rotation하지 않는다. 보호 라우트였을 때는 access 만료 상태의 로그아웃에서 미들웨어가 새로 심은 `session` 쿠키가 OpenNext의 쿠키 병합 순서 때문에 라우트의 삭제 쿠키를 덮어써 로그인이 유지됐다
@@ -291,3 +303,4 @@ POST /api/auth/logout
 - `fireSessionExpired()`(`src/lib/session-expired.ts`)는 페이지 수명 동안 한 번만 `window`에 `session-expired` 이벤트를 보낸다
 - `SessionExpiredHandler`(`src/components/providers/`)가 이벤트를 받아 토스트("세션이 만료되었습니다. 다시 로그인해주세요.")를 띄우고 1.5초 뒤 `loginUrlWithNext(현재 경로 + 쿼리)`로 이동한다
 - `/api/auth/me` 조회(헤더, 프로젝트·타이머 페이지)는 `authFetch`가 아닌 `fetch`를 써서 비로그인 401이 세션 만료로 처리되지 않는다
+- refresh 도중 서버 오류로 미들웨어가 500을 내면 `authFetch`는 이벤트를 보내지 않는다. 호출한 화면의 오류 처리가 그대로 동작한다 (`SessionExpiredHandler.test.tsx`)

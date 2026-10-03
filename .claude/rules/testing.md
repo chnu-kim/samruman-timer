@@ -33,4 +33,6 @@ paths:
 
 상태 코드와 `{ data }`/`{ error: { code } }` 형태, 그리고 의미 있는 부수효과(바인드 값, 기록된 로그의 `action_type`·before/after)를 검증한다. 엔드포인트마다 401(미인증)·403(타인 리소스)·404·400(잘못된 입력) 경로를 포함한다.
 
+운영 로그를 남기는 경로는 `vi.spyOn(console, "error" | "warn" | "log").mockImplementation(() => {})`로 출력을 막고, 호출 인자를 `JSON.parse`해 `event`·`requestId`·필드를 단언한다. 테스트 출력에 stderr 잡음(스택 전체 등)을 남기지 않기 위해서이고, 로그가 한 번만 남는지와 토큰·닉네임 같은 금지 값이 들어가지 않는지도 함께 확인한다. spy 타입은 `MockInstance<typeof console.error>`로 둔다(`ReturnType<typeof vi.spyOn>`은 tsc에서 인자 타입이 무너진다).
+
 mock이 실제 D1 동작을 대신하므로, SQL 자체의 정확성(제약 위반, 인덱스 등)은 이 테스트로 보장되지 않는다. 스키마가 얽힌 변경은 `pnpm db:migrate:local` 후 `pnpm dev`로 직접 확인한다.

@@ -16,7 +16,12 @@
 ### 인증
 - 인증 필요 엔드포인트는 `src/middleware.ts`의 `PROTECTED_ROUTES`(메서드+경로 패턴)에 등록된 것이다. 미들웨어가 `session` 쿠키의 JWT를 검증하고, 만료됐으면 `refresh` 쿠키로 토큰을 갱신(rotation)한 뒤 `x-user-id`·`x-user-chzzk-id`·`x-user-nickname` 헤더를 주입한다
 - 미인증 시 `401 Unauthorized` (둘 다 없거나 갱신 실패 시 미들웨어가 바로 반환)
+- 갱신 도중 D1 장애 같은 서버 오류가 나면 `401`이 아니라 `500 INTERNAL_ERROR`를 반환한다. 세션이 만료된 것이 아니므로 클라이언트는 로그인 화면으로 보내지 않는다 (AUTH.md 참조)
 - 권한 부족 시 `403 Forbidden`
+
+### 요청 ID (`x-request-id`)
+
+모든 `/api/*` 응답(성공·오류·미들웨어가 직접 낸 401/500 포함)에 `x-request-id` 응답 헤더가 붙는다. 미들웨어가 요청마다 새로 만든 UUID이며, 클라이언트가 보낸 같은 이름의 헤더는 무시하고 덮어쓴다. 오류 본문에는 넣지 않는다. 운영 로그의 `requestId`와 같은 값이라 문제 신고를 로그와 잇는 키로 쓴다 (ARCHITECTURE.md "운영 로그·관측").
 
 ### 에러 코드
 

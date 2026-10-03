@@ -11,3 +11,19 @@ binding = "ASSETS"
 binding = "DB"
 database_name = "samrumantimer-db"
 database_id = "b892f151-04e9-40f9-bd2a-214fd685000a"
+
+# 운영 로그(Workers Logs)와 Issues. 무료 플랜 범위에서만 쓴다(docs/ARCHITECTURE.md "운영 로그·관측")
+# 샘플에서 빠진 요청은 앱 로그도 함께 빠지므로 1을 유지한다. 쿼리스트링(OAuth code·state)은 지운다
+[observability]
+enabled = true
+head_sampling_rate = 1
+redact_query_string = true
+
+[observability.logs]
+enabled = true
+# 요청 메타데이터·헤더(Cookie 포함 가능)를 담는 invocation log는 마스킹 여부를 확인하기 전까지 끈다
+invocation_logs = false
+
+# Issues는 대시보드에서만 켜 두면 다음 배포 때 꺼지므로 여기서 선언한다
+[observability.issues]
+enabled = true
