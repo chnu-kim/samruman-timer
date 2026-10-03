@@ -14,7 +14,11 @@ import {
   normalizeIssue,
   normalizeOccurrence,
   extractCursor,
+  extractIssue,
+  attributeVersion,
+  collectOccurrences,
   judgeVerify,
+  MAX_LIMIT,
   EXIT,
   SERVICE,
 } from "../lib/obs.mjs";
@@ -54,6 +58,8 @@ async function exec(argv: string[], route: Route, env: Record<string, string | u
   });
   return { code, out, err, calls, fetch };
 }
+
+const queryFilters = (call: { body: unknown }) => (call.body as { parameters: { filters: unknown[] } }).parameters.filters;
 
 const ok = (result: unknown) => ({ body: { success: true, errors: [], messages: [], result } });
 
@@ -223,17 +229,29 @@ describe("응답 정규화", () => {
       lastSeen: "2026-10-03T00:00:00Z",
     });
     expect(normalizeIssue({ id: "i2", error: { name: "Error", message: "m" } })).toMatchObject({ title: "m", errorName: "Error" });
+    // OpenAPI의 Issue 필드: firstObserved·lastObserved(epoch ms)
+    expect(
+      normalizeIssue({ id: "i3", firstObserved: Date.parse("2026-10-01T00:00:00Z"), lastObserved: Date.parse("2026-10-03T00:00:00Z") })
+    ).toMatchObject({ firstSeen: "2026-10-01T00:00:00.000Z", lastSeen: "2026-10-03T00:00:00.000Z" });
+    expect(normalizeIssue({ id: "i4", created: 1_700_000_000_000, updated: 1_700_000_100_000 })).toMatchObject({
+      firstSeen: new Date(1_700_000_000_000).toISOString(),
+      lastSeen: new Date(1_700_000_100_000).toISOString(),
+    });
+    // 상세 응답은 result.issue로 감싸져 온다
+    expect(extractIssue({ success: true, result: { issue: { id: "i1" } } })).toEqual({ id: "i1" });
+    expect(extractIssue({ success: true, result: { id: "i1" } })).toEqual({ id: "i1" });
     expect(
       normalizeOccurrence({
         id: "o1",
-        timestamp: "2026-10-03T11:30:00Z",
+        timestamp: Date.parse("2026-10-03T11:30:00Z"),
         worker: { scriptVersion: { id: "v1", tag: TAG } },
         invocation: { id: "inv", method: "POST", path: "/api/x", statusCode: 500, rayId: "ray" },
         error: { name: "Error", message: "boom", stack: "s" },
       })
     ).toEqual({
       id: "o1",
-      timestamp: "2026-10-03T11:30:00Z",
+      timestamp: "2026-10-03T11:30:00.000Z",
+      invocationId: "inv",
       versionTag: TAG,
       versionId: "v1",
       method: "POST",
@@ -243,6 +261,9 @@ describe("응답 정규화", () => {
       errorName: "Error",
       error: "boom",
     });
+    // OpenAPI 위치: result_info.cursors.after(nullable)
+    expect(extractCursor({ result_info: { cursors: { after: "c1" } } })).toBe("c1");
+    expect(extractCursor({ result_info: { cursors: { after: null } } })).toBeUndefined();
     expect(extractCursor({ result_info: { cursor: "c2" } })).toBe("c2");
     expect(extractCursor({ result_info: { cursor: "" } })).toBeUndefined();
   });
@@ -256,9 +277,45 @@ describe("judgeVerify", () => {
     expect(judgeVerify({ ...base, occurrences: [{ versionTag: TAG }] }).verdict).toBe("recurred");
   });
 
-  it("서버가 태그로 거른 error는 태그 필드를 못 읽어도 재발로 센다. 다른 태그가 명시된 것만 뺀다", () => {
-    expect(judgeVerify({ ...base, errorEvents: [{}] }).verdict).toBe("recurred");
+  it("태그 없는 error는 versionId가 태그 로그의 버전이면 재발, 다른 버전이면 무시, 버전 정보가 없으면 근거 부족", () => {
+    const versionIds = new Set(["ver-new"]);
+    expect(judgeVerify({ ...base, versionIds, errorEvents: [{ versionId: "ver-new" }] }).verdict).toBe("recurred");
+    expect(judgeVerify({ ...base, versionIds, errorEvents: [{ versionId: "ver-old" }] }).verdict).toBe("clean");
+    expect(judgeVerify({ ...base, versionIds, errorEvents: [{}] })).toMatchObject({
+      verdict: "insufficient",
+      reason: "unattributed",
+      unattributedErrors: 1,
+    });
     expect(judgeVerify({ ...base, errorEvents: [{ versionTag: "other" }] }).verdict).toBe("clean");
+  });
+
+  it("버전 정보 없는 항목은 태그 로그가 처음 보인 시각 이전이면 이전 배포로 보고 세지 않는다", () => {
+    const firstTagTs = Date.parse("2026-10-03T10:00:00Z");
+    const before = { timestamp: "2026-10-03T09:00:00Z" };
+    const after = { timestamp: "2026-10-03T10:30:00Z" };
+    expect(judgeVerify({ ...base, firstTagTs, errorEvents: [before], occurrences: [before] }).verdict).toBe("clean");
+    expect(judgeVerify({ ...base, firstTagTs, errorEvents: [after] }).reason).toBe("unattributed");
+  });
+
+  it("attributeVersion: 태그가 versionId보다 먼저다", () => {
+    const ids = new Set(["v"]);
+    expect(attributeVersion({ versionTag: TAG }, TAG, ids)).toBe("match");
+    expect(attributeVersion({ versionTag: "x", versionId: "v" }, TAG, ids)).toBe("other");
+    expect(attributeVersion({ versionId: "v" }, TAG, ids)).toBe("match");
+    expect(attributeVersion({}, TAG, ids)).toBe("unknown");
+  });
+
+  it("조회가 잘렸으면 근거 부족(2). 단 이미 찾은 재발은 재발(1)", () => {
+    expect(judgeVerify({ ...base, truncated: ["x"] })).toMatchObject({ verdict: "insufficient", reason: "truncated" });
+    expect(judgeVerify({ ...base, truncated: ["x"], errorEvents: [{ versionTag: TAG }] }).verdict).toBe("recurred");
+  });
+
+  it("--expect-event가 태그 로그에 없으면 근거 부족(2)", () => {
+    expect(judgeVerify({ ...base, expectEvent: "auth.login.succeeded", expectEventCount: 0 })).toMatchObject({
+      verdict: "insufficient",
+      reason: "expected_event_missing",
+    });
+    expect(judgeVerify({ ...base, expectEvent: "auth.login.succeeded", expectEventCount: 2 }).verdict).toBe("clean");
   });
 
   it("다른 태그의 occurrence는 무시한다", () => {
@@ -268,7 +325,7 @@ describe("judgeVerify", () => {
   it("태그를 읽지 못한 occurrence가 있으면 근거 부족(2)", () => {
     expect(judgeVerify({ ...base, occurrences: [{ id: "o" }] })).toMatchObject({
       verdict: "insufficient",
-      reason: "unattributed_occurrences",
+      reason: "unattributed",
       exitCode: 2,
     });
   });
@@ -375,13 +432,29 @@ describe("run (CLI)", () => {
 
   it("issue <id>: 상세와 occurrence를 함께 낸다", async () => {
     const r = await exec(["issue", "i1"], (url) => {
-      if (url.pathname.endsWith("/issues/i1")) return ok({ id: "i1", status: "active", title: "t" });
+      if (url.pathname.endsWith("/issues/i1"))
+        return ok({ issue: { id: "i1", status: "active", title: "t", count: 4, firstObserved: NOW - 3_600_000, lastObserved: NOW } });
       if (url.pathname.endsWith("/issues/i1/occurrences"))
-        return { body: { success: true, result: [{ id: "o1", worker: { scriptVersion: { tag: TAG } } }], result_info: { cursor: "n" } } };
+        return {
+          body: {
+            success: true,
+            result: [{ id: "o1", worker: { scriptVersion: { tag: TAG } } }],
+            result_info: { per_page: 100, count: 1, cursors: { after: "n" } },
+          },
+        };
       return undefined;
     });
     expect(r.code).toBe(0);
-    expect(JSON.parse(r.out[0])).toEqual({ issue: { id: "i1", status: "active", title: "t" } });
+    expect(JSON.parse(r.out[0])).toEqual({
+      issue: {
+        id: "i1",
+        status: "active",
+        title: "t",
+        count: 4,
+        firstSeen: new Date(NOW - 3_600_000).toISOString(),
+        lastSeen: new Date(NOW).toISOString(),
+      },
+    });
     expect(JSON.parse(r.out[1])).toEqual({ occurrence: { id: "o1", versionTag: TAG } });
     expect(r.err.join("\n")).toContain("더 있음");
   });
@@ -398,17 +471,16 @@ describe("run verify", () => {
     return (url, init) => {
       if (url.pathname.endsWith("/telemetry/query")) {
         const body = JSON.parse(String(init.body));
-        const isErrorQuery = body.parameters.filters.some(
-          (f: { key: string; value: string }) => f.key === "level" && f.value === "error"
-        );
-        return ok({ events: { events: isErrorQuery ? (opts.errors ?? []) : (opts.tagEvents ?? []) } });
+        // 태그 질의만 versionTag 필터를 건다. 재발 후보 질의는 태그 없이 level=error 또는 event로 거른다
+        const isTagQuery = body.parameters.filters.some((f: { key: string }) => f.key === "versionTag");
+        return ok({ events: { events: isTagQuery ? (opts.tagEvents ?? []) : (opts.errors ?? []) } });
       }
       if (url.pathname.endsWith("/issues")) {
         const i = opts.issues ?? [];
         return Array.isArray(i) ? ok(i) : i;
       }
       const m = /\/issues\/([^/]+)\/occurrences$/.exec(url.pathname);
-      if (m) return ok(opts.occurrences?.[m[1]] ?? []);
+      if (m) return { body: { success: true, result: opts.occurrences?.[m[1]] ?? [], result_info: { per_page: 100, count: 0, cursors: { after: null } } } };
       return undefined;
     };
   }
@@ -421,11 +493,58 @@ describe("run verify", () => {
     );
     expect(r.code).toBe(EXIT.OK);
     expect(JSON.parse(r.out[0])).toMatchObject({ tag: TAG, verdict: "clean", tagEventCount: 1, errorCount: 0 });
-    // error 질의에 level·versionTag 필터가 들어간다
-    const errQuery = r.calls.find((c) => c.url.pathname.endsWith("/telemetry/query"))!.body as {
-      parameters: { filters: unknown[] };
-    };
-    expect(errQuery.parameters.filters).toEqual(expect.arrayContaining([eq("level", "error"), eq("versionTag", TAG)]));
+    // 태그 질의는 versionTag로, 재발 후보 질의는 태그 없이 level=error로 거른다(태그가 빠진 로그도 받으려고)
+    const queries = r.calls.filter((c) => c.url.pathname.endsWith("/telemetry/query")).map((c) => queryFilters(c));
+    expect(queries[0]).toContainEqual(eq("versionTag", TAG));
+    expect(queries[1]).toContainEqual(eq("level", "error"));
+    expect(queries[1]).not.toContainEqual(eq("versionTag", TAG));
+    // 기본 기간은 보관 기간(3d)
+    expect(r.calls[0].body).toMatchObject({ timeframe: { from: NOW - 259_200_000, to: NOW } });
+    expect(JSON.parse(r.out[0]).notes.join("\n")).toContain("--expect-event");
+  });
+
+  it("app versionTag가 빠진 error도 같은 버전(versionId)이면 재발로 센다", async () => {
+    const untagged = errEvent({ versionTag: undefined, versionId: "ver-1" });
+    const r = await exec(["verify", "--tag", TAG, "--skip-issues"], verifyRoute({ errors: [untagged], tagEvents: [infoEvent] }));
+    expect(r.code).toBe(EXIT.RECURRED);
+  });
+
+  it("버전 정보가 전혀 없는 error가 배포 이후에 있으면 근거 부족 2", async () => {
+    const noVersion = { timestamp: Date.parse("2026-10-03T11:30:00Z"), source: { level: "error", event: "api.unhandled" } };
+    const r = await exec(["verify", "--tag", TAG, "--skip-issues"], verifyRoute({ errors: [noVersion], tagEvents: [infoEvent] }));
+    expect(r.code).toBe(EXIT.FAILED);
+    expect(JSON.parse(r.out[0])).toMatchObject({ reason: "unattributed", unattributedErrors: 1 });
+  });
+
+  it("다른 태그의 error는 무시한다", async () => {
+    const old = errEvent({ versionTag: "000000000000", versionId: "ver-0" });
+    const r = await exec(["verify", "--tag", TAG, "--skip-issues"], verifyRoute({ errors: [old], tagEvents: [infoEvent] }));
+    expect(r.code).toBe(EXIT.OK);
+  });
+
+  it("error 후보가 2000건에서 잘리면 근거 부족 2", async () => {
+    const old = errEvent({ versionTag: "000000000000", versionId: "ver-0" });
+    const r = await exec(
+      ["verify", "--tag", TAG, "--skip-issues"],
+      verifyRoute({ errors: Array.from({ length: MAX_LIMIT }, () => old), tagEvents: [infoEvent] })
+    );
+    expect(r.code).toBe(EXIT.FAILED);
+    expect(JSON.parse(r.out[0]).reason).toBe("truncated");
+  });
+
+  it("--expect-event가 태그 로그에 없으면 2, 있으면 0", async () => {
+    const r1 = await exec(
+      ["verify", "--tag", TAG, "--skip-issues", "--expect-event", "timer.modify.succeeded"],
+      verifyRoute({ tagEvents: [infoEvent] })
+    );
+    expect(r1.code).toBe(EXIT.FAILED);
+    expect(JSON.parse(r1.out[0]).reason).toBe("expected_event_missing");
+    const r2 = await exec(
+      ["verify", "--tag", TAG, "--skip-issues", "--expect-event", "auth.login.succeeded"],
+      verifyRoute({ tagEvents: [infoEvent] })
+    );
+    expect(r2.code).toBe(EXIT.OK);
+    expect(JSON.parse(r2.out[0])).toMatchObject({ expectEventCount: 1 });
   });
 
   it("태그 error 이벤트가 있으면 1", async () => {
@@ -484,13 +603,70 @@ describe("run verify", () => {
     expect(r.code).toBe(EXIT.FAILED);
   });
 
-  it("--event는 error 질의를 좁히고, --issue 없이 주면 Issues를 보지 않는다", async () => {
+  it("--event는 재발 후보 질의를 좁히고, --issue 없이 주면 Issues를 보지 않는다", async () => {
     const r = await exec(["verify", "--tag", TAG, "--event", "auth.login.failed"], verifyRoute({ tagEvents: [infoEvent] }));
     expect(r.code).toBe(EXIT.OK);
-    const errQuery = r.calls[0].body as { parameters: { filters: unknown[] } };
-    expect(errQuery.parameters.filters).toContainEqual(eq("event", "auth.login.failed"));
+    const filters = queryFilters(r.calls[1]);
+    expect(filters).toContainEqual(eq("event", "auth.login.failed"));
     expect(r.calls.some((c) => c.url.pathname.includes("/issues"))).toBe(false);
     expect(JSON.parse(r.out[0]).notes[0]).toContain("--event만");
+  });
+
+  it("--event는 level=error로 거르지 않아 warn 이벤트의 재발도 잡는다. info는 세지 않는다", async () => {
+    const warn = rawEvent({ level: "warn", event: "timer.modify.conflict_exhausted", versionTag: TAG });
+    const r = await exec(
+      ["verify", "--tag", TAG, "--event", "timer.modify.conflict_exhausted"],
+      verifyRoute({ errors: [warn], tagEvents: [infoEvent, warn] })
+    );
+    expect(r.code).toBe(EXIT.RECURRED);
+    expect(queryFilters(r.calls[1])).not.toContainEqual(eq("level", "error"));
+
+    const info = rawEvent({ level: "info", event: "auth.oauth_state_invalid", versionTag: TAG });
+    const r2 = await exec(
+      ["verify", "--tag", TAG, "--event", "auth.oauth_state_invalid"],
+      verifyRoute({ errors: [info], tagEvents: [info] })
+    );
+    expect(r2.code).toBe(EXIT.OK);
+  });
+
+  it("occurrence 페이지 한도를 다 쓰고도 cursor가 남으면 근거 부족 2", async () => {
+    const r = await exec(["verify", "--tag", TAG, "--issue", "i1"], (url, init) => {
+      if (url.pathname.endsWith("/telemetry/query")) {
+        const body = JSON.parse(String(init.body));
+        const isTag = body.parameters.filters.some((f: { key: string }) => f.key === "versionTag");
+        return ok({ events: { events: isTag ? [infoEvent] : [] } });
+      }
+      // 최신순으로 since 이후 occurrence만 계속 나온다(다른 태그)
+      return {
+        body: {
+          success: true,
+          result: [{ id: "o", timestamp: NOW - 60_000, worker: { scriptVersion: { id: "ver-0", tag: "old" } } }],
+          result_info: { per_page: 100, count: 1, cursors: { after: "more" } },
+        },
+      };
+    });
+    expect(r.code).toBe(EXIT.FAILED);
+    expect(JSON.parse(r.out[0])).toMatchObject({ reason: "truncated" });
+  });
+
+  it("active Issue 목록이 여러 쪽이면 page로 넘겨 모두 본다", async () => {
+    const r = await exec(["verify", "--tag", TAG], (url, init) => {
+      if (url.pathname.endsWith("/telemetry/query")) {
+        const body = JSON.parse(String(init.body));
+        const isTag = body.parameters.filters.some((f: { key: string }) => f.key === "versionTag");
+        return ok({ events: { events: isTag ? [infoEvent] : [] } });
+      }
+      if (url.pathname.endsWith("/issues")) {
+        const page = Number(url.searchParams.get("page"));
+        return {
+          body: { success: true, result: [{ id: `i${page}` }], result_info: { page, per_page: 100, count: 1, total_count: 2, total_pages: 2 } },
+        };
+      }
+      return { body: { success: true, result: [], result_info: { per_page: 100, count: 0, cursors: { after: null } } } };
+    });
+    expect(r.code).toBe(EXIT.OK);
+    const occPaths = r.calls.map((c) => c.url.pathname).filter((p) => p.endsWith("/occurrences"));
+    expect(occPaths).toEqual([expect.stringContaining("/issues/i1/"), expect.stringContaining("/issues/i2/")]);
   });
 
   it("--issue는 그 Issue의 occurrence만 본다", async () => {
@@ -517,7 +693,48 @@ describe("run verify", () => {
   it("전체 SHA를 주면 12자로 잘라 질의한다", async () => {
     const r = await exec(["verify", "--tag", `${TAG}0123456789abcdef01234567`, "--skip-issues"], verifyRoute({ tagEvents: [infoEvent] }));
     expect(r.code).toBe(EXIT.OK);
-    const errQuery = r.calls[0].body as { parameters: { filters: unknown[] } };
-    expect(errQuery.parameters.filters).toContainEqual(eq("versionTag", TAG));
+    expect(queryFilters(r.calls[0])).toContainEqual(eq("versionTag", TAG));
+  });
+});
+
+describe("collectOccurrences", () => {
+  it("result_info.cursors.after로 다음 쪽을 넘기고 since보다 오래된 행에서 멈춘다", async () => {
+    const pages: Record<string, unknown> = {
+      first: {
+        result: [{ id: "a", timestamp: NOW - 1000 }],
+        result_info: { cursors: { after: "p2" } },
+      },
+      p2: {
+        result: [{ id: "b", timestamp: NOW - 2000 }, { id: "c", timestamp: NOW - 10 * 3_600_000 }],
+        result_info: { cursors: { after: "p3" } },
+      },
+    };
+    const seen: (string | undefined)[] = [];
+    const client = {
+      occurrences: async (_id: string, q: { cursor?: string }) => {
+        seen.push(q.cursor);
+        return pages[q.cursor ?? "first"];
+      },
+    };
+    const r = await collectOccurrences(client, "i1", NOW - 3_600_000);
+    expect(seen).toEqual([undefined, "p2"]);
+    expect(r.rows.map((o: { id: string }) => o.id)).toEqual(["a", "b"]);
+    expect(r.truncated).toBe(false);
+  });
+});
+
+describe("errors·events 기간·경로", () => {
+  it("--until과 --path로 occurrence 시각 앞뒤의 같은 경로 로그를 찾는다", async () => {
+    const r = await exec(
+      ["errors", "--since", "2026-10-03T10:00:00Z", "--until", "2026-10-03T10:10:00Z", "--path", "/api/x"],
+      () => ok({ events: { events: [] } })
+    );
+    expect(r.code).toBe(0);
+    expect(r.calls[0].body).toMatchObject({
+      timeframe: { from: Date.parse("2026-10-03T10:00:00Z"), to: Date.parse("2026-10-03T10:10:00Z") },
+    });
+    expect(queryFilters(r.calls[0])).toContainEqual(eq("path", "/api/x"));
+    const bad = await exec(["errors", "--since", "1h", "--until", "2h"], () => ok({}));
+    expect(bad.code).toBe(EXIT.FAILED);
   });
 });

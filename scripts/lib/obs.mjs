@@ -270,6 +270,13 @@ function sortSummary(rows) {
   );
 }
 
+/** Issue 상세 응답(`result.issue`)이나 목록 항목에서 Issue 객체를 꺼낸다 */
+export function extractIssue(body) {
+  const r = unwrap(body);
+  return isObj(r) && isObj(r.issue) ? r.issue : r;
+}
+
+/** Issue 필드는 OpenAPI 기준 firstObserved·lastObserved·created·updated(epoch ms)다. 나머지는 방어적 후보 */
 export function normalizeIssue(raw) {
   const err = isObj(raw.error) ? raw.error : {};
   const out = {
@@ -278,8 +285,8 @@ export function normalizeIssue(raw) {
     title: raw.title ?? raw.name ?? err.message ?? raw.message,
     errorName: err.name ?? raw.errorName,
     count: raw.count ?? raw.occurrenceCount ?? raw.occurrences ?? raw.eventCount,
-    firstSeen: toIso(raw.firstSeen ?? raw.first_seen ?? raw.createdAt),
-    lastSeen: toIso(raw.lastSeen ?? raw.last_seen ?? raw.updatedAt),
+    firstSeen: toIso(raw.firstObserved ?? raw.created ?? raw.firstSeen ?? raw.first_seen ?? raw.createdAt),
+    lastSeen: toIso(raw.lastObserved ?? raw.updated ?? raw.lastSeen ?? raw.last_seen ?? raw.updatedAt),
   };
   if (typeof out.title === "string") out.title = truncate(out.title, 200);
   if (typeof out.count !== "number" && typeof out.count !== "string") delete out.count;
@@ -300,6 +307,8 @@ export function normalizeOccurrence(raw) {
   const out = {
     id: raw.id,
     timestamp: toIso(raw.timestamp ?? raw.occurredAt ?? raw.createdAt ?? inv.timestamp),
+    // OpenAPI 설명은 "Worker invocation request ID". 앱 로그의 requestId(미들웨어 UUID)와는 다른 값이다
+    invocationId: inv.id,
     versionTag: sv.tag,
     versionId: sv.id,
     method: inv.method,
@@ -318,9 +327,10 @@ export function extractOccurrences(body) {
   return firstArray(r, [["occurrences"], ["items"], ["data"], []]).filter(isObj);
 }
 
-/** 다음 페이지 cursor. 없으면 undefined */
+/** 다음 페이지 cursor. 없으면 undefined. OpenAPI 기준 위치는 result_info.cursors.after(nullable) */
 export function extractCursor(body) {
   const candidates = [
+    body?.result_info?.cursors?.after,
     body?.result_info?.cursor,
     body?.result_info?.next_cursor,
     body?.result?.cursor,
@@ -333,26 +343,72 @@ export function extractCursor(body) {
 // ───────────────────────── verify 판정
 
 /**
- * 배포 태그 이후 재발 여부를 판정한다. 조회가 애매하면 "재발 없음"이 아니라 "근거 부족"으로 기운다(fail closed).
- * - recurred(1): 태그에 속한 error 이벤트나 Issue occurrence가 하나라도 있다
- * - insufficient(2): "재발 없음"을 말할 근거가 없다
- *   - 태그로 남은 로그가 minEvents보다 적다(배포가 안 됐거나 태그가 틀렸거나 트래픽이 없다. 배포를 확인했다면 --min-events 0)
- *   - 기간 안 occurrence 중 버전 태그를 읽지 못한 것이 있다(응답 모양이 예상과 다르다)
- * - clean(0): 위 둘이 아니다
- *
- * error 이벤트는 서버가 태그로 이미 거른 결과라, 태그 필드를 읽지 못한 이벤트도 재발로 센다.
- * 다른 태그가 명시된 것만 뺀다. occurrence는 클라이언트에서 거르므로 태그가 같아야만 센다.
+ * 로그·occurrence 한 건이 대상 버전에 속하는지 가른다.
+ * - match: 태그가 대상과 같다. 또는 태그는 없지만 versionId가 대상 태그로 남은 로그의 versionId 중 하나다
+ * - other: 다른 태그가 있거나, 대상과 무관한 versionId가 있다(이전 배포 등)
+ * - unknown: 버전 정보가 전혀 없다
+ * @param {{ versionTag?: unknown, versionId?: unknown }} item
+ * @param {string} tag
+ * @param {Set<string>} versionIds
  */
-export function judgeVerify({ tag, errorEvents, occurrences, tagEventCount, minEvents = 1 }) {
-  const errors = errorEvents.filter((e) => e.versionTag === undefined || e.versionTag === tag);
-  const occ = occurrences.filter((o) => o.versionTag === tag);
-  const unattributed = occurrences.filter((o) => o.versionTag === undefined).length;
-  const base = { errors, occurrences: occ, tagEventCount, unattributed };
+export function attributeVersion(item, tag, versionIds) {
+  if (item.versionTag !== undefined) return item.versionTag === tag ? "match" : "other";
+  if (item.versionId !== undefined) return versionIds.has(String(item.versionId)) ? "match" : "other";
+  return "unknown";
+}
+
+/**
+ * 배포 태그 이후 재발 여부를 판정한다. 조회가 애매하면 "재발 없음"이 아니라 "근거 부족"으로 기운다(fail closed).
+ * - recurred(1): 대상 버전에 속한 error(또는 --event의 error·warn) 로그나 Issue occurrence가 하나라도 있다.
+ *   잘린 조회에서도 찾은 재발은 확정이므로 다른 조건보다 먼저 본다
+ * - insufficient(2): "재발 없음"을 말할 근거가 없다
+ *   - truncated: 조회가 한도에서 잘렸다(error 2000건, occurrence 페이지 한도, Issue 목록 페이지 한도)
+ *   - unattributed: 버전을 알 수 없는 error·occurrence가 있다(firstTagTs 이후. 그 전 것은 이전 배포로 본다)
+ *   - expected_event_missing: --expect-event가 그 태그 로그에 한 건도 없다(수정한 경로가 실행됐다는 근거가 없다)
+ *   - too_few_events: 태그로 남은 로그가 minEvents보다 적다
+ * - clean(0): 위에 해당하지 않는다. "오류가 보이지 않았다"이지 "수정한 경로가 실행됐다"는 아니다
+ *
+ * @param {{ tag: string, errorEvents: object[], occurrences: object[], tagEventCount: number, minEvents?: number,
+ *   versionIds?: Set<string>, firstTagTs?: number, truncated?: string[], expectEvent?: string, expectEventCount?: number }} input
+ */
+export function judgeVerify({
+  tag,
+  errorEvents,
+  occurrences,
+  tagEventCount,
+  minEvents = 1,
+  versionIds = new Set(),
+  firstTagTs,
+  truncated = [],
+  expectEvent,
+  expectEventCount = 0,
+}) {
+  const afterDeploy = (item) => {
+    if (firstTagTs === undefined) return true;
+    const t = Date.parse(String(item.timestamp ?? ""));
+    return Number.isNaN(t) || t >= firstTagTs;
+  };
+  const errors = errorEvents.filter((e) => attributeVersion(e, tag, versionIds) === "match");
+  const occ = occurrences.filter((o) => attributeVersion(o, tag, versionIds) === "match");
+  const unattributedErrors = errorEvents.filter(
+    (e) => attributeVersion(e, tag, versionIds) === "unknown" && afterDeploy(e)
+  ).length;
+  const unattributedOcc = occurrences.filter(
+    (o) => attributeVersion(o, tag, versionIds) === "unknown" && afterDeploy(o)
+  ).length;
+  const unattributed = unattributedErrors + unattributedOcc;
+  const base = { errors, occurrences: occ, tagEventCount, unattributed, unattributedErrors, unattributedOcc, truncated };
   if (errors.length > 0 || occ.length > 0) {
     return { verdict: "recurred", exitCode: EXIT.RECURRED, reason: "tag_errors", ...base };
   }
+  if (truncated.length > 0) {
+    return { verdict: "insufficient", exitCode: EXIT.FAILED, reason: "truncated", ...base };
+  }
   if (unattributed > 0) {
-    return { verdict: "insufficient", exitCode: EXIT.FAILED, reason: "unattributed_occurrences", ...base };
+    return { verdict: "insufficient", exitCode: EXIT.FAILED, reason: "unattributed", ...base };
+  }
+  if (expectEvent !== undefined && expectEventCount < 1) {
+    return { verdict: "insufficient", exitCode: EXIT.FAILED, reason: "expected_event_missing", ...base };
   }
   if (tagEventCount < minEvents) {
     return { verdict: "insufficient", exitCode: EXIT.FAILED, reason: "too_few_events", ...base };
@@ -438,19 +494,20 @@ export function createClient({ fetch, accountId, token }) {
 export const USAGE = `사용: node scripts/obs.mjs <명령> [옵션]
 
 명령
-  errors [--since 1h]               level=error 이벤트
-  events <event> [--since 1h] [--level error]
+  errors [--since 1h] [--until <ISO>] [--path /api/x]   level=error 이벤트
+  events <event> [--since 1h] [--until <ISO>] [--level error] [--path /api/x]
   request <requestId> [--since 3d]  한 요청의 모든 앱 로그(응답 헤더 x-request-id 값)
   summary [--since 24h]             event×level 건수
   issues [--status active]          Issues 목록
   issue <id>                        Issue 상세와 최근 occurrence
-  verify --tag <sha> [--since 24h] [--event <event>] [--issue <id>] [--min-events 1] [--skip-issues]
+  verify --tag <sha> [--since 3d] [--event <event>] [--issue <id>] [--expect-event <event>] [--min-events 1] [--skip-issues]
                                     배포 태그 이후 재발 판정. exit 0 = 재발 없음, 1 = 재발, 2 = 조회 실패·판정 근거 부족
 
 공통 옵션
   --json      응답 원문(JSON)을 출력한다. verify는 판정 결과 객체
   --limit N   최대 건수(기본 100, 최대 2000)
   --since     기간(15m, 1h, 3d) 또는 ISO 시각
+  --until     끝 시각(기간 또는 ISO, 기본 지금). occurrence 시각 앞뒤로 앱 로그를 찾을 때 쓴다
 
 환경변수
   CF_OBS_TOKEN           필수. 읽기 전용 API 토큰 (docs/OBSERVABILITY.md "1회성 설정")
@@ -520,7 +577,7 @@ async function cmdIssue(client, { id, limit, json }, io) {
     io.out(JSON.stringify({ issue: detail, occurrences: occ }, null, 2));
     return EXIT.OK;
   }
-  const issue = unwrap(detail);
+  const issue = extractIssue(detail);
   io.out(JSON.stringify({ issue: isObj(issue) ? normalizeIssue(issue) : issue }));
   const rows = extractOccurrences(occ).map(normalizeOccurrence);
   jsonl(io.out, rows.map((o) => ({ occurrence: o })));
@@ -528,45 +585,86 @@ async function cmdIssue(client, { id, limit, json }, io) {
   return EXIT.OK;
 }
 
-/** 한 Issue의 occurrence를 since 이후만큼(최대 maxPages 쪽) 모은다 */
-async function collectOccurrences(client, id, fromMs, maxPages = 5) {
+/**
+ * 한 Issue의 occurrence를 since 이후만큼 모은다. API는 최신순(OpenAPI 설명 "newest first")이라
+ * since보다 오래된 행이 나오면 멈춘다. maxPages를 다 썼는데 cursor가 남고 아직 since에 닿지 않았으면 truncated
+ * @returns {Promise<{ rows: object[], truncated: boolean }>}
+ */
+export async function collectOccurrences(client, id, fromMs, maxPages = 5) {
   const all = [];
   let cursor;
+  let reachedSince = false;
   for (let page = 0; page < maxPages; page++) {
     const body = await client.occurrences(id, { per_page: 100, cursor });
     const rows = extractOccurrences(body).map((o) => ({ ...normalizeOccurrence(o), issueId: id }));
     all.push(...rows);
     cursor = extractCursor(body);
-    const oldest = rows.map((o) => Date.parse(o.timestamp ?? "")).filter((t) => !Number.isNaN(t));
-    if (!cursor || rows.length === 0 || (oldest.length > 0 && Math.min(...oldest) < fromMs)) break;
+    const times = rows.map((o) => Date.parse(o.timestamp ?? "")).filter((t) => !Number.isNaN(t));
+    reachedSince = times.length > 0 && Math.min(...times) < fromMs;
+    if (!cursor || rows.length === 0 || reachedSince) break;
   }
-  return all.filter((o) => {
+  const truncated = Boolean(cursor) && !reachedSince;
+  const rows = all.filter((o) => {
     const t = Date.parse(o.timestamp ?? "");
     return Number.isNaN(t) || t >= fromMs;
   });
+  return { rows, truncated };
+}
+
+/** verify가 볼 active Issue ID를 모은다(쪽 단위 page, 최대 maxPages) */
+async function collectActiveIssueIds(client, maxPages = 5) {
+  const ids = [];
+  for (let page = 1; page <= maxPages; page++) {
+    const body = await client.issues({ service: SERVICE, status: "active", perPage: 100, page });
+    const issues = extractIssues(body);
+    const pageIds = issues.map((i) => normalizeIssue(i).id).filter(Boolean);
+    if (pageIds.length < issues.length) {
+      throw new ApiError("Issue 목록에서 ID를 읽지 못했다(응답 모양이 예상과 다르다). --json으로 원문을 확인한다");
+    }
+    ids.push(...pageIds);
+    const totalPages = Number(body?.result_info?.total_pages);
+    if (!Number.isFinite(totalPages) || page >= totalPages || issues.length === 0) {
+      return { ids, truncated: false };
+    }
+  }
+  return { ids, truncated: true };
 }
 
 async function cmdVerify(client, opts, io) {
-  const { tag, from, to, event, issueId, skipIssues, minEvents, json } = opts;
+  const { tag, from, to, event, issueId, skipIssues, minEvents, expectEvent, json } = opts;
   const notes = [];
+  const truncated = [];
 
-  // 1) 태그에 속한 error 이벤트(재발 후보)
-  const errorFilters = [eq("level", "error"), eq("versionTag", tag)];
-  if (event) errorFilters.push(eq("event", event));
-  const errorBody = await client.query(buildTelemetryQuery({ from, to, limit: 200, filters: errorFilters }));
-  const errorEvents = extractEvents(errorBody).map((e) => normalizeEvent(e));
-
-  // 2) 태그로 남은 로그 수(배포·트래픽 근거). 레벨 무관
+  // 1) 태그로 남은 로그(배포·트래픽 근거, 버전 ID 수집). 레벨 무관
   const tagBody = await client.query(
     buildTelemetryQuery({ from, to, limit: MAX_LIMIT, filters: [eq("versionTag", tag)] })
   );
   // 서버가 태그로 거른 결과다. 태그를 읽지 못한 이벤트도 세고, 다른 태그가 명시된 것만 뺀다
-  const tagEventCount = extractEvents(tagBody)
+  const tagEvents = extractEvents(tagBody)
     .map((e) => normalizeEvent(e))
-    .filter((e) => e.versionTag === undefined || e.versionTag === tag).length;
+    .filter((e) => e.versionTag === undefined || e.versionTag === tag);
+  const tagEventCount = tagEvents.length;
+  const versionIds = new Set(tagEvents.map((e) => e.versionId).filter((v) => v !== undefined).map(String));
+  const tagTimes = tagEvents.map((e) => Date.parse(String(e.timestamp ?? ""))).filter((t) => !Number.isNaN(t));
+  const firstTagTs = tagTimes.length > 0 ? Math.min(...tagTimes) : undefined;
+  const expectEventCount = expectEvent ? tagEvents.filter((e) => e.event === expectEvent).length : 0;
+  if (expectEvent && tagEventCount >= MAX_LIMIT && expectEventCount === 0) {
+    notes.push(`태그 로그가 ${MAX_LIMIT}건에서 잘려 --expect-event를 다 보지 못했을 수 있다`);
+  }
+
+  // 2) 재발 후보. 태그 필터 없이 받아 클라이언트에서 버전을 가린다.
+  //    서버 태그 필터를 걸면 versionTag가 빠진 로그(버전 조회 실패 등)가 조용히 사라지기 때문이다.
+  //    --event를 주면 레벨을 묻지 않는다(warn 이벤트도 대상). 단 info는 정상 흐름이라 재발로 세지 않는다
+  const candidateFilters = event ? [eq("event", event)] : [eq("level", "error")];
+  const candidateBody = await client.query(
+    buildTelemetryQuery({ from, to, limit: MAX_LIMIT, filters: candidateFilters })
+  );
+  const candidates = extractEvents(candidateBody);
+  if (candidates.length >= MAX_LIMIT) truncated.push(`error 로그가 ${MAX_LIMIT}건에서 잘렸다. --since를 좁힌다`);
+  const errorEvents = candidates.map((e) => normalizeEvent(e)).filter((e) => !event || e.level !== "info");
 
   // 3) Issue occurrence
-  let occurrences = [];
+  const occurrences = [];
   if (skipIssues) {
     notes.push("Issues는 --skip-issues로 건너뛰었다");
   } else if (event && !issueId) {
@@ -574,16 +672,34 @@ async function cmdVerify(client, opts, io) {
   } else {
     let ids = [issueId];
     if (!issueId) {
-      const issues = extractIssues(await client.issues({ service: SERVICE, status: "active", perPage: 100 }));
-      ids = issues.map((i) => normalizeIssue(i).id).filter(Boolean);
-      if (ids.length < issues.length) {
-        throw new ApiError("Issue 목록에서 ID를 읽지 못했다(응답 모양이 예상과 다르다). --json으로 원문을 확인한다");
-      }
+      const listed = await collectActiveIssueIds(client);
+      ids = listed.ids;
+      if (listed.truncated) truncated.push("active Issue 목록이 페이지 한도에서 잘렸다. --issue <id>로 좁힌다");
     }
-    for (const id of ids) occurrences.push(...(await collectOccurrences(client, id, from)));
+    for (const id of ids) {
+      const r = await collectOccurrences(client, id, from);
+      occurrences.push(...r.rows);
+      if (r.truncated) truncated.push(`Issue ${id}의 occurrence가 페이지 한도에서 잘렸다. --since를 좁힌다`);
+    }
   }
 
-  const result = judgeVerify({ tag, errorEvents, occurrences, tagEventCount, minEvents });
+  const result = judgeVerify({
+    tag,
+    errorEvents,
+    occurrences,
+    tagEventCount,
+    minEvents,
+    versionIds,
+    firstTagTs,
+    truncated,
+    expectEvent,
+    expectEventCount,
+  });
+  if (result.verdict === "clean" && !expectEvent) {
+    notes.push(
+      "clean은 이 기간에 대상 오류가 보이지 않았다는 뜻이다. 수정한 경로가 실제로 실행됐다는 근거는 아니다(--expect-event <성공 이벤트>로 함께 확인한다)"
+    );
+  }
   const report = {
     tag,
     verdict: result.verdict,
@@ -592,10 +708,13 @@ async function cmdVerify(client, opts, io) {
     reason: result.reason,
     tagEventCount,
     errorCount: result.errors.length,
-    unattributedOccurrences: result.unattributed,
     occurrenceCount: result.occurrences.length,
+    unattributedErrors: result.unattributedErrors,
+    unattributedOccurrences: result.unattributedOcc,
     ...(event ? { event } : {}),
     ...(issueId ? { issueId } : {}),
+    ...(expectEvent ? { expectEvent, expectEventCount } : {}),
+    ...(truncated.length > 0 ? { truncated } : {}),
     notes,
   };
 
@@ -606,13 +725,16 @@ async function cmdVerify(client, opts, io) {
   io.out(JSON.stringify(report));
   jsonl(io.out, result.errors.map((e) => ({ error: e })));
   jsonl(io.out, result.occurrences.map((o) => ({ occurrence: o })));
+  const insufficient = {
+    truncated: `판정 근거 부족: 조회가 잘렸다(${truncated.join("; ")})`,
+    unattributed: `판정 근거 부족: 버전을 알 수 없는 error ${result.unattributedErrors}건, occurrence ${result.unattributedOcc}건. --json으로 원문을 보고 issue·request 명령으로 확인한다`,
+    expected_event_missing: `판정 근거 부족: 태그 ${tag} 로그에 ${expectEvent}가 없다. 수정한 경로가 아직 실행되지 않았다. 시간을 두고 다시 본다`,
+    too_few_events: `판정 근거 부족: 태그 ${tag}로 남은 로그 ${tagEventCount}건 < --min-events ${minEvents}. 배포 여부는 npx wrangler deployments list로 확인하고, 배포됐는데 트래픽이 적다면 기다린다`,
+  };
   const message = {
-    recurred: `재발: 태그 ${tag}에서 error ${result.errors.length}건, occurrence ${result.occurrences.length}건`,
-    insufficient:
-      result.reason === "unattributed_occurrences"
-        ? `판정 근거 부족: 버전 태그를 읽지 못한 occurrence ${result.unattributed}건. --json으로 원문을 보고 issue 명령으로 확인한다`
-        : `판정 근거 부족: 태그 ${tag}로 남은 로그 ${tagEventCount}건 < --min-events ${minEvents}. 배포 여부는 npx wrangler versions list로 확인하고, 배포됐는데 트래픽이 적다면 기다리거나 --min-events 0`,
-    clean: `재발 없음: 태그 ${tag} 로그 ${tagEventCount}건 중 대상 error 없음`,
+    recurred: `재발: 태그 ${tag}에서 ${event ? event : "error"} ${result.errors.length}건, occurrence ${result.occurrences.length}건. 출력된 항목이 고친 대상과 같은지 먼저 확인한다`,
+    insufficient: insufficient[result.reason],
+    clean: `재발 없음: 태그 ${tag} 로그 ${tagEventCount}건 중 대상 오류 없음`,
   }[result.verdict];
   io.err(`# ${message}`);
   for (const n of notes) io.err(`# ${n}`);
@@ -655,6 +777,13 @@ export async function run(argv, deps) {
     const json = flags.json === true;
     const limit = parseLimit(flags.limit, 100);
     const since = (fallback) => parseSince(flags.since ?? fallback, nowMs);
+    const until = flags.until === undefined ? nowMs : parseSince(flags.until, nowMs);
+    const window = (fallback) => {
+      const from = since(fallback);
+      if (from >= until) throw new UsageError("--since가 --until보다 늦다");
+      return { from, to: until };
+    };
+    const pathFilter = flags.path === undefined ? [] : [eq("path", flags.path)];
     const need = (name) => {
       if (!positional[0]) throw new UsageError(`${command}: <${name}>가 필요하다`);
       return positional[0];
@@ -664,22 +793,22 @@ export async function run(argv, deps) {
       case "errors":
         return await cmdEvents(
           client,
-          { from: since("1h"), to: nowMs, limit, json, filters: [eq("level", "error")] },
+          { ...window("1h"), limit, json, filters: [eq("level", "error"), ...pathFilter] },
           io
         );
       case "events": {
-        const filters = [eq("event", need("event"))];
+        const filters = [eq("event", need("event")), ...pathFilter];
         if (flags.level) filters.push(eq("level", flags.level));
-        return await cmdEvents(client, { from: since("1h"), to: nowMs, limit, json, filters }, io);
+        return await cmdEvents(client, { ...window("1h"), limit, json, filters }, io);
       }
       case "request":
         return await cmdEvents(
           client,
-          { from: since("3d"), to: nowMs, limit, json, withStack: true, filters: [eq("requestId", need("requestId"))] },
+          { ...window("3d"), limit, json, withStack: true, filters: [eq("requestId", need("requestId"))] },
           io
         );
       case "summary":
-        return await cmdSummary(client, { from: since("24h"), to: nowMs, json }, io);
+        return await cmdSummary(client, { ...window("24h"), json }, io);
       case "issues":
         return await cmdIssues(client, { status: flags.status ?? "active", limit, json }, io);
       case "issue":
@@ -697,12 +826,13 @@ export async function run(argv, deps) {
           client,
           {
             tag,
-            from: since("24h"),
-            to: nowMs,
+            // 보관 기간(현재 3일)만큼 본다. 태그로 가리므로 이전 버전의 오류는 섞이지 않는다
+            ...window("3d"),
             event: flags.event,
             issueId: flags.issue,
             skipIssues: flags["skip-issues"] === true,
             minEvents,
+            expectEvent: flags["expect-event"],
             json,
           },
           io
