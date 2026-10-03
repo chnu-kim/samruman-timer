@@ -7,6 +7,7 @@ import { StatsCardGrid } from "@/components/stats/StatsCardGrid";
 import { DonorRankingTable } from "@/components/stats/DonorRankingTable";
 import { HourlyActivityChart } from "@/components/stats/HourlyActivityChart";
 import { DailyActivityChart } from "@/components/stats/DailyActivityChart";
+import { CumulativeChart } from "@/components/graph/CumulativeChart";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { ChevronLeftIcon } from "@/components/ui/Icons";
 import { StatsPageSkeleton } from "@/components/ui/Skeleton";
@@ -15,6 +16,8 @@ import type {
   ApiSuccessResponse,
   TimerDetailResponse,
   TimerStatsResponse,
+  CumulativeGraphPoint,
+  GraphResponse,
 } from "@/types";
 
 export default function TimerStatsPage() {
@@ -23,15 +26,18 @@ export default function TimerStatsPage() {
 
   const [timer, setTimer] = useState<TimerDetailResponse | null>(null);
   const [stats, setStats] = useState<TimerStatsResponse | null>(null);
+  // 누적 변경량은 보조 차트라 실패해도 통계 전체를 오류로 바꾸지 않고 해당 섹션만 숨긴다
+  const [cumulative, setCumulative] = useState<CumulativeGraphPoint[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
   const fetchData = useCallback(async () => {
     try {
-      const [timerRes, statsRes] = await Promise.all([
+      const [timerRes, statsRes, cumulativeRes] = await Promise.all([
         fetch(`/api/timers/${timerId}`),
         fetch(`/api/timers/${timerId}/stats`),
+        fetch(`/api/timers/${timerId}/graph?mode=cumulative`).catch(() => null),
       ]);
 
       if (statsRes.status === 401 || statsRes.status === 403) {
@@ -50,6 +56,10 @@ export default function TimerStatsPage() {
 
       setTimer(timerJson.data);
       setStats(statsJson.data);
+      if (cumulativeRes?.ok) {
+        const graphJson = (await cumulativeRes.json()) as ApiSuccessResponse<GraphResponse>;
+        if (graphJson.data.mode === "cumulative") setCumulative(graphJson.data.points);
+      }
     } catch {
       setError(true);
     } finally {
@@ -119,6 +129,16 @@ export default function TimerStatsPage() {
             <h2 className="border-l-2 border-accent pl-3 text-lg font-bold">상위 후원자</h2>
             <DonorRankingTable donors={stats.topDonors} className="mt-4" />
           </div>
+
+          {/* 누적 변경량 */}
+          {cumulative && (
+            <div>
+              <h2 className="border-l-2 border-accent pl-3 text-lg font-bold">누적 변경량</h2>
+              <div className="mt-4 rounded-xl border border-border bg-muted p-4">
+                <CumulativeChart points={cumulative} />
+              </div>
+            </div>
+          )}
 
           {/* 시간대별 활동 */}
           <div>

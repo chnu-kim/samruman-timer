@@ -7,7 +7,6 @@ interface ShortcutAction {
   toggleAction?: boolean;
   showHelp?: boolean;
   refresh?: boolean;
-  toggleGraph?: boolean;
 }
 
 interface UseKeyboardShortcutsOptions {
@@ -15,7 +14,6 @@ interface UseKeyboardShortcutsOptions {
   onPreset: (seconds: number) => void;
   onToggleAction: () => void;
   onRefresh?: () => void;
-  onToggleGraph?: () => void;
 }
 
 const SHORTCUTS: Record<string, ShortcutAction> = {
@@ -31,10 +29,9 @@ const SHORTCUTS: Record<string, ShortcutAction> = {
 const CODE_SHORTCUTS: Record<string, ShortcutAction> = {
   KeyX: { toggleAction: true },
   KeyR: { refresh: true },
-  KeyG: { toggleGraph: true },
 };
 
-export function useKeyboardShortcuts({ enabled, onPreset, onToggleAction, onRefresh, onToggleGraph }: UseKeyboardShortcutsOptions) {
+export function useKeyboardShortcuts({ enabled, onPreset, onToggleAction, onRefresh }: UseKeyboardShortcutsOptions) {
   const [showHelp, setShowHelp] = useState(false);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -53,7 +50,7 @@ export function useKeyboardShortcuts({ enabled, onPreset, onToggleAction, onRefr
     const action: ShortcutAction | undefined = SHORTCUTS[e.key] ?? CODE_SHORTCUTS[e.code];
     if (!action) return;
 
-    // 도움말이 열려 있는 동안에는 시간을 바꾸는 단축키를 막는다('?', R, G는 유지)
+    // 도움말이 열려 있는 동안에는 시간을 바꾸는 단축키를 막는다('?', R은 유지)
     if (showHelp && (action.presetSeconds || action.toggleAction)) return;
 
     if (action.presetSeconds) {
@@ -68,11 +65,8 @@ export function useKeyboardShortcuts({ enabled, onPreset, onToggleAction, onRefr
     } else if (action.refresh) {
       e.preventDefault();
       onRefresh?.();
-    } else if (action.toggleGraph) {
-      e.preventDefault();
-      onToggleGraph?.();
     }
-  }, [enabled, showHelp, onPreset, onToggleAction, onRefresh, onToggleGraph]);
+  }, [enabled, showHelp, onPreset, onToggleAction, onRefresh]);
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
@@ -88,6 +82,5 @@ export const SHORTCUT_HELP = [
   { key: "0", description: "10시간 추가/차감" },
   { key: "X", description: "추가/차감 전환" },
   { key: "R", description: "수동 새로고침" },
-  { key: "G", description: "그래프 모드 전환" },
   { key: "?", description: "단축키 도움말" },
 ];

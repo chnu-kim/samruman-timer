@@ -17,10 +17,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { FormDialog } from "@/components/ui/FormDialog";
 import { useToast } from "@/components/ui/Toast";
 import { cn, formatDateTime, displayActorName } from "@/lib/utils";
-import { GraphModeSelector } from "@/components/graph/GraphModeSelector";
 import { RemainingChart } from "@/components/graph/RemainingChart";
-import { CumulativeChart } from "@/components/graph/CumulativeChart";
-import { FrequencyChart } from "@/components/graph/FrequencyChart";
 import { useKeyboardShortcuts, SHORTCUT_HELP } from "@/hooks/useKeyboardShortcuts";
 import { usePolling } from "@/hooks/usePolling";
 import { useDocumentTitle, APP_TITLE } from "@/hooks/useDocumentTitle";
@@ -36,7 +33,6 @@ import type {
   TimerLogResponse,
   ActionType,
   MeResponse,
-  GraphMode,
   GraphResponse,
 } from "@/types";
 
@@ -61,8 +57,6 @@ const ACTION_TYPE_BADGE_VARIANT: Record<ActionType, "create" | "add" | "subtract
 };
 
 const FILTER_ACTIONS: ActionType[] = ["CREATE", "ADD", "SUBTRACT", "EXPIRE", "REOPEN", "ACTIVATE", "DELETE"];
-
-const GRAPH_MODES: GraphMode[] = ["remaining", "cumulative", "frequency"];
 
 function formatSeconds(s: number): string {
   const abs = Math.abs(s);
@@ -100,8 +94,7 @@ export default function TimerDetailPage() {
   const [activeFilters, setActiveFilters] = useState<Set<ActionType>>(new Set());
   const [logsLoading, setLogsLoading] = useState(false);
 
-  // 그래프
-  const [graphMode, setGraphMode] = useState<GraphMode>("remaining");
+  // 그래프(잔여 시간 추이. 누적 변경량은 통계 페이지에 있다)
   const [graphData, setGraphData] = useState<GraphResponse | null>(null);
   const [graphLoading, setGraphLoading] = useState(false);
   const [graphError, setGraphError] = useState(false);
@@ -171,13 +164,13 @@ export default function TimerDetailPage() {
   }, [logPage, activeFilters, fetchLogs]);
 
   // silent: 폴링이 부르는 백그라운드 갱신. 스피너를 띄우지 않고, 실패해도 보이던 그래프를 오류 문구로 바꾸지 않는다
-  const fetchGraph = useCallback(async (mode: GraphMode, { silent = false } = {}) => {
+  const fetchGraph = useCallback(async ({ silent = false } = {}) => {
     if (!silent) {
       setGraphLoading(true);
       setGraphError(false);
     }
     try {
-      const res = await fetch(`/api/timers/${timerId}/graph?mode=${mode}`);
+      const res = await fetch(`/api/timers/${timerId}/graph?mode=remaining`);
       if (res.ok) {
         const json = (await res.json()) as ApiSuccessResponse<GraphResponse>;
         setGraphData(json.data);
@@ -193,8 +186,8 @@ export default function TimerDetailPage() {
   }, [timerId]);
 
   useEffect(() => {
-    fetchGraph(graphMode);
-  }, [graphMode, fetchGraph]);
+    fetchGraph();
+  }, [fetchGraph]);
 
   // 폴링: 서버 동기화
   const pollInterval = timer?.status === "RUNNING" ? 5000 : 15000;
@@ -234,12 +227,12 @@ export default function TimerDetailPage() {
       // 2페이지 이후를 보고 있으면 목록이 밀리지 않게 로그는 건너뛴다
       if (externalChange) {
         if (logPage === 1) fetchLogs(1, activeFilters, { silent: true });
-        fetchGraph(graphMode, { silent: true });
+        fetchGraph({ silent: true });
       }
     } catch {
       // 폴링 실패는 무시
     }
-  }, [timerId, logPage, activeFilters, graphMode, fetchLogs, fetchGraph]);
+  }, [timerId, logPage, activeFilters, fetchLogs, fetchGraph]);
 
   usePolling({
     fn: pollTimer,
@@ -257,7 +250,7 @@ export default function TimerDetailPage() {
     if (data.log?.id) {
       fetchLogs(1, activeFilters);
       setLogPage(1);
-      fetchGraph(graphMode);
+      fetchGraph();
     }
   }
 
@@ -298,18 +291,9 @@ export default function TimerDetailPage() {
   const handleRefresh = useCallback(() => {
     fetchTimer();
     fetchLogs(logPage, activeFilters);
-    fetchGraph(graphMode);
+    fetchGraph();
     toast("새로고침 완료", "success");
-  }, [fetchTimer, fetchLogs, fetchGraph, logPage, activeFilters, graphMode, toast]);
-
-  const handleToggleGraph = useCallback(() => {
-    setGraphMode((prev) => {
-      const idx = GRAPH_MODES.indexOf(prev);
-      const next = GRAPH_MODES[(idx + 1) % GRAPH_MODES.length];
-      setGraphData(null);
-      return next;
-    });
-  }, []);
+  }, [fetchTimer, fetchLogs, fetchGraph, logPage, activeFilters, toast]);
 
   const { showHelp, setShowHelp } = useKeyboardShortcuts({
     // 모달이 열려 있으면 뒤쪽 화면의 시간을 바꾸지 않는다
@@ -317,7 +301,6 @@ export default function TimerDetailPage() {
     onPreset: handleKeyboardPreset,
     onToggleAction: handleToggleAction,
     onRefresh: handleRefresh,
-    onToggleGraph: handleToggleGraph,
   });
 
   function toggleFilter(action: ActionType) {
@@ -681,9 +664,8 @@ export default function TimerDetailPage() {
 
       {/* 그래프 */}
       <div className="mt-8">
-        <h2 className="border-l-2 border-accent pl-3 text-lg font-bold">그래프</h2>
-        <GraphModeSelector mode={graphMode} onModeChange={(m) => { setGraphData(null); setGraphMode(m); }} className="mt-3" />
-        <div id="graph-panel" role="tabpanel" aria-label={`${graphMode} 그래프`} className="mt-4 rounded-xl border border-border bg-muted p-4">
+        <h2 className="border-l-2 border-accent pl-3 text-lg font-bold">잔여 시간 추이</h2>
+        <div className="mt-4 rounded-xl border border-border bg-muted p-4">
           {graphLoading ? (
             <div className="flex h-64 items-center justify-center">
               <Spinner />
@@ -692,7 +674,7 @@ export default function TimerDetailPage() {
             <div className="flex h-64 flex-col items-center justify-center gap-2 text-muted-foreground">
               <p className="text-sm">그래프를 불러오는데 실패했습니다.</p>
               <button
-                onClick={() => fetchGraph(graphMode)}
+                onClick={() => fetchGraph()}
                 className="rounded-md px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent-light transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 다시 시도
@@ -700,10 +682,6 @@ export default function TimerDetailPage() {
             </div>
           ) : graphData?.mode === "remaining" ? (
             <RemainingChart points={graphData.points} />
-          ) : graphData?.mode === "cumulative" ? (
-            <CumulativeChart points={graphData.points} />
-          ) : graphData?.mode === "frequency" ? (
-            <FrequencyChart buckets={graphData.buckets} />
           ) : null}
         </div>
       </div>
