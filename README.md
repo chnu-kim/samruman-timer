@@ -16,13 +16,13 @@ pnpm dev
 ## 스크립트
 
 ```bash
-pnpm dev              # 개발 서버
-pnpm build            # 프로덕션 빌드
-pnpm test             # 테스트
-pnpm storybook        # Storybook
-pnpm run deploy       # Cloudflare 배포
-pnpm db:migrate       # DB 마이그레이션 (원격)
-pnpm db:migrate:local # DB 마이그레이션 (로컬)
+pnpm dev               # 개발 서버
+pnpm build             # 프로덕션 빌드
+pnpm test              # 테스트
+pnpm storybook         # Storybook
+pnpm run deploy        # Cloudflare 배포 (원격 마이그레이션은 따로 적용)
+pnpm db:migrate:local  # DB 마이그레이션 (로컬)
+pnpm db:migrate:remote # DB 마이그레이션 (원격, 프로덕션)
 ```
 
 ## 기술 스택
