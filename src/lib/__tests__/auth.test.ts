@@ -243,12 +243,12 @@ describe("rotateRefreshToken", () => {
     db._stmt.run.mockResolvedValue({ meta: { changes: 1 } });
 
     const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
-    expect(result).not.toBeNull();
-    expect(result!.userId).toBe("user-1");
-    expect(result!.chzzkUserId).toBe("chzzk-1");
-    expect(result!.nickname).toBe("tester");
-    expect(result!.newRawToken).toBeTruthy();
-    expect(result!.familyId).toBe("family-1");
+    if (!result.ok) throw new Error(`rotation 실패: ${result.reason}`);
+    expect(result.userId).toBe("user-1");
+    expect(result.chzzkUserId).toBe("chzzk-1");
+    expect(result.nickname).toBe("tester");
+    expect(result.newRawToken).toBeTruthy();
+    expect(result.familyId).toBe("family-1");
   });
 
   it("USED 토큰이 방금(30초 이내) rotation됨 → grace (사용자 정보 반환)", async () => {
@@ -269,14 +269,14 @@ describe("rotateRefreshToken", () => {
       .mockResolvedValueOnce({ id: "user-1", chzzk_user_id: "chzzk-1", nickname: "tester" });
 
     const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
-    expect(result).not.toBeNull();
-    expect(result!.userId).toBe("user-1");
-    expect(result!.newRawToken).toBeNull();
+    if (!result.ok) throw new Error(`rotation 실패: ${result.reason}`);
+    expect(result.userId).toBe("user-1");
+    expect(result.newRawToken).toBeNull();
     // family 폐기 호출 안 됨
     expect(db._stmt.run).not.toHaveBeenCalled();
   });
 
-  it("USED 토큰이 rotation된 지 30초 넘음 → null + family 폐기 (reuse detection)", async () => {
+  it("USED 토큰이 rotation된 지 30초 넘음 → reuse_detected + family 폐기", async () => {
     const rawToken = "used-token-old";
     const tokenHash = await hashToken(rawToken);
 
@@ -293,7 +293,7 @@ describe("rotateRefreshToken", () => {
     db._stmt.run.mockResolvedValue({ meta: { changes: 2 } });
 
     const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
-    expect(result).toBeNull();
+    expect(result).toEqual({ ok: false, reason: "reuse_detected", userId: "user-1", familyId: "family-1" });
     // family 폐기 호출됨
     expect(db._stmt.run).toHaveBeenCalledTimes(1);
     const sqls = db.prepare.mock.calls.map((c) => String(c[0]));
@@ -318,13 +318,13 @@ describe("rotateRefreshToken", () => {
     db._stmt.run.mockResolvedValue({ meta: { changes: 3 } });
 
     const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
-    expect(result).toBeNull();
+    expect(result).toMatchObject({ ok: false, reason: "reuse_detected" });
     const sqls = db.prepare.mock.calls.map((c) => String(c[0]));
     expect(sqls.some((q) => q.includes("status = 'ACTIVE' AND created_at >"))).toBe(false);
     expect(sqls.some((q) => q.includes("SET status = 'REVOKED'"))).toBe(true);
   });
 
-  it("REVOKED 토큰 → null", async () => {
+  it("REVOKED 토큰 → reuse_detected", async () => {
     const rawToken = "revoked-token";
     const tokenHash = await hashToken(rawToken);
 
@@ -340,10 +340,10 @@ describe("rotateRefreshToken", () => {
     });
 
     const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
-    expect(result).toBeNull();
+    expect(result).toMatchObject({ ok: false, reason: "reuse_detected", familyId: "family-1" });
   });
 
-  it("만료된 토큰 → null", async () => {
+  it("만료된 토큰 → expired", async () => {
     const rawToken = "expired-token";
     const tokenHash = await hashToken(rawToken);
 
@@ -359,14 +359,14 @@ describe("rotateRefreshToken", () => {
     });
 
     const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
-    expect(result).toBeNull();
+    expect(result).toMatchObject({ ok: false, reason: "expired" });
   });
 
-  it("존재하지 않는 토큰 → null", async () => {
+  it("존재하지 않는 토큰 → not_found", async () => {
     db._stmt.first.mockResolvedValue(null);
 
     const result = await rotateRefreshToken(db as unknown as D1Database, "nonexistent");
-    expect(result).toBeNull();
+    expect(result).toEqual({ ok: false, reason: "not_found" });
   });
 
   it("동시 사용 (changes=0) + 방금 USED가 됨 → grace (사용자 정보 반환, 새 토큰 없음)", async () => {
@@ -392,15 +392,15 @@ describe("rotateRefreshToken", () => {
     db._stmt.run.mockResolvedValue({ meta: { changes: 0 } });
 
     const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
-    expect(result).not.toBeNull();
-    expect(result!.userId).toBe("user-1");
-    expect(result!.newRawToken).toBeNull();
-    expect(result!.newTokenHash).toBeNull();
+    if (!result.ok) throw new Error(`rotation 실패: ${result.reason}`);
+    expect(result.userId).toBe("user-1");
+    expect(result.newRawToken).toBeNull();
+    expect(result.newTokenHash).toBeNull();
     // family 폐기 호출 안 됨 (UPDATE 1회만)
     expect(db._stmt.run).toHaveBeenCalledTimes(1);
   });
 
-  it("동시 사용 (changes=0) + 그 사이 family가 폐기됨 → null + family 폐기", async () => {
+  it("동시 사용 (changes=0) + 그 사이 family가 폐기됨 → reuse_detected + family 폐기", async () => {
     const rawToken = "reused-token";
     const tokenHash = await hashToken(rawToken);
 
@@ -420,9 +420,51 @@ describe("rotateRefreshToken", () => {
     db._stmt.run.mockResolvedValue({ meta: { changes: 0 } });
 
     const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
-    expect(result).toBeNull();
+    expect(result).toMatchObject({ ok: false, reason: "reuse_detected", userId: "user-1", familyId: "family-1" });
     // UPDATE (0 changes) + family 폐기
     expect(db._stmt.run).toHaveBeenCalledTimes(2);
+  });
+
+  it("rotation 뒤 사용자 행이 없으면 user_missing", async () => {
+    const rawToken = "orphan-token";
+    const tokenHash = await hashToken(rawToken);
+    db._stmt.first
+      .mockResolvedValueOnce({
+        id: "rt-1",
+        user_id: "user-gone",
+        token_hash: tokenHash,
+        family_id: "family-1",
+        status: "ACTIVE",
+        expires_at: new Date(Date.now() + 86400000).toISOString(),
+        created_at: new Date().toISOString(),
+        used_at: null,
+      })
+      .mockResolvedValueOnce(null);
+    db._stmt.run.mockResolvedValue({ meta: { changes: 1 } });
+
+    const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
+    expect(result).toEqual({ ok: false, reason: "user_missing", userId: "user-gone", familyId: "family-1" });
+  });
+
+  it("grace 경로에서 사용자 행이 없어도 user_missing", async () => {
+    const rawToken = "orphan-grace";
+    const tokenHash = await hashToken(rawToken);
+    db._stmt.first
+      .mockResolvedValueOnce({
+        id: "rt-1",
+        user_id: "user-gone",
+        token_hash: tokenHash,
+        family_id: "family-1",
+        status: "USED",
+        expires_at: new Date(Date.now() + 86400000).toISOString(),
+        created_at: new Date(Date.now() - 120_000).toISOString(),
+        used_at: new Date(Date.now() - 5_000).toISOString(),
+      })
+      .mockResolvedValueOnce(null);
+
+    const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
+    expect(result).toMatchObject({ ok: false, reason: "user_missing" });
+    expect(db._stmt.run).not.toHaveBeenCalled();
   });
 });
 
@@ -485,7 +527,8 @@ describe("refresh family 절대 수명 (보안 감사 F18)", () => {
 
     const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
 
-    expect(result?.newRawToken).toBeTruthy();
+    if (!result.ok) throw new Error(`rotation 실패: ${result.reason}`);
+    expect(result.newRawToken).toBeTruthy();
     const binds = insertBinds(db);
     expect(binds[4]).toBe(familyExpiresAt); // 30일로 연장되지 않는다
     expect(binds[6]).toBe(familyExpiresAt);
@@ -509,7 +552,7 @@ describe("refresh family 절대 수명 (보안 감사 F18)", () => {
 
     const result = await rotateRefreshToken(db as unknown as D1Database, rawToken);
 
-    expect(result).toBeNull();
+    expect(result).toMatchObject({ ok: false, reason: "family_expired" });
     // USED 처리도, 새 토큰 발급도 하지 않는다
     expect(db._stmt.run).not.toHaveBeenCalled();
   });

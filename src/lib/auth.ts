@@ -151,13 +151,14 @@ function isWithinRaceGrace(usedAt: string | null): boolean {
 }
 
 /** Grace: 새 토큰 발급 없이 사용자 정보만 반환한다 */
-async function graceResult(db: D1Database, row: RefreshTokenRow): Promise<RotateResult | null> {
+async function graceResult(db: D1Database, row: RefreshTokenRow): Promise<RotateOutcome> {
   const user = await db
     .prepare("SELECT id, chzzk_user_id, nickname FROM users WHERE id = ?")
     .bind(row.user_id)
     .first<{ id: string; chzzk_user_id: string; nickname: string }>();
-  if (!user) return null;
+  if (!user) return { ok: false, reason: "user_missing", userId: row.user_id, familyId: row.family_id };
   return {
+    ok: true,
     userId: user.id,
     chzzkUserId: user.chzzk_user_id,
     nickname: user.nickname,
@@ -177,10 +178,22 @@ export interface RotateResult {
   familyId: string;
 }
 
+/** refresh 거부 사유. middleware가 운영 로그에 남긴다(이 모듈은 로깅하지 않는다) */
+export type RotateRejectReason =
+  | "not_found"
+  | "expired"
+  | "family_expired"
+  | "reuse_detected"
+  | "user_missing";
+
+export type RotateOutcome =
+  | ({ ok: true } & RotateResult)
+  | { ok: false; reason: RotateRejectReason; userId?: string; familyId?: string };
+
 export async function rotateRefreshToken(
   db: D1Database,
   rawToken: string
-): Promise<RotateResult | null> {
+): Promise<RotateOutcome> {
   const tokenHash = await hashToken(rawToken);
 
   // 1. 토큰 해시로 DB 조회
@@ -189,7 +202,7 @@ export async function rotateRefreshToken(
     .bind(tokenHash)
     .first<RefreshTokenRow>();
 
-  if (!row) return null;
+  if (!row) return { ok: false, reason: "not_found" };
 
   // 2. USED/REVOKED면 → grace period 확인 후 reuse detection
   if (row.status === "USED" || row.status === "REVOKED") {
@@ -201,15 +214,15 @@ export async function rotateRefreshToken(
     }
 
     await revokeRefreshTokenFamily(db, row.family_id);
-    return null;
+    return { ok: false, reason: "reuse_detected", userId: row.user_id, familyId: row.family_id };
   }
 
   // 3. 만료 확인. family 절대 만료가 지났으면 토큰 자체 만료가 남아 있어도 거부한다
   if (new Date(row.expires_at) <= new Date()) {
-    return null;
+    return { ok: false, reason: "expired", userId: row.user_id, familyId: row.family_id };
   }
   if (row.family_expires_at && new Date(row.family_expires_at) <= new Date()) {
-    return null;
+    return { ok: false, reason: "family_expired", userId: row.user_id, familyId: row.family_id };
   }
 
   // 4. 동시성 대응: UPDATE ... WHERE status='ACTIVE' + changes 체크
@@ -233,7 +246,7 @@ export async function rotateRefreshToken(
     }
 
     await revokeRefreshTokenFamily(db, row.family_id);
-    return null;
+    return { ok: false, reason: "reuse_detected", userId: row.user_id, familyId: row.family_id };
   }
 
   // 5. 새 토큰 생성, 같은 family_id
@@ -253,9 +266,10 @@ export async function rotateRefreshToken(
     .bind(row.user_id)
     .first<{ id: string; chzzk_user_id: string; nickname: string }>();
 
-  if (!user) return null;
+  if (!user) return { ok: false, reason: "user_missing", userId: row.user_id, familyId: row.family_id };
 
   return {
+    ok: true,
     userId: user.id,
     chzzkUserId: user.chzzk_user_id,
     nickname: user.nickname,
