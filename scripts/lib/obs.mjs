@@ -1115,7 +1115,7 @@ const SLIM_ISSUE_SOURCE = `function slimIssue(raw) {
   // status·errorName: 판정이 safeValue로 거르는 값. 통과하지 못할 값은 미리 "[?]"로 바꾼다(safeValue 결과가 같다)
   const token = (v) => (empty(v) ? v : /^[A-Za-z0-9_.:-]{1,64}$/.test(String(v)) ? v : "[?]");
   // count: 숫자만 판정에 쓰인다. 글자는 "[?]"(문자열이라 ?? 연쇄를 멈추고 판정에서 빠진다), 그 밖의 모양은 false(같은 뜻)
-  const count = (v) => (empty(v) || typeof v === "number" ? v : typeof v === "string" ? (/^\d{1,15}$/.test(v) ? v : "[?]") : false);
+  const count = (v) => (empty(v) || typeof v === "number" ? v : typeof v === "string" ? (/^\\d{1,15}$/.test(v) ? v : "[?]") : false);
   // 시각: 숫자(epoch)는 그대로, 문자열은 시각으로 읽힐 때만. 읽히지 않으면 원문과 같이 "lastSeen을 알 수 없다"가 된다
   const time = (v) =>
     empty(v) || typeof v === "number" ? v : typeof v === "string" ? (v.length <= 64 && !Number.isNaN(Date.parse(v)) ? v : "[?]") : false;
