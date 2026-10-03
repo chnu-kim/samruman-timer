@@ -29,6 +29,12 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // 배포 환경의 /sw.js는 Workers Static Assets가 Worker 없이 서빙하므로 public/_headers가 실제 헤더를 정한다.
+        // 이 항목은 next start로 띄울 때만 적용된다.
+        source: "/sw.js",
+        headers: [{ key: "Cache-Control", value: "no-cache" }],
+      },
+      {
         // OBS 브라우저 소스와 설정 화면 미리보기(iframe)로 쓰이므로 프레이밍은 허용한다.
         // 오버레이에는 이미지가 없으므로 외부 이미지 로드(방송 PC IP 노출 경로)를 막는다.
         source: "/timers/:id/overlay",

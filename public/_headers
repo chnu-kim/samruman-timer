@@ -1,0 +1,22 @@
+# Workers Static Assets가 Worker를 거치지 않고 직접 서빙하는 public/* 파일의 응답 헤더.
+# next.config.ts headers()는 Worker 응답에만 붙으므로 여기서 따로 지정한다. 보안 헤더는 next.config.ts와 맞춘다
+# (src/__tests__/static-headers.test.ts가 /* 블록과 next.config.ts의 /:path* 공통 헤더가 같은지 확인한다).
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+
+# 브라우저가 sw.js를 HTTP 캐시에 묶어 두지 않게 해 배포 직후 새 서비스워커를 바로 확인하게 한다
+/sw.js
+  Cache-Control: no-cache
+
+# 정적 자산 계층이 /offline.html을 /offline으로 307 리다이렉트하므로 실제 본문은 /offline에서 나간다
+/offline
+  X-Frame-Options: DENY
+  Content-Security-Policy: frame-ancestors 'none'; object-src 'none'; base-uri 'self'
+
+/offline.html
+  X-Frame-Options: DENY
+  Content-Security-Policy: frame-ancestors 'none'; object-src 'none'; base-uri 'self'
