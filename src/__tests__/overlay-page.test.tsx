@@ -294,6 +294,40 @@ describe("오버레이 폴링 백오프", () => {
     expect(warn.mock.calls[1][0]).toContain("HTTP 503");
   });
 
+  it("타이머를 그린 뒤 404가 오면(삭제) 다음 폴링에 화면을 비운다 (C028)", async () => {
+    const responses: Array<() => unknown> = [okResponse, notFound];
+    vi.stubGlobal("fetch", vi.fn(async () => (responses.shift() ?? notFound)()));
+    render(<TimerOverlayPage />);
+
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.getByRole("timer")).toHaveTextContent("00:10:00");
+
+    await act(() => vi.advanceTimersByTimeAsync(5_000));
+    expect(screen.queryByRole("timer")).not.toBeInTheDocument();
+    // 오류 문구도 그리지 않는다
+    expect(document.body.textContent).toBe("");
+  });
+
+  it.each([
+    ["5xx", () => ({ ok: false, status: 503, json: async () => ({}) })],
+    [
+      "네트워크 오류",
+      () => {
+        throw new TypeError("Failed to fetch");
+      },
+    ],
+  ])("%s에는 마지막 값을 유지하고 로컬 카운트를 이어 간다", async (_, failure) => {
+    const responses: Array<() => unknown> = [okResponse];
+    vi.stubGlobal("fetch", vi.fn(async () => (responses.shift() ?? failure)()));
+    render(<TimerOverlayPage />);
+
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.getByRole("timer")).toHaveTextContent("00:10:00");
+
+    await act(() => vi.advanceTimersByTimeAsync(30_000));
+    expect(screen.getByRole("timer")).toHaveTextContent("00:09:30");
+  });
+
   it("언마운트하면 예약된 폴링이 남지 않고, 응답 대기 중 언마운트돼도 다음 요청을 예약하지 않는다", async () => {
     let resolveFetch: (v: unknown) => void = () => {};
     const fetchMock = vi.fn(() => new Promise((resolve) => (resolveFetch = resolve)));
