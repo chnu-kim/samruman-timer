@@ -26,7 +26,7 @@
 
 - `src/app/api/` — API 라우트 (`auth`, `projects`, `timers`)
 - `src/app/timers/[id]/overlay/` — OBS 브라우저 소스용 오버레이 페이지
-- `src/lib/` — 서버 로직 (`timer.ts` 잔여시간·상태전이, `auth.ts`, `chzzk.ts`, `db.ts`, `goal.ts`). `auth-fetch.ts`, `session-expired.ts`, `timer-sync.ts`, `overlay-animation.ts`는 클라이언트용
+- `src/lib/` — 서버 로직 (`timer.ts` 잔여시간·상태전이, `auth.ts`, `chzzk.ts`, `db.ts`, `goal.ts`). `auth-fetch.ts`, `session-expired.ts`, `timer-sync.ts`, `overlay-animation.ts`, `pwa.ts`는 클라이언트용, `safe-redirect.ts`, `overlay-style.ts`는 서버·클라이언트 공용
 - `src/hooks/` — 클라이언트 훅 (`usePolling`, `useKeyboardShortcuts` 등)
 - `src/components/{timer,project,goal,graph,stats,layout,providers,ui}/`
 - `migrations/NNNN_*.sql` — D1 스키마 변경 이력

@@ -126,6 +126,7 @@ src/
     env.ts                              — 필수 환경변수 검증
     logger.ts                           — 구조화 로그
     safe-redirect.ts                    — 로그인 후 next 경로 검증 (서버·클라이언트 공용)
+    overlay-style.ts                    — 오버레이 색상·배경 값 검증 (서버·클라이언트 공용)
     auth-fetch.ts                       — (클라이언트) 401이면 세션 만료 이벤트를 보내는 fetch 래퍼
     session-expired.ts                  — (클라이언트) 세션 만료 이벤트
     timer-sync.ts                       — (클라이언트) 폴링 값과 로컬 카운트다운 동기화
