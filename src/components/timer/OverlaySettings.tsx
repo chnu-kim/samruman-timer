@@ -206,6 +206,12 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
         setSavedTitle(trimmedTitle);
         setTitle(trimmedTitle);
       }
+      // 제목만 바뀌었으면 URL이 그대로라 다시 붙여넣을 필요가 없다
+      const configDirty = savedConfig === null || JSON.stringify(config) !== JSON.stringify(savedConfig);
+      if (!configDirty) {
+        toast("제목이 저장되었습니다", "success");
+        return;
+      }
       const res = await authFetch(`/api/timers/${timerId}/overlay-settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -224,7 +230,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
     } finally {
       setSaving(false);
     }
-  }, [timerId, config, toast, title, titleDirty]);
+  }, [timerId, config, savedConfig, toast, title, titleDirty]);
 
   const overlayUrl = useMemo(() => {
     const params = new URLSearchParams();

@@ -180,11 +180,22 @@ describe("OverlaySettings 표시할 제목", () => {
 
     fireEvent.change(input, { target: { value: "  주말 서브어톤  " } });
     expect(screen.getByText("저장하지 않은 변경 사항이 있습니다")).toHaveClass("opacity-100");
+    fireEvent.click(screen.getByRole("button", { name: "게이밍 네온" }));
     fireEvent.click(screen.getByRole("button", { name: "저장" }));
 
     await waitFor(() => expect(calls.some((c) => c.init?.method === "PUT")).toBe(true));
     const patch = calls.find((c) => c.url === "/api/timers/abc" && c.init?.method === "PATCH");
     expect(JSON.parse(String(patch!.init!.body))).toEqual({ title: "주말 서브어톤" });
+  });
+
+  it("제목만 바꾸면 설정은 저장하지 않고 URL을 다시 붙여넣으라고 하지 않는다", async () => {
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    fireEvent.change(await screen.findByLabelText("표시할 제목"), { target: { value: "새 제목" } });
+    fireEvent.click(screen.getByRole("button", { name: "저장" }));
+
+    await waitFor(() => expect(mockToast).toHaveBeenCalledWith("제목이 저장되었습니다", "success"));
+    expect(calls.some((c) => c.init?.method === "PUT")).toBe(false);
+    expect(mockToast).not.toHaveBeenCalledWith(expect.stringContaining("다시 붙여넣으세요"), "success");
   });
 
   it("제목을 비우면 저장하지 않고 알린다", async () => {

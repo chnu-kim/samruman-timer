@@ -156,6 +156,33 @@ describe("useKeyboardShortcuts", () => {
     expect(onPreset).toHaveBeenCalledWith(3600);
   });
 
+  it("닫힌 <dialog aria-modal>은 모달로 치지 않는다", () => {
+    const { onPreset } = setup();
+    const dialog = document.createElement("dialog");
+    dialog.setAttribute("aria-modal", "true");
+    document.body.appendChild(dialog);
+    try {
+      press({ key: "1", code: "Digit1" });
+      expect(onPreset).toHaveBeenCalledWith(3600);
+    } finally {
+      dialog.remove();
+    }
+  });
+
+  it("<dialog>가 아닌 aria-modal 모달이 있으면 프리셋을 무시한다", () => {
+    const { onPreset } = setup();
+    const modal = document.createElement("div");
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    document.body.appendChild(modal);
+    try {
+      press({ key: "1", code: "Digit1" });
+      expect(onPreset).not.toHaveBeenCalled();
+    } finally {
+      modal.remove();
+    }
+  });
+
   it("도움말 목록에 Tab이 없고 X가 있다", () => {
     const keys = SHORTCUT_HELP.map((item) => item.key);
     expect(keys).not.toContain("Tab");

@@ -191,6 +191,39 @@ describe("프로젝트 콘솔", () => {
     await waitFor(() => expect(dialog).not.toHaveAttribute("open"));
   });
 
+  describe("숫자 단축키", () => {
+    beforeEach(() => {
+      localStorage.setItem("defaultActorName", "기본냥");
+    });
+    afterEach(() => {
+      localStorage.removeItem("defaultActorName");
+    });
+
+    // 화면에는 닫힌 다이얼로그(목표 폼, 삭제 확인, 도움말)가 늘 렌더돼 있어도 단축키가 동작해야 한다
+    it("기본 닉네임이 있으면 '1'로 1시간을 바로 적용한다", async () => {
+      const calls = stubApi({ timers: [timer], goals: [], me: owner });
+      render(<ProjectDetailPage />);
+      await screen.findByRole("heading", { name: "시간 조작" });
+
+      fireEvent.keyDown(window, { key: "1", code: "Digit1" });
+      await waitFor(() =>
+        expect(calls.some((c) => c.url === "/api/timers/t1/modify" && c.method === "POST")).toBe(true),
+      );
+    });
+
+    it("목표 폼이 열려 있으면 '1'이 뒤쪽 타이머를 바꾸지 않는다", async () => {
+      const calls = stubApi({ timers: [timer], goals: [], me: owner });
+      render(<ProjectDetailPage />);
+      await screen.findByRole("heading", { name: "시간 조작" });
+
+      fireEvent.click(screen.getByRole("button", { name: /새 목표/ }));
+      await screen.findByRole("heading", { name: "새 목표 설정" });
+      fireEvent.keyDown(window, { key: "1", code: "Digit1" });
+      await new Promise((r) => setTimeout(r, 50));
+      expect(calls.some((c) => c.url === "/api/timers/t1/modify")).toBe(false);
+    });
+  });
+
   it("타이머만 삭제하면 화면에 남아 '타이머 없음' 상태가 된다", async () => {
     const calls = stubApi({ timers: [timer], goals: [], me: owner });
     render(<ProjectDetailPage />);
