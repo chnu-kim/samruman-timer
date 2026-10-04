@@ -206,18 +206,18 @@ describe("TimerControls", () => {
     expect(plain.defaultPrevented).toBe(false);
   });
 
-  // C014: 즉시 적용 닉네임(입력한 이름 우선, 없으면 기본 닉네임)을 상위에 알려 숫자 단축키가 같은 이름을 쓰게 한다
-  it("즉시 적용 닉네임을 입력 이름 우선으로 정해 onQuickActorChange로 알린다", () => {
+  // C014: 즉시 적용 닉네임(입력한 이름 우선, 없으면 기본 닉네임)을 상위와 ref로 공유해 숫자 단축키가 같은 이름을 쓰게 한다
+  it("즉시 적용 닉네임을 입력 이름 우선으로 정해 quickActorRef에 채운다", () => {
     localStorageMock.setItem("defaultActorName", "기본냥");
-    const onQuickActorChange = vi.fn();
-    render(<Harness timerId={timerId} status="RUNNING" onQuickActorChange={onQuickActorChange} />);
-    expect(onQuickActorChange).toHaveBeenLastCalledWith("기본냥");
+    const quickActorRef = { current: "" };
+    render(<Harness timerId={timerId} status="RUNNING" quickActorRef={quickActorRef} />);
+    expect(quickActorRef.current).toBe("기본냥");
 
     fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: " 벌칙룰렛 " } });
-    expect(onQuickActorChange).toHaveBeenLastCalledWith("벌칙룰렛");
+    expect(quickActorRef.current).toBe("벌칙룰렛");
 
     fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "" } });
-    expect(onQuickActorChange).toHaveBeenLastCalledWith("기본냥");
+    expect(quickActorRef.current).toBe("기본냥");
   });
 
   // UX-02: 방향 상태는 상위가 소유한다

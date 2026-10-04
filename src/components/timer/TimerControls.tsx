@@ -17,8 +17,11 @@ interface TimerControlsProps {
   selectedAction: ModifyAction;
   onActionChange: (action: ModifyAction) => void;
   onModified?: (data: TimerModifyResponse) => void;
-  /** 즉시 적용 닉네임이 바뀔 때마다 알린다. 숫자 단축키(상위 소유)가 모바일 바와 같은 이름으로 기록하게 한다 */
-  onQuickActorChange?: (actor: string) => void;
+  /**
+   * 즉시 적용 닉네임을 상위와 공유하는 ref. 숫자 단축키(상위 소유)가 모바일 바와 같은 이름으로 기록하게 한다.
+   * effect가 아니라 렌더 중에 채워, 닉네임을 바꾼 직후의 단축키도 화면에 보이는 이름을 쓴다
+   */
+  quickActorRef?: { current: string };
   className?: string;
 }
 
@@ -68,7 +71,7 @@ function saveDefaultActor(name: string) {
   localStorage.setItem(DEFAULT_ACTOR_KEY, name);
 }
 
-export function TimerControls({ timerId, status, remainingSeconds, selectedAction, onActionChange, onModified, onQuickActorChange, className }: TimerControlsProps) {
+export function TimerControls({ timerId, status, remainingSeconds, selectedAction, onActionChange, onModified, quickActorRef, className }: TimerControlsProps) {
   const { toast } = useToast();
   const [actorName, setActorName] = useState("");
   const [hours, setHours] = useState(0);
@@ -101,9 +104,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   // 즉시 적용(모바일 하단 바·숫자 단축키)이 기록할 닉네임. 표시와 제출이 어긋나지 않도록 한 곳에서 정한다
   const actionLabel = selectedAction === "ADD" ? "추가" : "차감";
   const quickActor = resolveQuickActor(actorName, defaultActor);
-  useEffect(() => {
-    onQuickActorChange?.(quickActor);
-  }, [quickActor, onQuickActorChange]);
+  if (quickActorRef) quickActorRef.current = quickActor;
 
   function setTime({ hours, minutes, seconds }: TimeParts) {
     setHours(hours);

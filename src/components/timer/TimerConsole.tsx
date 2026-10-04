@@ -260,12 +260,9 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
     }
   }
 
-  // 숫자 단축키가 기록할 닉네임. 시간 조작 카드(TimerControls)가 모바일 하단 바와 같은 규칙으로 정해 알려 준다
+  // 숫자 단축키가 기록할 닉네임. 시간 조작 카드(TimerControls)가 모바일 하단 바와 같은 규칙으로 렌더마다 채운다
   // (입력란의 이름 우선, 비면 기본 닉네임). 단축키 핸들러가 다시 만들어지지 않도록 ref로 들고 있는다
   const quickActorRef = useRef("");
-  const handleQuickActorChange = useCallback((actor: string) => {
-    quickActorRef.current = actor;
-  }, []);
 
   // 키보드 단축키 핸들러
   const handleKeyboardPreset = useCallback(async (seconds: number) => {
@@ -386,7 +383,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                 selectedAction={selectedAction}
                 onActionChange={setSelectedAction}
                 onModified={handleModified}
-                onQuickActorChange={handleQuickActorChange}
+                quickActorRef={quickActorRef}
                 className="mt-3"
               />
             </section>
