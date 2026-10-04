@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { calculateRemaining, detectScheduledActivation, detectExpiry, modifyTimer } from "@/lib/timer";
+import { calculateRemaining, detectScheduledActivation, detectExpiry, modifyTimer, revertAmount, activateTimerNow, TimerStateError } from "@/lib/timer";
 import type { Timer } from "@/types";
 
 // ─── calculateRemaining ───
@@ -105,6 +105,91 @@ describe("detectScheduledActivation", () => {
     const result = await detectScheduledActivation(db, timer);
     expect(result.status).toBe("EXPIRED");
     expect(db.batch).not.toHaveBeenCalled();
+  });
+});
+
+// ─── activateTimerNow (C031 '지금 시작') ───
+
+describe("activateTimerNow", () => {
+  function createMockDB() {
+    const preparedStatement = {
+      bind: vi.fn().mockReturnThis(),
+      run: vi.fn().mockResolvedValue({}),
+      first: vi.fn().mockResolvedValue(null),
+      all: vi.fn().mockResolvedValue({ results: [] }),
+    };
+    return {
+      prepare: vi.fn().mockReturnValue(preparedStatement),
+      batch: vi.fn().mockResolvedValue([{ meta: { changes: 1 } }]),
+      _stmt: preparedStatement,
+    } as unknown as D1Database & { _stmt: typeof preparedStatement; batch: ReturnType<typeof vi.fn> };
+  }
+
+  function makeTimer(overrides: Partial<Timer> = {}): Timer {
+    return {
+      id: "timer-1",
+      projectId: "proj-1",
+      title: "Test Timer",
+      description: null,
+      baseRemainingSeconds: 3600,
+      lastCalculatedAt: "2025-01-01T00:00:00Z",
+      status: "SCHEDULED",
+      scheduledStartAt: new Date(Date.now() + 1_000).toISOString(), // 예약 시각 직전
+      createdBy: "user-1",
+      createdAt: "2025-01-01T00:00:00Z",
+      updatedAt: "2025-01-01T00:00:00Z",
+      ...overrides,
+    };
+  }
+
+  it("예약 시각 직전 → 지금 기준으로 RUNNING, 시작 시각도 지금, ACTIVATE 로그(before=after=잔여)", async () => {
+    const db = createMockDB();
+    const before = Date.now();
+    const { timer, log } = await activateTimerNow(db, makeTimer(), "방송인", "user-1");
+    expect(timer.status).toBe("RUNNING");
+    expect(timer.baseRemainingSeconds).toBe(3600);
+    expect(timer.lastCalculatedAt).toBe(log.createdAt);
+    expect(timer.scheduledStartAt).toBe(log.createdAt);
+    expect(new Date(log.createdAt).getTime()).toBeGreaterThanOrEqual(before - 1000);
+    expect(log).toMatchObject({ actionType: "ACTIVATE", actorName: "방송인", actorUserId: "user-1", deltaSeconds: 0, beforeSeconds: 3600, afterSeconds: 3600 });
+    expect(calculateRemaining(timer.baseRemainingSeconds, timer.lastCalculatedAt)).toBe(3600);
+    expect(db.batch).toHaveBeenCalledTimes(1);
+  });
+
+  it("예약 시각이 지났으면 그 시각 기준 자동 활성화만 하고 지금으로 다시 시작하지 않는다", async () => {
+    const db = createMockDB();
+    const scheduledStartAt = new Date(Date.now() - 1_000).toISOString(); // 예약 시각 직후
+    const { timer, log } = await activateTimerNow(db, makeTimer({ scheduledStartAt }), "방송인", "user-1");
+    expect(log).toBeNull();
+    expect(timer.status).toBe("RUNNING");
+    expect(timer.lastCalculatedAt).toBe(scheduledStartAt);
+    expect(db.batch).toHaveBeenCalledTimes(1); // 자동 활성화 한 번
+  });
+
+  it("이미 RUNNING이면 쓰지 않고 현재 상태, EXPIRED도 그대로", async () => {
+    for (const status of ["RUNNING", "EXPIRED"] as const) {
+      const db = createMockDB();
+      const { timer, log } = await activateTimerNow(db, makeTimer({ status, lastCalculatedAt: new Date().toISOString() }), "방송인", "user-1");
+      expect(log).toBeNull();
+      expect(timer.status).toBe(status);
+      expect(db.batch).not.toHaveBeenCalled();
+    }
+  });
+
+  it("CAS 실패 후 다시 읽은 상태가 삭제면 404, 시작됐으면 그 상태(log 없음)", async () => {
+    const deleted = createMockDB();
+    deleted.batch.mockResolvedValueOnce([{ meta: { changes: 0 } }]);
+    const err = await activateTimerNow(deleted, makeTimer(), "방송인", "user-1").catch((e) => e);
+    expect(err).toBeInstanceOf(TimerStateError);
+    expect(err.status).toBe(404);
+
+    const started = createMockDB();
+    started.batch.mockResolvedValueOnce([{ meta: { changes: 0 } }]);
+    const startedAt = new Date().toISOString();
+    started._stmt.first.mockResolvedValueOnce({ status: "RUNNING", base_remaining_seconds: 3600, last_calculated_at: startedAt, updated_at: startedAt });
+    const result = await activateTimerNow(started, makeTimer(), "방송인", "user-1");
+    expect(result.log).toBeNull();
+    expect(result.timer.status).toBe("RUNNING");
   });
 });
 
@@ -387,5 +472,19 @@ describe("타이머 상태 쓰기 CAS (보안 감사 F02)", () => {
 
     expect(result.status).toBe("RUNNING");
     expect(result.baseRemainingSeconds).toBe(600);
+  });
+});
+
+// ─── revertAmount ───
+// 되돌리기는 요청량이 아니라 그 기록이 실제로 바꾼 양만 반대로 적용한다(상태 전이·집계는 integration/timer-revert.test.ts)
+
+describe("revertAmount", () => {
+  it("ADD는 추가한 만큼 뺀다", () => {
+    expect(revertAmount({ actionType: "ADD", beforeSeconds: 3600, afterSeconds: 39600 })).toBe(-36000);
+  });
+
+  it("SUBTRACT는 실제로 줄인 만큼 더한다(0에서 잘린 차감은 요청량보다 작다)", () => {
+    expect(revertAmount({ actionType: "SUBTRACT", beforeSeconds: 600, afterSeconds: 0 })).toBe(600);
+    expect(revertAmount({ actionType: "SUBTRACT", beforeSeconds: 3600, afterSeconds: 3000 })).toBe(600);
   });
 });

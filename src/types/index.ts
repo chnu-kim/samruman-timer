@@ -51,6 +51,8 @@ export interface TimerLog {
   beforeSeconds: number;
   afterSeconds: number;
   createdAt: string;
+  /** 되돌린(취소 처리한) 시각. null이면 유효한 기록이다(0010) */
+  revertedAt?: string | null;
 }
 
 // ─── API 공통 타입 ───
@@ -60,6 +62,7 @@ export type ErrorCode =
   | "UNAUTHORIZED"
   | "FORBIDDEN"
   | "NOT_FOUND"
+  | "CONFLICT"
   | "INTERNAL_ERROR"
   | "SERVICE_UNAVAILABLE";
 
@@ -203,12 +206,19 @@ export interface TimerDetailResponse {
   projectOwnerId: string;
   createdAt: string;
   updatedAt: string;
+  /** `?since=<updatedAt>`로 조회했을 때 그 뒤 지금까지의 시간 추가·차감 변경량 합계(초, 차감은 음수).
+   *  그사이 추가·차감이 없으면 null, since가 없거나 계산할 수 없으면 필드가 없다 */
+  deltaSinceSeconds?: number | null;
 }
 
 export interface TimerModifyResponse {
   id: string;
   remainingSeconds: number;
   status: TimerStatus;
+  /**
+   * 시간 변경: 이번 ADD/SUBTRACT 기록(차감으로 만료돼도 EXPIRE가 아니라 SUBTRACT). 되돌리기가 이 id를 쓴다.
+   * 되돌리기: 되돌린 기록(revertedAt 채워짐)
+   */
   log: TimerLogResponse;
 }
 
@@ -223,6 +233,8 @@ export interface TimerLogResponse {
   beforeSeconds: number;
   afterSeconds: number;
   createdAt: string;
+  /** 되돌린 시각. null이면 유효한 기록이다. 되돌린 기록은 통계·그래프·목표 집계에서 빠진다 */
+  revertedAt: string | null;
 }
 
 export interface TimerLogsResponse {

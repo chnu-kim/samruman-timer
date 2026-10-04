@@ -10,13 +10,15 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { FormDialog } from "@/components/ui/FormDialog";
 import { useToast } from "@/components/ui/Toast";
-import { cn, formatDateTime, displayActorName } from "@/lib/utils";
+import { cn, formatDateTime, displayActorName, formatDeltaSeconds } from "@/lib/utils";
 import { RemainingChart } from "@/components/graph/RemainingChart";
 import { useKeyboardShortcuts, SHORTCUT_HELP } from "@/hooks/useKeyboardShortcuts";
 import { usePolling } from "@/hooks/usePolling";
 import { useCountdownEnded } from "@/hooks/useCountdownEnded";
+import { useUndoableModifyToast } from "@/hooks/useUndoableModifyToast";
 import { authFetch } from "@/lib/auth-fetch";
 import { hasExternalChange, type SyncedTimerSnapshot } from "@/lib/timer-sync";
+import { connectionLostAgo } from "@/lib/connection-status";
 import type {
   ApiSuccessResponse,
   ApiErrorResponse,
@@ -55,18 +57,26 @@ const FILTER_ACTIONS: ActionType[] = ["CREATE", "ADD", "SUBTRACT", "EXPIRE", "RE
 const RECENT_LOG_LIMIT = 5;
 const FULL_LOG_LIMIT = 20;
 
-function formatSeconds(s: number): string {
-  const abs = Math.abs(s);
-  const h = Math.floor(abs / 3600);
-  const m = Math.floor((abs % 3600) / 60);
-  const sec = abs % 60;
-
-  const parts: string[] = [];
-  if (h > 0) parts.push(`${h}시간`);
-  if (m > 0) parts.push(`${m}분`);
-  if (sec > 0 || parts.length === 0) parts.push(`${sec}초`);
-  return parts.join(" ");
+/**
+ * 연결 끊김 배지. 경과 시간 문구만 1초마다 바뀌도록 따로 둔다(끊겼을 때만 마운트).
+ * 좁은 화면에서는 경과 문구를 빼서 '실행 중' 배지처럼 카운트다운 옆 한 줄에 남게 한다(아래 내용이 밀리지 않게)
+ */
+function ConnectionLostBadge({ lastSyncedAtMs, className }: { lastSyncedAtMs: number | null; className?: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const ago = connectionLostAgo(lastSyncedAtMs, now);
+  return (
+    <Badge variant="disconnected" className={cn("tabular-nums", className)}>
+      연결 끊김{ago && <span className="hidden sm:inline"> · {ago}</span>}
+    </Badge>
+  );
 }
+
+/** 폴링 한 번의 응답 대기 한도. 넘으면 실패 1회로 센다 */
+const POLL_TIMEOUT_MS = 10_000;
 
 interface TimerConsoleProps {
   timerId: string;
@@ -200,46 +210,53 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
       : null;
   }, [timer]);
 
+  // 실패(네트워크 오류·5xx)는 잡지 않고 reject로 넘긴다. 화면은 마지막 값으로 로컬 카운트를 이어 가고,
+  // 연속 실패 횟수는 usePolling이 세어 연결 상태로 돌려준다
   const pollTimer = useCallback(async () => {
+    // 응답 없이 멈춘 요청(연결은 살아 있는데 패킷이 안 오는 경우)도 실패로 세도록 시간 제한을 둔다
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), POLL_TIMEOUT_MS);
+    let res: Response;
     try {
-      const res = await fetch(`/api/timers/${timerId}`);
-      if (res.status === 404) {
-        onTimerRemovedRef.current?.();
-        return;
-      }
-      if (!res.ok) return;
-      const json = (await res.json()) as ApiSuccessResponse<TimerDetailResponse>;
-      const serverData = json.data;
-      const synced = syncedRef.current;
-      const externalChange = !!synced && hasExternalChange(synced, serverData, Date.now());
+      res = await fetch(`/api/timers/${timerId}`, { signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
+    if (res.status === 404) {
+      onTimerRemovedRef.current?.();
+      return;
+    }
+    // 5xx 등은 서버 값을 받지 못한 것이라 실패로 알린다. 연속 실패가 쌓이면 배지가 '연결 끊김'으로 바뀐다
+    if (!res.ok) throw new Error(`poll ${res.status}`);
+    const json = (await res.json()) as ApiSuccessResponse<TimerDetailResponse>;
+    const serverData = json.data;
+    const synced = syncedRef.current;
+    const externalChange = !!synced && hasExternalChange(synced, serverData, Date.now());
 
-      setTimer((prev) => {
-        if (!prev) return prev;
-        if (prev.status !== serverData.status) {
-          return serverData;
-        }
-        if (prev.status === "RUNNING") {
-          const diff = Math.abs(prev.remainingSeconds - serverData.remainingSeconds);
-          if (diff >= 2) {
-            return { ...prev, remainingSeconds: serverData.remainingSeconds };
-          }
-        }
-        return prev;
-      });
-
-      // 상태 전이(만료 등)나 다른 기기의 조작이 있을 때만 기록·그래프·목표를 다시 불러온다.
-      // 펼친 기록의 2페이지 이후를 보고 있으면 목록이 밀리지 않게 기록은 건너뛴다
-      if (externalChange) {
-        if (logPage === 1) fetchLogs(1, activeFilters, logsExpanded, { silent: true });
-        fetchGraph({ silent: true });
-        onTimeChanged?.();
+    setTimer((prev) => {
+      if (!prev) return prev;
+      if (prev.status !== serverData.status) {
+        return serverData;
       }
-    } catch {
-      // 폴링 실패는 무시
+      if (prev.status === "RUNNING") {
+        const diff = Math.abs(prev.remainingSeconds - serverData.remainingSeconds);
+        if (diff >= 2) {
+          return { ...prev, remainingSeconds: serverData.remainingSeconds };
+        }
+      }
+      return prev;
+    });
+
+    // 상태 전이(만료 등)나 다른 기기의 조작이 있을 때만 기록·그래프·목표를 다시 불러온다.
+    // 펼친 기록의 2페이지 이후를 보고 있으면 목록이 밀리지 않게 기록은 건너뛴다
+    if (externalChange) {
+      if (logPage === 1) fetchLogs(1, activeFilters, logsExpanded, { silent: true });
+      fetchGraph({ silent: true });
+      onTimeChanged?.();
     }
   }, [timerId, logPage, activeFilters, logsExpanded, fetchLogs, fetchGraph, onTimeChanged]);
 
-  usePolling({
+  const connection = usePolling({
     fn: pollTimer,
     interval: pollInterval,
     enabled: !loading && !error && !!timer,
@@ -260,6 +277,9 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
     }
   }
 
+  // 단축키 성공 토스트('+10분 · 닉네임' + 되돌리기). 되돌린 결과도 handleModified로 반영해 기록·그래프·목표를 다시 불러온다
+  const showModifiedToast = useUndoableModifyToast(timerId, handleModified);
+
   // 숫자 단축키가 기록할 닉네임. 시간 조작 카드(TimerControls)가 모바일 하단 바와 같은 규칙으로 렌더마다 채운다
   // (입력란의 이름 우선, 비면 기본 닉네임). 단축키 핸들러가 다시 만들어지지 않도록 ref로 들고 있는다
   const quickActorRef = useRef("");
@@ -278,7 +298,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
         if (res.ok) {
           const json = (await res.json()) as ApiSuccessResponse<TimerModifyResponse>;
           handleModified(json.data);
-          toast(`${selectedAction === "ADD" ? "추가" : "차감"} 완료 (${actor})`, "success");
+          showModifiedToast(json.data.log);
         } else {
           const json = (await res.json().catch(() => null)) as ApiErrorResponse | null;
           toast(json?.error?.message || "시간 변경에 실패했습니다.", "error");
@@ -290,7 +310,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
       toast("시청자 닉네임을 입력하거나 기본 닉네임을 설정하면 숫자키로 즉시 적용됩니다", "info");
     }
     // handleModified가 읽는 기록 상태(필터, 펼침)가 바뀌면 다시 만들어 오래된 값으로 기록을 불러오지 않게 한다
-  }, [isOwner, timer, toast, timerId, selectedAction, activeFilters, logsExpanded]);
+  }, [isOwner, timer, toast, showModifiedToast, timerId, selectedAction, activeFilters, logsExpanded]);
 
   const handleToggleAction = useCallback(() => {
     setSelectedAction((prev) => (prev === "ADD" ? "SUBTRACT" : "ADD"));
@@ -301,8 +321,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
     fetchLogs(logPage, activeFilters, logsExpanded);
     fetchGraph();
     onTimeChanged?.();
-    toast("새로고침 완료", "success");
-  }, [fetchTimer, fetchLogs, fetchGraph, onTimeChanged, logPage, activeFilters, logsExpanded, toast]);
+  }, [fetchTimer, fetchLogs, fetchGraph, onTimeChanged, logPage, activeFilters, logsExpanded]);
 
   const { showHelp, setShowHelp } = useKeyboardShortcuts({
     enabled: isOwner && !!timer && timer.status !== "SCHEDULED",
@@ -365,9 +384,14 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
           scheduledStartAt={timer.scheduledStartAt}
           size="large"
         />
-        <Badge variant={statusBadgeVariant} className="mt-2">
-          {statusLabel}
-        </Badge>
+        {/* 연결이 끊기면 서버 상태를 알 수 없으므로 상태 배지 자리를 연결 끊김으로 바꾼다. 숫자는 로컬 추정값으로 계속 흐른다 */}
+        {connection.disconnected ? (
+          <ConnectionLostBadge lastSyncedAtMs={connection.lastSuccessAtMs} className="mt-2" />
+        ) : (
+          <Badge variant={statusBadgeVariant} className="mt-2">
+            {statusLabel}
+          </Badge>
+        )}
       </div>
 
       {/* 시간 조작 + 곁 영역(목표). 방송 중 가장 자주 쓰는 두 가지를 첫 화면에 나란히 둔다 */}
@@ -383,6 +407,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                 selectedAction={selectedAction}
                 onActionChange={setSelectedAction}
                 onModified={handleModified}
+                onTimerRemoved={() => onTimerRemovedRef.current?.()}
                 quickActorRef={quickActorRef}
                 className="mt-3"
               />
@@ -459,14 +484,20 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                     <Badge variant={ACTION_TYPE_BADGE_VARIANT[log.actionType]}>
                       {ACTION_TYPE_LABELS[log.actionType]}
                     </Badge>
-                    <span className="truncate">{displayActorName(log)}</span>
+                    {/* 되돌린 기록은 지우지 않고 글자로 표시한다(통계·그래프에서는 빠진다) */}
+                    <span className="truncate">
+                      {displayActorName(log)}
+                      {log.revertedAt && <span className="ml-1.5 text-xs text-muted-foreground">· 되돌림</span>}
+                    </span>
                     {log.deltaSeconds > 0 ? (
                       <span className={cn(
                         "text-right font-mono text-xs font-medium",
-                        log.actionType === "ADD" ? "text-green-700 dark:text-green-400" : log.actionType === "SUBTRACT" ? "text-red-600 dark:text-red-400" : "",
+                        log.revertedAt
+                          ? "text-muted-foreground line-through"
+                          : log.actionType === "ADD" ? "text-green-700 dark:text-green-400" : log.actionType === "SUBTRACT" ? "text-red-600 dark:text-red-400" : "",
                       )}>
                         {log.actionType === "ADD" ? "+" : log.actionType === "SUBTRACT" ? "-" : ""}
-                        {formatSeconds(log.deltaSeconds)}
+                        {formatDeltaSeconds(log.deltaSeconds)}
                       </span>
                     ) : (
                       <span className="text-right font-mono text-xs text-muted-foreground">—</span>
@@ -475,7 +506,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                     <div className="col-span-3 flex flex-wrap items-baseline justify-between gap-x-3 font-mono text-xs text-muted-foreground">
                       <span className="whitespace-nowrap">{formatDateTime(log.createdAt)}</span>
                       <span className="ml-auto whitespace-nowrap text-right">
-                        {formatSeconds(log.beforeSeconds)} → <span className="text-foreground">{formatSeconds(log.afterSeconds)}</span>
+                        {formatDeltaSeconds(log.beforeSeconds)} → <span className="text-foreground">{formatDeltaSeconds(log.afterSeconds)}</span>
                       </span>
                     </div>
                   </li>

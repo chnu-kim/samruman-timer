@@ -3,9 +3,11 @@
 import { useState, useEffect, useRef, useId } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
 import { authFetch } from "@/lib/auth-fetch";
+import { useUndoableModifyToast } from "@/hooks/useUndoableModifyToast";
 import { normalizeTimeParts, resolveQuickActor, type TimeParts } from "@/lib/timer-input";
 import type { ApiSuccessResponse, ApiErrorResponse, TimerModifyResponse, TimerLogResponse, ModifyAction, TimerStatus } from "@/types";
 
@@ -17,6 +19,8 @@ interface TimerControlsProps {
   selectedAction: ModifyAction;
   onActionChange: (action: ModifyAction) => void;
   onModified?: (data: TimerModifyResponse) => void;
+  /** 조작 중 타이머가 이미 삭제됐음(404)을 알게 됐을 때. 상위가 '타이머 없음' 상태로 바꾼다 */
+  onTimerRemoved?: () => void;
   /**
    * 즉시 적용 닉네임을 상위와 공유하는 ref. 숫자 단축키(상위 소유)가 모바일 바와 같은 이름으로 기록하게 한다.
    * effect가 아니라 렌더 중에 채워, 닉네임을 바꾼 직후의 단축키도 화면에 보이는 이름을 쓴다
@@ -71,8 +75,9 @@ function saveDefaultActor(name: string) {
   localStorage.setItem(DEFAULT_ACTOR_KEY, name);
 }
 
-export function TimerControls({ timerId, status, remainingSeconds, selectedAction, onActionChange, onModified, quickActorRef, className }: TimerControlsProps) {
+export function TimerControls({ timerId, status, remainingSeconds, selectedAction, onActionChange, onModified, onTimerRemoved, quickActorRef, className }: TimerControlsProps) {
   const { toast } = useToast();
+  const showModifiedToast = useUndoableModifyToast(timerId, onModified);
   const [actorName, setActorName] = useState("");
   const [hours, setHours] = useState(0);
   const [minutes, setMinutes] = useState(0);
@@ -80,6 +85,11 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   const [error, setError] = useState("");
   const [recentActors, setRecentActors] = useState<string[]>([]);
   const [defaultActor, setDefaultActor] = useState("");
+  // 예약 타이머 '지금 시작'. 시간 조작 폼과 오류 문구가 섞이지 않도록 따로 둔다
+  const [activating, setActivating] = useState(false);
+  // 지금 시작은 되돌릴 수 없고(예약 시각이 사라짐) 드물게 쓰므로, 자주 쓰는 시간 조작과 달리 확인을 한 번 거친다
+  const [confirmActivate, setConfirmActivate] = useState(false);
+  const [activateError, setActivateError] = useState("");
   // 실패 시 입력을 되돌릴 때, 요청 중에 새로 입력한 값을 덮어쓰지 않도록 최신 입력을 들고 있는다
   const inputsRef = useRef({ hours, minutes, seconds });
   inputsRef.current = { hours, minutes, seconds };
@@ -179,7 +189,8 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
 
       const json = (await res.json()) as ApiSuccessResponse<TimerModifyResponse>;
       onModified?.(json.data); // 서버 값으로 확정
-      toast(`${action === "ADD" ? "추가" : "차감"} 완료`, "success");
+      // 폼·하단 바 공통: '+10분 · 닉네임' + 되돌리기. 결과 잔여는 카운트다운이 보여 준다
+      showModifiedToast(json.data.log);
     } catch {
       // 롤백
       onModified?.({
@@ -247,12 +258,51 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
     }
   }
 
+  // 낙관적 반영 없이 서버 확정 후에만 바꾼다. 응답은 modify와 같은 형태라 상위가 기록·그래프·목표를 새로 불러온다.
+  // 이미 시작된 타이머(예약 시각 경과, 다른 탭)도 서버가 현재 상태로 200을 주므로 화면이 곧바로 실행 중으로 바뀐다
+  async function handleActivate() {
+    setConfirmActivate(false);
+    setActivateError("");
+    setActivating(true);
+    try {
+      const res = await authFetch(`/api/timers/${timerId}/activate`, { method: "POST" });
+      if (res.status === 404 && onTimerRemoved) {
+        onTimerRemoved();
+        return;
+      }
+      if (!res.ok) {
+        const json = (await res.json().catch(() => null)) as ApiErrorResponse | null;
+        setActivateError(json?.error?.message || "타이머를 시작하지 못했습니다.");
+        return;
+      }
+      const json = (await res.json()) as ApiSuccessResponse<TimerModifyResponse>;
+      onModified?.(json.data);
+    } catch {
+      setActivateError("타이머를 시작하지 못했습니다.");
+    } finally {
+      setActivating(false);
+    }
+  }
+
   if (status === "SCHEDULED") {
     return (
-      <div className={className}>
+      <div className={cn("space-y-3", className)}>
         <p className="text-sm text-muted-foreground">
-          예약된 타이머는 시작 전까지 시간을 변경할 수 없습니다. 시작 시각을 바꾸려면 타이머를 삭제한 뒤 다시 만드세요.
+          시작 시각까지 기다리거나 지금 시작할 수 있습니다. 시작을 늦추려면 타이머를 삭제한 뒤 다시 만드세요.
         </p>
+        <Button type="button" onClick={() => setConfirmActivate(true)} disabled={activating} className="max-md:min-h-11">
+          지금 시작
+        </Button>
+        {activateError && <p className="text-sm text-red-600 dark:text-red-400" role="alert">{activateError}</p>}
+        <ConfirmDialog
+          open={confirmActivate}
+          title="지금 시작"
+          description="예약 시각을 기다리지 않고 바로 카운트다운을 시작합니다. 시작한 뒤에는 예약 상태로 되돌릴 수 없습니다."
+          confirmLabel="지금 시작"
+          cancelLabel="돌아가기"
+          onConfirm={handleActivate}
+          onCancel={() => setConfirmActivate(false)}
+        />
       </div>
     );
   }

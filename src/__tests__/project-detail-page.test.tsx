@@ -317,6 +317,69 @@ describe("프로젝트 콘솔", () => {
     }
   });
 
+  // C027: 폴링이 연속으로 실패하면 상태 배지 하나만 '연결 끊김'으로 바꾸고, 성공하면 되돌린다
+  it("폴링이 1회 실패하면 그대로, 2회 연속 실패하면 상태 배지가 '연결 끊김'으로 바뀌고 성공하면 돌아온다", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      stubApi({ timers: [timer], goals: [], me: owner });
+      render(<ProjectDetailPage />);
+      await screen.findByRole("heading", { name: "시간 조작" });
+      // 카운트다운 옆 상태 배지(기록 행의 '만료' 배지와 구분)
+      const statusBadge = () => screen.getByRole("timer").parentElement!.parentElement!.lastElementChild!;
+      expect(statusBadge()).toHaveTextContent(/^만료$/);
+
+      const stubbed = global.fetch;
+      let detailDown = true;
+      global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input) === "/api/timers/t1" && detailDown) return new Response(null, { status: 500 });
+        return stubbed(input, init);
+      }) as typeof fetch;
+
+      // 만료 타이머는 15초 간격으로 폴링한다
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(statusBadge()).toHaveTextContent(/^만료$/);
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      await waitFor(() => expect(statusBadge()).toHaveTextContent(/^연결 끊김 · \d+초 전 기준$/));
+      // 오류 화면으로 바꾸지 않고 콘솔은 그대로 둔다
+      expect(screen.getByRole("heading", { name: "시간 조작" })).toBeInTheDocument();
+
+      detailDown = false;
+      await vi.advanceTimersByTimeAsync(15_000);
+      await waitFor(() => expect(statusBadge()).toHaveTextContent(/^만료$/));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("응답 없이 멈춘 폴링도 시간 제한으로 실패로 세어 2회째에 '연결 끊김'으로 바뀐다", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      stubApi({ timers: [timer], goals: [], me: owner });
+      render(<ProjectDetailPage />);
+      await screen.findByRole("heading", { name: "시간 조작" });
+      const statusBadge = () => screen.getByRole("timer").parentElement!.parentElement!.lastElementChild!;
+
+      const stubbed = global.fetch;
+      global.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input) !== "/api/timers/t1") return stubbed(input, init);
+        // 응답이 오지 않다가 abort되면 그때 실패한다
+        return new Promise<Response>((_, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+        });
+      }) as typeof fetch;
+
+      // 만료 타이머는 15초 간격. 15초에 보낸 요청이 25초에 끊겨 실패 1회
+      await vi.advanceTimersByTimeAsync(25_000);
+      expect(statusBadge()).toHaveTextContent(/^만료$/);
+      // 30초에 보낸 요청이 40초에 끊겨 실패 2회
+      await vi.advanceTimersByTimeAsync(15_000);
+      await waitFor(() => expect(statusBadge()).toHaveTextContent(/^연결 끊김 · \d+초 전 기준$/));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("목록을 받은 뒤 첫 조회 전에 타이머가 삭제됐으면 오류 대신 '타이머 없음' 상태가 된다", async () => {
     let timersCalls = 0;
     global.fetch = vi.fn(async (input: RequestInfo | URL) => {

@@ -22,22 +22,36 @@ export interface TimerChangeResult {
   floatingText: string;
 }
 
+/** 추정 변경량이 이 범위 안이면 시간 흐름의 오차로 보고 연출하지 않는다 */
+const NOISE_SECONDS = 2;
+
 export function detectTimerChange(
   prev: TimerSnapshot,
-  current: { remainingSeconds: number; updatedAt: string },
+  current: { remainingSeconds: number; updatedAt: string; deltaSinceSeconds?: number | null },
   now: number,
 ): TimerChangeResult | null {
   if (prev.updatedAt === current.updatedAt) return null;
   // SCHEDULED에서는 시간 변경이 불가능하므로, 값이 바뀌었다면 예약 활성화(ACTIVATE)다
   if (prev.status === "SCHEDULED") return null;
 
-  // 카운트다운은 RUNNING일 때만 진행되고 0 아래로 내려가지 않는다.
-  // 만료 상태에서 흐른 시간까지 빼면 재오픈 시 변경량이 부풀려진다.
-  const elapsedSec = prev.status === "RUNNING" ? Math.floor((now - prev.fetchedAt) / 1000) : 0;
-  const expectedRemaining = Math.max(0, prev.remainingSeconds - elapsedSec);
-  const delta = current.remainingSeconds - expectedRemaining;
-
-  if (Math.abs(delta) <= 2) return null;
+  // 서버가 직전 updatedAt(since) 이후의 실제 변경량 합계를 주면 그대로 쓴다. 폴링 시각으로 추정하면
+  // 폴링 시각과 서버의 초 내림 때문에 1~2초 어긋나 '+60초'가 '+1:01'로 보이고, 만료·재오픈이 끼면 더 어긋난다.
+  // null은 그사이 시간 추가·차감이 없었다는 뜻(제목 수정, 만료 기록 등)이라 연출하지 않는다.
+  // undefined(since를 보내지 않았거나, 그사이 되돌리기가 있었거나, 이 필드가 없는 이전 서버)일 때만 폴링 시각으로 추정한다
+  if (current.deltaSinceSeconds === null) return null;
+  let delta: number;
+  if (typeof current.deltaSinceSeconds === "number") {
+    // 실제 값이므로 오차 범위를 두지 않는다(+1초 추가, 2초 남았을 때의 차감도 연출한다)
+    if (current.deltaSinceSeconds === 0) return null;
+    delta = current.deltaSinceSeconds;
+  } else {
+    // 카운트다운은 RUNNING일 때만 진행되고 0 아래로 내려가지 않는다.
+    // 만료 상태에서 흐른 시간까지 빼면 재오픈 시 변경량이 부풀려진다.
+    const elapsedSec = prev.status === "RUNNING" ? Math.round((now - prev.fetchedAt) / 1000) : 0;
+    const expectedRemaining = Math.max(0, prev.remainingSeconds - elapsedSec);
+    delta = current.remainingSeconds - expectedRemaining;
+    if (Math.abs(delta) <= NOISE_SECONDS) return null;
+  }
 
   const absDelta = Math.abs(delta);
   const sign = delta > 0 ? "+" : "-";

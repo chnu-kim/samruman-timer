@@ -247,6 +247,7 @@ Next 16 관례상 `proxy.ts`가 표준이지만 이 프로젝트는 `middleware.
 | PATCH / DELETE | `/api/projects/[id]/goals/[goalId]` | 목표 취소 / 삭제 |
 | PATCH / DELETE | `/api/timers/[id]` | 타이머 수정 / 삭제 |
 | POST | `/api/timers/[id]/modify` | 시간 증감 |
+| POST | `/api/timers/[id]/activate` | 예약 타이머 지금 시작 |
 | PUT | `/api/timers/[id]/overlay-settings` | 오버레이 설정 저장 |
 | GET | `/api/timers/[id]/stats` | 타이머 통계 |
 | GET | `/api/auth/me` | 현재 사용자 |

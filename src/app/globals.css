@@ -139,11 +139,13 @@ body {
   100% { transform: translateX(0); }
 }
 
-/* 요소의 인라인 translateX(-50%)를 덮어쓰므로 가로 중앙 정렬을 키프레임에도 포함한다 */
+/* 오버레이 변경량('+N'). 요소는 top: 50%로 숫자 줄 가운데에 걸리고, 숫자 줄 아래쪽에서 시작해 위쪽까지만 떠오른다.
+   이동량을 자기 높이(숫자의 0.4배) 기준 %로 잡아 어떤 글자 크기에서도 숫자 줄(높이 1em) 밖으로 나가지 않는다 */
 @keyframes overlay-float-up {
-  0% { opacity: 1; transform: translate(-50%, 0); }
+  0% { opacity: 0; transform: translateY(-20%); }
+  15% { opacity: 1; }
   70% { opacity: 1; }
-  100% { opacity: 0; transform: translate(-50%, -60px); }
+  100% { opacity: 0; transform: translateY(-110%); }
 }
 
 .animate-fade-in {
