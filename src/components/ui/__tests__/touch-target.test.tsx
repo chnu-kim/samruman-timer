@@ -41,11 +41,12 @@ describe("터치 타깃 44px (pointer-coarse)", () => {
     }
   });
 
-  it("헤더 로그인 링크는 테두리 높이 32px을 두고 위아래 누르는 영역만 넓힌다", () => {
+  // W37: 헤더 로그인은 테마 토글과 같은 줄에서 같은 높이(데스크톱 40, 터치 44)다
+  it("헤더 로그인 링크는 데스크톱 40px, 터치 기기에서 44px이다", () => {
     render(<Header initialUser={null} />);
     const cls = screen.getByRole("link", { name: "로그인" }).className;
-    expect(cls).toContain("h-8");
-    expect(cls).toContain("pointer-coarse:before:-inset-y-[7px]");
+    expect(cls).toContain("h-10");
+    expect(cls).toContain("pointer-coarse:min-h-11");
   });
 
   // 폭 기준(max-md:)으로 되돌아가면 가로 태블릿(1024 터치)에서 다시 32px이 된다

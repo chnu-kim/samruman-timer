@@ -7,12 +7,16 @@ import { Button } from "@/components/ui/Button";
 import { LogoIcon, LogOutIcon } from "@/components/ui/Icons";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { loginUrlWithNext } from "@/lib/safe-redirect";
+import { fetchMe } from "@/lib/session-me";
 import { cn } from "@/lib/utils";
 import type { MeResponse } from "@/types";
 
 interface HeaderProps {
   initialUser?: MeResponse | null;
 }
+
+/** 헤더 오른쪽 액션(로그인·로그아웃) 크기. Button md(h-10 px-4)에 맞추고 테마 토글과 같은 높이다: 데스크톱 40, 터치 44 */
+const HEADER_ACTION = "text-sm pointer-coarse:min-h-11 pointer-coarse:min-w-11";
 
 export function Header({ initialUser }: HeaderProps = {}) {
   const [user, setUser] = useState<MeResponse | null>(initialUser ?? null);
@@ -22,15 +26,15 @@ export function Header({ initialUser }: HeaderProps = {}) {
 
   useEffect(() => {
     if (initialUser !== undefined) return;
-    fetch("/api/auth/me")
-      .then(async (res) => {
-        if (res.ok) {
-          const json = (await res.json()) as { data: MeResponse };
-          setUser(json.data);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoaded(true));
+    let cancelled = false;
+    fetchMe().then((me) => {
+      if (cancelled) return;
+      setUser(me);
+      setLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [initialUser]);
 
   // 헤더는 레이아웃에 있어 페이지 이동 때 다시 그려지지 않으므로, 누르는 시점의 경로로 next를 만든다
@@ -70,23 +74,31 @@ export function Header({ initialUser }: HeaderProps = {}) {
           <ThemeToggle />
           {user ? (
             <>
+              {/* 이니셜은 장식이라 낭독에서 빼고, 이름은 모바일에서도 스크린 리더에는 남긴다 */}
               <div className="flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-xs font-bold text-accent-foreground">
+                <span
+                  aria-hidden="true"
+                  className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-xs font-bold text-accent-foreground"
+                >
                   {user.nickname.charAt(0)}
                 </span>
-                <span className="hidden sm:inline text-sm">{user.nickname}</span>
+                <span className="sr-only sm:not-sr-only text-sm">{user.nickname}</span>
               </div>
-              <Button variant="ghost" size="sm" onClick={handleLogout} aria-label="로그아웃">
+              {/* 로그인·로그아웃은 같은 모양(C129)이고 테마 토글과 같은 높이(데스크톱 40, 터치 44)다 */}
+              <Button variant="secondary" onClick={handleLogout} aria-label="로그아웃" title="로그아웃" className={cn(HEADER_ACTION, "max-sm:w-10 max-sm:px-0")}>
                 <LogOutIcon className="w-4 h-4 sm:hidden" />
                 <span className="hidden sm:inline">로그아웃</span>
               </Button>
             </>
           ) : onLoginPage ? null : (
-            // 테두리가 있어 보이는 높이(32px)는 두고, 터치 기기에서는 ::before로 위아래 누르는 영역만 44px로 넓힌다(::before는 테두리 안쪽 30px 기준이라 7px씩)
+            // 공용 Button secondary와 같은 모양·높이의 링크
             <Link
               href="/login"
               onClick={handleLoginClick}
-              className="relative pointer-coarse:before:absolute pointer-coarse:before:inset-x-0 pointer-coarse:before:-inset-y-[7px] inline-flex items-center justify-center rounded-lg border border-border bg-transparent px-3 h-8 text-sm font-medium hover:bg-foreground/5 transition-colors"
+              className={cn(
+                "inline-flex h-10 items-center justify-center rounded-lg border border-border bg-transparent px-4 font-medium hover:bg-foreground/5 transition-colors",
+                HEADER_ACTION,
+              )}
             >
               로그인
             </Link>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Fragment } from "react";
 import { cn, formatDuration, formatRelativeDate } from "@/lib/utils";
 import type { ProjectListItem } from "@/types";
 
@@ -24,7 +25,7 @@ function formatScheduledAt(iso: string): string {
  * 상태 이름은 콘솔 배지와 같은 말(실행 중·예약됨·만료)을 쓰고, 색 점은 보조 단서다.
  * 타이머가 없으면 아무것도 보이지 않는다(없는 것이 기본).
  */
-function TimerStatusLine({ project }: { project: ProjectListItem }) {
+function timerStatusLine(project: ProjectListItem): React.ReactNode {
   const { timerStatus, remainingSeconds, scheduledStartAt } = project;
   if (timerStatus === "RUNNING") {
     const left = remainingSeconds !== null && remainingSeconds < 60 ? "1분 미만" : formatDuration(remainingSeconds ?? 0);
@@ -50,6 +51,13 @@ function TimerStatusLine({ project }: { project: ProjectListItem }) {
 export function ProjectCard({ project, showOwner = true, className }: ProjectCardProps) {
   const titleId = `project-title-${project.id}`;
   const metaId = `project-meta-${project.id}`;
+  const metaItems = [
+    timerStatusLine(project),
+    showOwner ? <span>{project.ownerNickname}</span> : null,
+    <span>
+      생성 <time dateTime={project.createdAt}>{formatRelativeDate(project.createdAt)}</time>
+    </span>,
+  ].filter(Boolean);
   return (
     <Link
       href={`/projects/${project.id}`}
@@ -59,29 +67,28 @@ export function ProjectCard({ project, showOwner = true, className }: ProjectCar
     >
       <article
         className={cn(
-          "flex w-full flex-col border border-border rounded-xl p-5 transition-all duration-200 shadow-card hover:shadow-card-hover hover:-translate-y-0.5 hover:border-accent/40",
+          "flex w-full flex-col border border-border rounded-xl p-5 transition-[box-shadow,border-color,translate] duration-200 shadow-card hover:shadow-card-hover hover:-translate-y-0.5 motion-reduce:hover:translate-none hover:border-accent/40",
           className,
         )}
         style={{ animation: "fade-in 0.2s ease-out forwards" }}
       >
-        {/* 상단: 제목 + 설명 (가변 영역). 그리드에서 카드 높이를 맞추는 빈 설명 줄은 sm 이상에서만 둔다 */}
-        <div className="flex-1 min-h-0">
+        {/* 상단: 제목 + 설명 (가변 영역). 그리드에서 카드 높이를 맞추도록 sm 이상에서는 제목 1줄 + 설명 2줄 높이를 잡아 두고,
+            설명이 없으면 빈 문단을 두지 않는다(스크린 리더에 빈 줄이 읽히지 않게) */}
+        <div className="flex-1 min-h-0 sm:min-h-[4.25rem]">
           <h2 id={titleId} className="font-bold">{project.name}</h2>
-          <p
-            className={cn(
-              "mt-1 text-sm text-muted-foreground line-clamp-2 sm:min-h-[2.5rem]",
-              !project.description && "hidden sm:block",
-            )}
-          >
-            {project.description || " "}
-          </p>
+          {project.description && (
+            <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{project.description}</p>
+          )}
         </div>
 
-        {/* 하단: 메타 정보 (고정 영역) */}
-        <div id={metaId} className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          <TimerStatusLine project={project} />
-          {showOwner && <span>{project.ownerNickname}</span>}
-          <span>{formatRelativeDate(project.createdAt)}</span>
+        {/* 하단: 메타 정보 (고정 영역). 항목 사이 '·'는 글자로 두어 링크 설명에서도 항목이 붙어 읽히지 않는다 */}
+        <div id={metaId} className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
+          {metaItems.map((item, i) => (
+            <Fragment key={i}>
+              {i > 0 && <span>{" · "}</span>}
+              {item}
+            </Fragment>
+          ))}
         </div>
       </article>
     </Link>
