@@ -51,6 +51,8 @@ function matchesPreset(config: OverlayConfig, preset: (typeof PRESETS)[number]):
 
 // 투명은 type=color가 표현하지 못해 검정으로 그려지므로 견본 자리에 체커보드를 깐다
 const CHECKERBOARD = "repeating-conic-gradient(#d4d4d4 0% 25%, #ffffff 0% 50%) 50% / 12px 12px";
+// 배경색 칸에 CSS 키워드(transparent) 대신 보여 주는 말. 입력으로도 받는다
+const TRANSPARENT_LABEL = "투명";
 
 const POSITION_LABELS: Record<Position, string> = {
   center: "중앙",
@@ -91,7 +93,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
   const [colorDraft, setColorDraft] = useState<string | null>(null);
   const [bgDraft, setBgDraft] = useState<string | null>(null);
   const [iframeSrc, setIframeSrc] = useState<string>("");
-  // 타이머 제목은 오버레이의 '타이틀 표시'에서만 화면에 나오므로 여기서 함께 고친다.
+  // 타이머 제목은 오버레이의 '제목 표시'에서만 화면에 나오므로 여기서 함께 고친다.
   // 저장 전 변경 여부와 닫기 경고에 포함되도록 설정과 같은 저장 흐름에 둔다
   const [savedTitle, setSavedTitle] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -241,7 +243,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
     // 빈 제목은 저장하지 않는다. 다만 URL과는 무관하므로 복사·설정 저장까지 막지는 않는다
     const titleInvalid = titleDirty && !trimmedTitle;
     if (titleOnly && titleInvalid) {
-      toast("표시할 제목을 입력해주세요", "error");
+      toast("표시할 제목을 입력해 주세요", "error");
       return;
     }
     // 복사는 await 전에 시작한다. Safari는 await를 지나면 클릭의 사용자 활성화를 잃어 클립보드 쓰기를 막는다
@@ -309,11 +311,12 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
       onClick={(e) => {
         if (e.target === dialogRef.current) handleClose();
       }}
-      className="m-auto w-full max-w-[min(42rem,calc(100%-2rem))] max-h-[90dvh] overflow-hidden rounded-xl border border-border bg-background p-0 text-foreground shadow-dialog backdrop:bg-black/50 animate-[fade-in_0.15s_ease-out]"
+      // md 미만에서는 화면 아래에 붙은 시트: 좌우 꽉 채우고 위쪽 모서리만 둥글게, 아래 여백 없이 붙인다
+      className="m-auto w-full max-w-[min(42rem,calc(100%-2rem))] max-h-[90dvh] overflow-hidden rounded-xl border border-border bg-background p-0 text-foreground shadow-dialog backdrop:bg-black/50 animate-[fade-in_0.15s_ease-out] max-md:mb-0 max-md:max-w-none max-md:rounded-b-none max-md:border-b-0"
     >
       <div className="flex max-h-[90dvh] flex-col">
         {/* 헤더 */}
-        <div className="flex items-center justify-between p-6 pb-0">
+        <div className="flex items-center justify-between p-6 pb-0 max-md:pt-4">
           <h2 id={titleId} className="text-lg font-bold">OBS 오버레이 설정</h2>
           <button
             onClick={handleClose}
@@ -326,7 +329,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
 
         {loading ? (
           <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">
-            설정을 불러오는 중...
+            설정을 불러오는 중…
           </div>
         ) : <>
         {/* 스크롤 가능 콘텐츠 */}
@@ -393,7 +396,8 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                 setConfig((prev) => ({ ...prev, fontSize: v }));
                 setFontSizeInput(String(v));
               }}
-              className="flex-1 accent-accent"
+              // 터치 기기에서는 입력 상자를 44px로 키워 트랙 위아래를 눌러도 값이 바뀌게 한다(트랙·썸 모양은 그대로)
+              className="flex-1 accent-accent pointer-coarse:h-11"
               aria-label="폰트 크기 슬라이더"
             />
             <div className="flex items-center gap-1">
@@ -421,7 +425,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                     setConfig((prev) => ({ ...prev, fontSize: clamped }));
                   }
                 }}
-                className="w-16 text-center rounded border border-border bg-background px-2 py-1 text-sm text-foreground"
+                className="w-16 text-center rounded border border-border-input bg-background px-2 py-1 text-sm text-foreground"
                 aria-label="폰트 크기 입력"
               />
               <span className="text-sm text-muted-foreground">px</span>
@@ -446,7 +450,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                   setColorDraft(null);
                   setConfig((prev) => ({ ...prev, color: e.target.value }));
                 }}
-                className="w-11 h-11 rounded border border-border cursor-pointer"
+                className="w-11 h-11 rounded border border-border-input cursor-pointer"
                 aria-label="텍스트 색상"
               />
               <Input
@@ -483,30 +487,31 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                     setConfig((prev) => ({ ...prev, bg: e.target.value }));
                   }}
                   className={cn(
-                    "block w-11 h-11 rounded border border-border cursor-pointer",
+                    "block w-11 h-11 rounded border border-border-input cursor-pointer",
                     config.bg === "transparent" && "opacity-0",
                   )}
                   aria-label="배경색"
                 />
                 {config.bg === "transparent" && (
-                  <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded border border-border" />
+                  <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded border border-border-input" />
                 )}
               </span>
               <div className="flex-1 flex items-center gap-1">
                 <Input
-                  value={bgDraft ?? config.bg}
+                  // 저장값·URL은 CSS 키워드 transparent 그대로 두고, 화면에는 '투명'으로 보인다
+                  value={bgDraft ?? (config.bg === "transparent" ? TRANSPARENT_LABEL : config.bg)}
                   onChange={(e) => {
                     const v = e.target.value;
-                    if (v === "transparent" || HEX_COLOR.test(v)) {
+                    if (v === TRANSPARENT_LABEL || v === "transparent" || HEX_COLOR.test(v)) {
                       setBgDraft(null);
-                      setConfig((prev) => ({ ...prev, bg: v }));
+                      setConfig((prev) => ({ ...prev, bg: v === TRANSPARENT_LABEL ? "transparent" : v }));
                     } else {
                       setBgDraft(v);
                     }
                   }}
                   aria-invalid={bgDraft !== null}
                   className="flex-1 font-mono text-sm aria-[invalid=true]:border-red-500"
-                  placeholder="transparent"
+                  placeholder={TRANSPARENT_LABEL}
                   aria-label="배경색 코드"
                 />
               </div>
@@ -541,10 +546,10 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                   onClick={() => setConfig((prev) => ({ ...prev, position: pos }))}
                   className={cn(
                     "rounded border text-xs transition-colors min-h-[40px]",
-                    // 고르지 않은 칸도 누를 수 있는 자리로 보이게 윤곽을 상시 둔다(배경 대비 3:1 이상)
+                    // 고르지 않은 칸도 누를 수 있는 자리로 보이게 입력 경계 토큰으로 윤곽을 상시 둔다(bg-muted 대비 3:1 이상)
                     config.position === pos
                       ? "border-accent bg-accent text-accent-foreground"
-                      : "border-foreground/50 hover:bg-foreground/10",
+                      : "border-border-input hover:bg-foreground/10",
                   )}
                   aria-label={POSITION_LABELS[pos]}
                   aria-pressed={config.position === pos}
@@ -555,9 +560,9 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
 
         </div>
 
-        {/* 토글 옵션 */}
-        <div className="mb-5 space-y-3">
-          <label className="flex items-center gap-3 cursor-pointer">
+        {/* 토글 옵션 — 터치 기기에서는 행마다 44px 높이로 누르게 하고, 그만큼 행 사이 간격을 없앤다 */}
+        <div className="mb-5 space-y-3 pointer-coarse:space-y-0">
+          <label className="flex pointer-coarse:min-h-11 items-center gap-3 cursor-pointer">
             <input
               type="checkbox"
               checked={config.showTitle}
@@ -569,7 +574,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
               }}
               className="w-4 h-4 accent-accent rounded"
             />
-            <span className="text-sm">타이틀 표시</span>
+            <span className="text-sm">제목 표시</span>
           </label>
           {config.showTitle && savedTitle !== null && (
             <div className="pl-7">
@@ -583,7 +588,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
               <p className="mt-1 text-xs text-muted-foreground">제목은 저장하면 방송 화면에 바로 반영됩니다.</p>
             </div>
           )}
-          <label className="flex items-center gap-3 cursor-pointer">
+          <label className="flex pointer-coarse:min-h-11 items-center gap-3 cursor-pointer">
             <input
               type="checkbox"
               checked={config.shadow}
@@ -592,7 +597,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
             />
             <span className="text-sm">텍스트 그림자</span>
           </label>
-          <label className="flex items-center gap-3 cursor-pointer">
+          <label className="flex pointer-coarse:min-h-11 items-center gap-3 cursor-pointer">
             <input
               type="checkbox"
               checked={config.animation}
@@ -606,7 +611,8 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
         </div>
 
         {/* 하단 고정 영역 — 주 버튼은 저장을 포함한 URL 복사 */}
-        <div className="flex items-center justify-between flex-wrap gap-2 border-t border-border px-6 py-4">
+        {/* 시트(md 미만)에서는 한 줄 높이로 줄이고 홈 인디케이터(safe-area)만큼 띄운다 */}
+        <div className="flex items-center justify-between flex-wrap gap-2 border-t border-border px-6 py-4 max-md:py-3 max-md:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <span
             role="status"
             aria-live="polite"
@@ -647,7 +653,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
               className={cn("min-h-11", saving && "cursor-wait")}
             >
               {titleOnly ? <CheckIcon className="w-4 h-4 mr-1" /> : <CopyIcon className="w-4 h-4 mr-1" />}
-              {saving ? "저장 중..." : titleOnly ? "제목 저장" : "URL 복사"}
+              {saving ? "저장 중…" : titleOnly ? "제목 저장" : "URL 복사"}
             </Button>
           </div>
         </div>
@@ -658,7 +664,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
     <ConfirmDialog
       open={showUnsavedDialog}
       title="저장하지 않고 닫기"
-      description="변경된 설정이 저장되지 않았습니다. 그래도 닫으시겠습니까?"
+      description="바꾼 설정은 저장되지 않고 사라집니다."
       confirmLabel="닫기"
       variant="danger"
       onConfirm={onClose}

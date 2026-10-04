@@ -42,7 +42,7 @@ function LoginContent() {
 
       {error && (
         <div className="rounded-lg bg-red-50 p-3 text-center text-sm text-red-700 dark:bg-red-900/30 dark:text-red-400" role="alert">
-          로그인에 실패했습니다. 다시 시도해주세요.
+          로그인에 실패했습니다. 다시 시도해 주세요.
         </div>
       )}
 

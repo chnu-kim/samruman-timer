@@ -59,5 +59,5 @@ export const Failure: Story = {
 };
 
 export const Info: Story = {
-  args: { message: "시청자 닉네임을 입력하거나 기본 닉네임을 설정하면 숫자키로 즉시 적용됩니다", variant: "info" },
+  args: { message: "시청자 닉네임을 입력하면 숫자키로 즉시 적용됩니다. 닉네임 입력 후 ‘기본 닉네임으로 설정’을 누르면 다음부터 입력 없이 적용됩니다", variant: "info" },
 };

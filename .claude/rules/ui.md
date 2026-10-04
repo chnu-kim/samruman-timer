@@ -14,6 +14,7 @@ paths:
 ## 스타일
 
 - 색은 토큰 클래스(`bg-background`, `text-foreground`, `border-border`, `bg-muted`, `text-muted-foreground` 등)로. 상태색처럼 토큰이 없는 색을 쓸 때는 `dark:` 변형을 함께 지정한다.
+- 입력·select 경계는 `border-border-input`(배경 대비 3:1 이상)이고, `border-border`는 카드·구분선 같은 장식 경계다. placeholder 색은 `globals.css`가 `--muted-foreground`로 정한다.
 - 상태를 색만으로 구분하지 않는다. 텍스트나 아이콘을 함께 쓴다 (예: RUNNING/EXPIRED 뱃지).
 - 애니메이션은 `globals.css`에 `@keyframes`로 정의하고 재사용한다. 컴포넌트 인라인으로 중복 정의하지 않는다.
 - 아이콘은 `ui/Icons.tsx`를 쓴다. stroke 기반, `stroke-width` 2.

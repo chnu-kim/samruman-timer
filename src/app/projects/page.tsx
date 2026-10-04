@@ -206,7 +206,7 @@ export default function ProjectsPage() {
             tabIndex={activeTab === "mine" ? 0 : -1}
             onClick={() => setActiveTab("mine")}
             onKeyDown={handleTabKeyDown}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            className={`px-4 py-2 pointer-coarse:min-h-11 text-sm font-medium transition-colors border-b-2 -mb-px ${
               activeTab === "mine"
                 ? "border-accent text-accent"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -222,7 +222,7 @@ export default function ProjectsPage() {
             tabIndex={activeTab === "others" ? 0 : -1}
             onClick={() => setActiveTab("others")}
             onKeyDown={handleTabKeyDown}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            className={`px-4 py-2 pointer-coarse:min-h-11 text-sm font-medium transition-colors border-b-2 -mb-px ${
               activeTab === "others"
                 ? "border-accent text-accent"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -242,16 +242,16 @@ export default function ProjectsPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="프로젝트 검색..."
+              placeholder="프로젝트 검색…"
               aria-label="프로젝트 검색"
-              className="w-full rounded-lg border border-border bg-background pl-9 pr-3 py-2 text-sm transition-colors"
+              className="w-full rounded-lg border border-border-input bg-background pl-9 pr-3 py-2 text-sm transition-colors"
             />
           </div>
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortBy)}
             aria-label="정렬 기준"
-            className="shrink-0 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+            className="shrink-0 rounded-lg border border-border-input bg-background px-3 py-2 text-sm"
           >
             <option value="latest">최신순</option>
             <option value="name">이름순</option>
@@ -269,7 +269,7 @@ export default function ProjectsPage() {
         {loading ? (
           <ProjectCardGridSkeleton count={6} />
         ) : error ? (
-          <ErrorState message="프로젝트를 불러오는데 실패했습니다." onRetry={fetchProjects} />
+          <ErrorState message="프로젝트를 불러오지 못했습니다." onRetry={fetchProjects} />
         ) : projects.length === 0 ? (
           searchQuery.trim() ? (
             <div className="py-12 text-center">
