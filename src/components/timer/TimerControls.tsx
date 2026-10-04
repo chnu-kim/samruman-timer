@@ -148,6 +148,8 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   useEffect(() => () => clearTimeout(barCooldownTimerRef.current), []);
   const actionGroupLabelId = useId();
   const submitHintId = useId();
+  const disconnectedHintId = useId();
+  const nicknamePromptId = useId();
   const formRef = useRef<HTMLFormElement>(null);
   const actorInputRef = useRef<HTMLInputElement>(null);
   // 닉네임 없이 바를 눌렀을 때 입력란 옆에 띄우는 안내. 닉네임을 입력하면 사라진다(누른 프리셋은 따로 기억하지 않는다)
@@ -170,7 +172,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
 
   const totalSeconds = hours * 3600 + minutes * 60 + seconds;
   // 만료(잔여 0)에서는 차감할 시간이 없으므로 세그먼트를 숨기고 '추가'로만 적용한다.
-  // 선택 상태는 바꾸지 않고 실효 동작만 고정한다(바·카드·숫자키가 모두 이 값을 쓴다)
+  // 선택 상태는 상위(TimerConsole)가 만료로 들어갈 때 '추가'로 되돌린다. 여기서도 실효 동작을 고정해 그 사이 렌더를 막는다
   const expired = status === "EXPIRED" || !!expiredProp;
   // 토글은 사용자 조작 없이(카운트다운이 0에 닿아) 사라질 수 있다. 그때 포커스가 토글 안이었으면 새로 나타난 안내로 옮긴다.
   // 지워진 노드의 blur는 브라우저마다 다르므로, 포커스가 이미 다른 곳으로 옮겨 갔으면 건드리지 않는다
@@ -182,6 +184,27 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
     // 사용자가 보던 위치(기록·그래프)로 화면이 끌려가지 않게 스크롤은 하지 않는다
     restartNoticeRef.current?.focus({ preventScroll: true });
   }, [expired]);
+
+  // 반대 방향: 재시작 안내에 포커스가 있는 채로 시간이 추가돼 안내가 사라지면, 돌아온 토글의 선택된 항목으로 옮긴다
+  const noticeFocusedRef = useRef(false);
+  useLayoutEffect(() => {
+    if (expired || !noticeFocusedRef.current) return;
+    noticeFocusedRef.current = false;
+    const active = document.activeElement;
+    if (active && active !== document.body && document.contains(active)) return;
+    actionWrapperRef.current?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]')?.focus({ preventScroll: true });
+  }, [expired]);
+  function handleNoticeBlur(e: React.FocusEvent<HTMLParagraphElement>) {
+    if (e.relatedTarget) {
+      noticeFocusedRef.current = false;
+      return;
+    }
+    // 노드 제거로 생긴 blur는 같은 커밋의 layout effect가 처리한다. 안내가 남아 있는데 포커스가 떠났으면 실제로 떠난 것이다
+    setTimeout(() => {
+      const notice = restartNoticeRef.current;
+      if (notice && notice.isConnected && document.activeElement !== notice) noticeFocusedRef.current = false;
+    }, 0);
+  }
 
   // 토글을 떠난 blur. relatedTarget이 있으면 그 자리에서 판단하고, 없으면(빈 곳 클릭·창 전환·노드 제거) 다음 틱에 본다.
   // 그때 토글이 아직 화면에 있고 포커스가 그 밖이면 실제로 떠난 것이다. 노드 제거로 생긴 blur는 같은 커밋의
@@ -457,7 +480,13 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
       {/* 만료 상태에서 추가는 곧 재시작이므로 결과를 한 줄로 미리 알린다 */}
       {/* tabIndex -1: 추가/차감 토글이 사라질 때 그 안에 있던 포커스를 받는다(Tab 순서에는 넣지 않는다) */}
       {expired && (
-        <p ref={restartNoticeRef} tabIndex={-1} className="text-sm text-muted-foreground">
+        <p
+          ref={restartNoticeRef}
+          tabIndex={-1}
+          onFocus={() => { noticeFocusedRef.current = true; }}
+          onBlur={handleNoticeBlur}
+          className="text-sm text-muted-foreground"
+        >
           시간을 추가하면 다시 시작됩니다
         </p>
       )}
@@ -473,9 +502,13 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
             maxLength={50}
             autoComplete="off"
             placeholder={defaultActor ? `기본: ${defaultActor}` : "시간 변경을 요청한 시청자"}
+            // 안내(role=alert)는 포커스 이동과 같은 틱에 나타나 낭독이 끊기거나, 두 번째 탭에는 다시 읽히지 않는다.
+            // 입력란 설명으로 이어 두어 포커스가 닿을 때 이유를 함께 읽게 한다
+            aria-describedby={showNicknamePrompt ? nicknamePromptId : undefined}
+            aria-invalid={showNicknamePrompt || undefined}
           />
           {showNicknamePrompt && (
-            <p className="mt-1.5 text-sm text-red-600 dark:text-red-400" role="alert">{NICKNAME_PROMPT_MESSAGE}</p>
+            <p id={nicknamePromptId} className="mt-1.5 text-sm text-red-600 dark:text-red-400" role="alert">{NICKNAME_PROMPT_MESSAGE}</p>
           )}
           {/* 최근 닉네임 칩 */}
           {recentActors.length > 0 && (
@@ -604,16 +637,17 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
             <span className="text-sm text-muted-foreground">초</span>
           </div>
         </div>
-        {/* 확인 버튼이 비활성인 이유. 값을 넣으면 사라지고 버튼 라벨이 적용될 양을 보여 준다.
-            연결이 끊긴 동안은 문구만 바꾼다(버튼은 막지 않는다. 눌러 실패하면 롤백·안내가 따른다) */}
-        {disconnected ? (
-          // 모바일에도 보인다. 바 캡션('즉시 적용 → 이름')은 모드 단서라 그대로 두고 이 줄이 안내한다
-          <p id={submitHintId} className="mt-1 text-xs text-muted-foreground">
-            {DISCONNECTED_HINT_MESSAGE}
-          </p>
-        ) : totalSeconds <= 0 && (
+        {/* 확인 버튼이 비활성인 이유. 값을 넣으면 사라지고 버튼 라벨이 적용될 양을 보여 준다 */}
+        {totalSeconds <= 0 && (
           <p id={submitHintId} className="mt-1 text-xs text-muted-foreground max-md:hidden">
             시간을 입력하면 {actionLabel}할 수 있습니다.
+          </p>
+        )}
+        {/* 연결이 끊긴 동안 덧붙이는 줄(버튼은 막지 않는다. 눌러 실패하면 롤백·안내가 따른다). 비활성 이유는 위 줄이 그대로 맡는다.
+            모바일에도 보인다. 바 캡션('즉시 적용 → 이름')은 모드 단서라 그대로 두고 이 줄이 안내한다 */}
+        {disconnected && (
+          <p id={disconnectedHintId} className="mt-1 text-xs text-muted-foreground">
+            {DISCONNECTED_HINT_MESSAGE}
           </p>
         )}
       </div>
@@ -628,7 +662,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
         size="lg"
         variant={action === "SUBTRACT" ? "danger" : "primary"}
         disabled={totalSeconds <= 0}
-        aria-describedby={totalSeconds <= 0 || disconnected ? submitHintId : undefined}
+        aria-describedby={[totalSeconds <= 0 && submitHintId, disconnected && disconnectedHintId].filter(Boolean).join(" ") || undefined}
         className="w-full max-md:hidden"
       >
         {totalSeconds > 0 ? `시간 ${actionLabel} (${formatDelta(totalSeconds)})` : `시간 ${actionLabel}`}

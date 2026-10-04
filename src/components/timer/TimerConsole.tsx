@@ -347,8 +347,13 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
 
   // 카운트다운이 0에 닿으면 다음 폴링을 기다리지 않고 배지를 '만료'로 보여 준다
   const countdownEnded = useCountdownEnded(timer?.remainingSeconds, timer?.status);
-  // 만료(잔여 0)면 차감할 시간이 없으므로 숫자키·바·카드 모두 '추가'로만 적용한다(선택 상태는 그대로 둔다)
+  // 만료(잔여 0)면 차감할 시간이 없으므로 숫자키·바·카드 모두 '추가'로만 적용한다
   const expired = countdownEnded || timer?.status === "EXPIRED";
+  // 만료로 들어가면 선택도 '추가'로 되돌린다. 숨긴 세그먼트의 '차감'을 남겨 두면 '+'로 재시작한 직후 같은 자리
+  // 바 버튼이 '−'로 바뀌어, 연달아 누른 두 번째 탭이 방금 더한 시간을 빼 버린다. 효과가 돌기 전 렌더는 아래 강제값이 맡는다
+  useEffect(() => {
+    if (expired) setSelectedAction("ADD");
+  }, [expired]);
   const effectiveAction: ModifyAction = expired ? "ADD" : selectedAction;
 
   // 키보드 단축키 핸들러

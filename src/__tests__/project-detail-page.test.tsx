@@ -455,8 +455,9 @@ describe("프로젝트 콘솔", () => {
       });
     });
 
-    // 만료 중에는 토글이 보이지 않으므로 X가 숨은 선택을 바꾸면 안 된다. 재시작 뒤 첫 적용이 고르지 않은 방향으로 바로 나가기 때문이다
-    it("만료 중 X는 선택을 바꾸지 않아, 추가로 재시작한 뒤에도 차감이 그대로 선택돼 있다", async () => {
+    // 만료 중에는 토글이 보이지 않으므로 X가 숨은 선택을 바꾸면 안 된다. 만료로 들어가면 선택은 '추가'로 되돌아가
+    // 재시작 직후 같은 자리 바 버튼이 '−'로 바뀌어 연달은 두 번째 입력이 방금 더한 시간을 빼지 않게 한다
+    it("차감 선택 후 만료되면 선택이 추가로 돌아가, 추가로 재시작한 뒤 두 번째 '1'도 ADD다", async () => {
       const running = { ...timerDetail, status: "RUNNING", remainingSeconds: 1 };
       const calls = stubApi({
         timers: [{ ...timer, status: "RUNNING", remainingSeconds: 1 }],
@@ -477,9 +478,18 @@ describe("프로젝트 콘솔", () => {
         const modify = calls.find((c) => c.url === "/api/timers/t1/modify" && c.method === "POST");
         expect(JSON.parse(modify!.body!)).toMatchObject({ action: "ADD", deltaSeconds: 3600 });
       });
-      // 서버 응답으로 다시 실행 중이 되면 토글이 돌아오고, 만료 전에 고른 차감이 그대로다
-      const subtract = await screen.findByRole("radio", { name: "차감" });
-      expect(subtract).toHaveAttribute("aria-checked", "true");
+      // 서버 응답으로 다시 실행 중이 되면 토글이 돌아오고 '추가'가 선택돼 있다. 바도 방금 본 '+' 그대로다
+      const add = await screen.findByRole("radio", { name: "추가" });
+      expect(add).toHaveAttribute("aria-checked", "true");
+      const bar = within(document.querySelector("[data-quick-bar]") as HTMLElement);
+      expect(bar.getAllByRole("button").map((b) => b.textContent)).toEqual(["+1시간", "+5시간", "+10시간"]);
+
+      fireEvent.keyDown(window, { key: "1", code: "Digit1" });
+      await waitFor(() => {
+        const modifies = calls.filter((c) => c.url === "/api/timers/t1/modify" && c.method === "POST");
+        expect(modifies).toHaveLength(2);
+        expect(JSON.parse(modifies[1].body!)).toMatchObject({ action: "ADD", deltaSeconds: 3600 });
+      });
     });
 
     it("목표 폼이 열려 있으면 '1'이 뒤쪽 타이머를 바꾸지 않는다", async () => {

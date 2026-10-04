@@ -258,6 +258,34 @@ describe("TimerControls", () => {
       expect((document.querySelector("[data-quick-bar]") as HTMLElement).classList.contains("hidden")).toBe(false);
     });
 
+    // 반대 방향: 안내에 포커스가 있는 채로 시간이 추가돼 재시작하면 안내가 사라진다. 포커스는 돌아온 토글의 선택 항목으로 간다
+    it("재시작 안내에 포커스가 있을 때 재시작하면 포커스가 돌아온 토글의 선택 항목으로 간다(스크롤 없이)", () => {
+      const { rerender } = render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3} initialAction="SUBTRACT" />);
+      act(() => screen.getByRole("radio", { name: "차감" }).focus());
+      rerender(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3} initialAction="SUBTRACT" expired />);
+      const notice = screen.getByText("시간을 추가하면 다시 시작됩니다");
+      expect(document.activeElement).toBe(notice);
+
+      const focusSpy = vi.spyOn(HTMLElement.prototype, "focus");
+      rerender(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3600} initialAction="SUBTRACT" />);
+      expect(screen.queryByText("시간을 추가하면 다시 시작됩니다")).not.toBeInTheDocument();
+      expect(document.activeElement).not.toBe(document.body);
+      const selected = screen.getAllByRole("radio").find((r) => r.getAttribute("aria-checked") === "true");
+      expect(document.activeElement).toBe(selected);
+      expect(focusSpy).toHaveBeenLastCalledWith({ preventScroll: true });
+      focusSpy.mockRestore();
+    });
+
+    it("재시작 안내를 떠난 뒤(다른 칸으로 이동) 재시작하면 포커스를 옮기지 않는다", () => {
+      const { rerender } = render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3} initialAction="SUBTRACT" />);
+      act(() => screen.getByRole("radio", { name: "차감" }).focus());
+      rerender(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3} initialAction="SUBTRACT" expired />);
+      const input = screen.getByLabelText("시청자 닉네임");
+      act(() => input.focus());
+      rerender(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3600} initialAction="SUBTRACT" />);
+      expect(document.activeElement).toBe(input);
+    });
+
     it("재시작 안내로 옮길 때 스크롤하지 않는다(preventScroll)", () => {
       const { rerender } = render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3} initialAction="SUBTRACT" />);
       act(() => screen.getByRole("radio", { name: "차감" }).focus());
@@ -333,6 +361,16 @@ describe("TimerControls", () => {
     fireEvent.change(screen.getAllByLabelText("분")[0], { target: { value: "10" } });
     expect(cardButton("시간 추가 (10분)")).toBeEnabled();
     expect(screen.getByText(DISCONNECTED_HINT_MESSAGE)).toBeInTheDocument();
+  });
+
+  // 시간이 비어 비활성인 확인 버튼은 연결이 끊겨도 진짜 이유(시간 입력)를 설명에 남긴다. 재연결만 기다리라고 읽히면 안 된다
+  it("연결이 끊기고 시간이 0이면 확인 버튼 설명에 시간 입력 이유와 연결 안내가 함께 있다", () => {
+    render(<Harness timerId={timerId} status="RUNNING" disconnected />);
+    const submit = cardButton("시간 추가");
+    expect(submit).toBeDisabled();
+    expect(submit).toHaveAccessibleDescription(`시간을 입력하면 추가할 수 있습니다. ${DISCONNECTED_HINT_MESSAGE}`);
+    fireEvent.change(screen.getAllByLabelText("분")[0], { target: { value: "10" } });
+    expect(cardButton("시간 추가 (10분)")).toHaveAccessibleDescription(DISCONNECTED_HINT_MESSAGE);
   });
 
   it("switches to SUBTRACT action", () => {
@@ -990,10 +1028,15 @@ describe("TimerControls", () => {
       expect(screen.getByRole("alert")).toHaveTextContent(NICKNAME_PROMPT_MESSAGE);
       expect(mockFetch).not.toHaveBeenCalled();
       expect(mockToast).not.toHaveBeenCalled();
+      // alert가 포커스 낭독에 묻히거나 두 번째 탭에 다시 읽히지 않아도, 입력란 설명으로 이유가 함께 읽힌다
+      expect(input).toHaveAccessibleDescription(NICKNAME_PROMPT_MESSAGE);
+      expect(input).toHaveAttribute("aria-invalid", "true");
 
       // 닉네임을 입력하면 안내가 사라지고, 앞서 누른 +1시간은 적용되지 않는다
       fireEvent.change(input, { target: { value: "치즈냥" } });
       expect(screen.queryByText(NICKNAME_PROMPT_MESSAGE)).not.toBeInTheDocument();
+      expect(input).not.toHaveAttribute("aria-describedby");
+      expect(input).not.toHaveAttribute("aria-invalid");
       await act(async () => {});
       expect(mockFetch).not.toHaveBeenCalled();
     });

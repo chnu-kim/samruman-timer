@@ -31,7 +31,7 @@ W32·W25·W29·W30은 모두 콘솔 파일(`TimerConsole`·`TimerControls`·`pro
   3. (R22) 단축키 도움말 각주 세 문장을 '숫자키는 닉네임 칸의 이름(없으면 기본 닉네임)으로 바로 적용됩니다' 한 문장으로. '?' 행은 유지(진입점 설명은 그대로 남겨도 해롭지 않음).
   4. (R14) 바 캡션 '즉시 적용 → 닉네임'은 §4-3 결정(부호·캡션 유지)대로 남기되 `@media (max-height: 480px)`에서 바를 `static`으로 바꾸고 `--quick-bar-h`를 0으로 둔다. 폼 입력(`:focus-within`)에 포커스가 있는 동안 바를 숨긴다(`has()` 또는 state). 캡션 제거로 64px까지 줄이는 안은 **사용자 결정 2**로 남긴다.
   5. (R25) 잔여 0(만료)에서는 추가/차감 세그먼트를 숨기고 '추가'로 고정. 안내문은 결과 한 줄 '시간을 추가하면 다시 시작됩니다'(R17 흡수).
-  6. (R27) 연결 끊김 상태에서는 버튼 아래 힌트 줄 문구만 '연결이 돌아오면 적용할 수 있습니다'로 바꾼다. 버튼은 비활성화하지 않는다.
+  6. (R27) 연결 끊김 상태에서는 버튼 아래 힌트 줄 문구만 '연결이 돌아오면 적용할 수 있습니다'로 바꾼다. 버튼은 비활성화하지 않는다.(구현 결정: 시간이 비어 확인 버튼이 비활성이면 비활성 이유 줄 '시간을 입력하면 …할 수 있습니다.'를 남기고 연결 안내 줄을 덧붙여 두 줄 모두 버튼 `aria-describedby`에 잇는다. 이유를 바꿔 치우면 재연결을 기다려도 켜지지 않는 버튼이 재연결 안내만 읽힌다.)
 - 완료 판정: 390×844 첫 사용(기본 닉네임 없음)에서 바 버튼 `disabled` 0개, 탭 → activeElement가 닉네임 input이고 input 중심이 뷰포트 안. 데스크톱 숫자키 `1` → 토스트 1건·폭 ≤ 420px·문장 1개. 320×200에서 바 `position: static`, 카운트다운 보임. 입력 포커스 중 바 bounding box 없음. 만료 콘솔에 radio 0개. §4-14(390에서 카운트다운과 바 동시 노출) 유지 스크린샷. TimerControls 테스트 갱신.
 - 주요 파일: `src/components/timer/TimerControls.tsx`, `src/components/timer/TimerConsole.tsx`(handleKeyboardPreset·도움말 각주), `src/components/ui/Toast.tsx`, `src/app/globals.css`, `src/components/timer/__tests__/TimerControls.test.tsx`, `src/components/timer/__tests__/mobile-reflow.test.tsx`, `src/components/ui/__tests__/Toast.test.tsx`
 - 의존: W31 뒤(TimerConsole.tsx). W25 전(TimerControls 카드 테두리).
