@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { render, screen } from "@testing-library/react";
-import TimerRedirectPage, { metadata } from "@/app/timers/[id]/page";
+import TimerRedirectPage from "@/app/timers/[id]/page";
 import TimerNotFound from "@/app/timers/[id]/not-found";
+import { metadata } from "@/app/timers/[id]/layout";
 
 const redirect = vi.hoisted(() =>
   vi.fn((url: string) => {
@@ -52,6 +53,6 @@ describe("/timers/[id]", () => {
     render(<TimerNotFound />);
     expect(screen.getByText(/타이머를 찾을 수 없습니다/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /프로젝트 목록으로/ })).toHaveAttribute("href", "/projects");
-    expect(metadata.title).toBe("찾을 수 없음");
+    expect(metadata.title).toMatchObject({ default: "찾을 수 없음" });
   });
 });

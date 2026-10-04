@@ -133,10 +133,10 @@ function recentLogsQuery() {
 
 /**
  * 콘솔 첫 화면 데이터를 함께 받는다. 세 요청은 함께 떠나 보통 같이 도착한다.
- * 타이머가 없으면(404) "removed", 상세를 받지 못하면 null(콘솔이 직접 다시 부르고 실패하면 오류를 보인다).
+ * 타이머가 없으면(404) "removed", 상세를 받지 못하면(5xx·네트워크·응답 없음 10초) "failed"(콘솔이 같은 요청을 또 걸지 않고 바로 오류와 '다시 시도'를 보인다).
  * 기록·그래프가 상세보다 많이 늦으면 기다리지 않는다. 방송 중 주 조작(시간 카드)을 부가 정보 때문에 늦추지 않기 위해서다
  */
-export async function loadConsoleSnapshot(timerId: string): Promise<ConsoleSnapshot | "removed" | null> {
+export async function loadConsoleSnapshot(timerId: string): Promise<ConsoleSnapshot | "removed" | "failed"> {
   const data = async <T,>(request: Promise<Response>): Promise<T | null> => {
     try {
       const res = await request;
@@ -151,10 +151,10 @@ export async function loadConsoleSnapshot(timerId: string): Promise<ConsoleSnaps
   try {
     detail = await fetchTimerDetail(timerId);
   } catch {
-    return null;
+    return "failed";
   }
   if (detail.status === 404) return "removed";
-  if (!detail.data) return null;
+  if (!detail.data) return "failed";
   const receivedAtMs = Date.now();
   const late = new Promise<null>((resolve) => setTimeout(() => resolve(null), SNAPSHOT_EXTRA_WAIT_MS));
   const [firstLogs, firstGraph] = await Promise.all([Promise.race([logs, late]), Promise.race([graph, late])]);
@@ -165,6 +165,8 @@ interface TimerConsoleProps {
   timerId: string;
   /** 상위 화면이 `loadConsoleSnapshot`으로 미리 받은 첫 화면 데이터. 있으면 그 부분은 다시 부르지 않고 바로 그린다. 없으면 직접 불러온다 */
   initialSnapshot?: ConsoleSnapshot | null;
+  /** 상위 화면이 상세를 받지 못했다(`loadConsoleSnapshot`이 "failed"). 같은 요청을 다시 걸지 않고 바로 오류 화면을 그린다 */
+  initialFailed?: boolean;
   isOwner: boolean;
   /** 시간 카드 옆(소유자가 아니면 카운트다운 아래)에 둘 영역. 프로젝트 화면은 목표를 넣는다 */
   aside?: ReactNode;
@@ -174,7 +176,7 @@ interface TimerConsoleProps {
   onTimerRemoved?: () => void;
 }
 
-export function TimerConsole({ timerId, initialSnapshot, isOwner, aside, onTimeChanged, onTimerRemoved }: TimerConsoleProps) {
+export function TimerConsole({ timerId, initialSnapshot, initialFailed = false, isOwner, aside, onTimeChanged, onTimerRemoved }: TimerConsoleProps) {
   const { toast } = useToast();
   // 마운트 때의 값만 쓴다(상위가 나중에 넘기는 값으로 상태를 덮거나 다시 부르지 않는다)
   const [snapshot] = useState(initialSnapshot ?? null);
@@ -184,8 +186,8 @@ export function TimerConsole({ timerId, initialSnapshot, isOwner, aside, onTimeC
   );
   // 시간 추가·차감(낙관적 반영 포함)·되돌리기로 스냅샷이 바뀐 횟수. 낙관적 반영에는 updatedAt이 없어 종료 예정 시각을 다시 잡는 신호로 쓴다
   const [modifySeq, setModifySeq] = useState(0);
-  const [loading, setLoading] = useState(!snapshot);
-  const [error, setError] = useState(false);
+  const [loading, setLoading] = useState(!snapshot && !initialFailed);
+  const [error, setError] = useState(initialFailed);
 
   // 기록
   const [logsExpanded, setLogsExpanded] = useState(false);
@@ -310,13 +312,13 @@ export function TimerConsole({ timerId, initialSnapshot, isOwner, aside, onTimeC
 
   // 상위가 넘긴 데이터가 있으면 그 부분의 첫 조회를 건너뛴다
   useEffect(() => {
-    if (snapshot) return;
+    if (snapshot || initialFailed) return;
     async function load() {
       await fetchTimer();
       setLoading(false);
     }
     load();
-  }, [snapshot, fetchTimer]);
+  }, [snapshot, initialFailed, fetchTimer]);
 
   // 조건(페이지·필터·펼침)이 바뀔 때 부른다. 마지막으로 부른 조건과 같으면 다시 부르지 않는다
   // (넘겨받은 첫 기록과 같은 조건의 첫 실행, 개발 모드에서 effect가 두 번 도는 경우)

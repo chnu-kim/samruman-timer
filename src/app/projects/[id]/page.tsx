@@ -224,6 +224,7 @@ export default function ProjectDetailPage() {
   const [timersLoaded, setTimersLoaded] = useState(false);
   // 콘솔의 첫 화면을 골격 다음 한 번에 그리려고 타이머 상세·최근 기록·그래프의 첫 조회도 목록과 이어서 여기서 한다(이후 폴링·갱신은 TimerConsole)
   const [consoleSnapshot, setConsoleSnapshot] = useState<ConsoleSnapshot | null>(null);
+  const [consoleFailed, setConsoleFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   // 404는 다시 시도해도 같으므로 일시적 오류와 구분한다
@@ -285,13 +286,16 @@ export default function ProjectDetailPage() {
         const json = (await res.json()) as ApiSuccessResponse<TimerListItem[]>;
         let list = json.data;
         let snapshot: ConsoleSnapshot | null = null;
+        let failed = false;
         if (list[0]) {
           const loaded = await loadConsoleSnapshot(list[0].id);
           // 목록을 받은 직후 다른 곳에서 삭제됐다. 보지도 못한 타이머라 알림 없이 '타이머 없음'으로 그린다
           if (loaded === "removed") list = [];
+          else if (loaded === "failed") failed = true;
           else snapshot = loaded;
         }
         setConsoleSnapshot(snapshot);
+        setConsoleFailed(failed);
         setTimers(list);
       }
     } catch {
@@ -513,6 +517,8 @@ export default function ProjectDetailPage() {
               {project.owner.nickname}
             </p>
           )}
+          {/* 시청자는 설명이 없으면 그 줄이 없다. 골격(ProjectDetailSkeleton)은 설명 줄을 항상 그리므로 같은 높이를 닉네임 아래에 비워 두어 카운트다운이 밀리지 않게 한다 */}
+          {!isOwner && !project.description && <div aria-hidden="true" className="mt-1 h-6" />}
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           {isOwner && timer && (
@@ -555,6 +561,7 @@ export default function ProjectDetailPage() {
             key={timer.id}
             timerId={timer.id}
             initialSnapshot={consoleSnapshot?.timer.id === timer.id ? consoleSnapshot : null}
+            initialFailed={consoleFailed}
             isOwner={isOwner}
             onTimeChanged={refreshGoalsSilently}
             onTimerRemoved={handleTimerRemoved}

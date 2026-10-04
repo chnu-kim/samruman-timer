@@ -258,6 +258,14 @@ describe("프로젝트 콘솔", () => {
     expect(screen.getByRole("button", { name: "링크 복사" })).toBeInTheDocument();
   });
 
+  // 골격은 설명 줄을 항상 그리므로, 설명이 없는 프로젝트의 시청자 화면도 같은 높이를 비워 카운트다운이 골격→본문 전환에서 밀리지 않는다
+  it("설명이 없으면 시청자 헤더 아래에 설명 줄 높이만큼 자리를 비워 둔다", async () => {
+    stubApi({ timers: [timer], goals: [] });
+    render(<ProjectDetailPage />);
+    await screen.findByRole("heading", { name: "잔여 시간 추이" });
+    expect(screen.getByRole("heading", { name: "테스트 프로젝트" }).parentElement!.querySelector(".h-6[aria-hidden=true]")).toBeInTheDocument();
+  });
+
   // UX-73: 만료 로그의 행위자를 'system' 대신 '자동'으로 보여 준다
   it("시스템이 남긴 만료 로그의 행위자를 '자동'으로 표시한다", async () => {
     stubApi({ timers: [timer], goals: [] });

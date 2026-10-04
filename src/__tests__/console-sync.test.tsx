@@ -209,18 +209,17 @@ describe("폴링의 외부 변경 판정 (updatedAt)", () => {
 });
 
 describe("타이머 상세 요청 시간 제한", () => {
-  it("상세가 응답 없이 멈추면 10초 뒤 콘솔 자리에 오류와 '다시 시도'를 보이고, 기다리는 동안 그 자리 높이를 잡아 둔다", async () => {
+  it("상세가 응답 없이 멈추면 10초 뒤 콘솔 자리에 오류와 '다시 시도'를 바로 보인다(콘솔이 10초를 더 기다리지 않는다)", async () => {
     server.detail = "pending";
     vi.useFakeTimers({ shouldAdvanceTime: true });
     render(<ProjectDetailPage />);
 
-    // 상위의 첫 조회가 10초 뒤 끝나면 화면 헤더를 그리고, 콘솔이 다시 묻는 동안 콘솔 골격을 둔다
+    // 상위의 첫 조회가 10초 뒤 끝나면 콘솔이 같은 요청을 또 걸지 않고 바로 오류와 '다시 시도'를 보인다(대기는 10초 한 번)
     await vi.advanceTimersByTimeAsync(10_500);
     await screen.findByRole("heading", { name: "테스트 프로젝트" });
-    expect(document.querySelector("[aria-busy=true] .h-70")).toBeInTheDocument();
-
-    await vi.advanceTimersByTimeAsync(10_000);
     expect(await screen.findByText("타이머 정보를 불러오지 못했습니다.")).toBeInTheDocument();
+    expect(document.querySelector("[aria-busy=true]")).not.toBeInTheDocument();
+    expect(vi.mocked(global.fetch).mock.calls.filter(([u]) => String(u) === "/api/timers/t1")).toHaveLength(1);
 
     server.detail = "ok";
     fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));
