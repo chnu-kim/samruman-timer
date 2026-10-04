@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useId } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useId } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -32,6 +32,15 @@ interface TimerControlsProps {
    * effect가 아니라 렌더 중에 채워, 닉네임을 바꾼 직후의 단축키도 화면에 보이는 이름을 쓴다
    */
   quickActorRef?: { current: string };
+  /**
+   * 닉네임 입력란으로 안내하는 함수를 상위와 공유하는 ref. 닉네임 없이 숫자 단축키를 눌렀을 때 상위가 불러
+   * 입력란으로 포커스를 옮긴다(안내 문구는 상위 토스트가 맡으므로 입력란 옆 alert는 띄우지 않는다)
+   */
+  nicknamePromptRef?: { current: (() => void) | null };
+  /** 카운트다운이 0에 닿아 만료로 보이는지. 폴링 전이라 status가 아직 RUNNING이어도 상위가 알려 준다 */
+  expired?: boolean;
+  /** 서버와 연결이 끊긴 상태. 버튼은 그대로 두고 안내 줄 문구만 바꾼다 */
+  disconnected?: boolean;
   className?: string;
 }
 
@@ -80,12 +89,26 @@ function saveDefaultActor(name: string) {
   localStorage.setItem(DEFAULT_ACTOR_KEY, name);
 }
 
-/** 닉네임이 없을 때의 안내. 폼 제출과 하단 바가 같은 문구를 쓴다 */
+/** 닉네임 없이 폼(확인 버튼·Enter)으로 제출했을 때의 안내 */
 export const NICKNAME_REQUIRED_MESSAGE = "시청자 닉네임을 입력해 주세요.";
+/** 닉네임 없이 하단 바를 눌렀을 때 입력란 옆에 띄우는 한 줄 */
+export const NICKNAME_PROMPT_MESSAGE = "닉네임을 입력하면 바로 적용됩니다";
+/** 연결이 끊긴 동안의 안내 줄 */
+export const DISCONNECTED_HINT_MESSAGE = "연결이 돌아오면 적용할 수 있습니다";
 /** 서버 오류·네트워크 실패(폼). 실패하면 입력을 되살리므로 다시 누르면 된다 */
 export const MODIFY_FAILED_FORM_MESSAGE = "적용하지 못했습니다. 입력은 그대로 있으니 다시 확인을 누르세요.";
 /** 서버 오류·네트워크 실패(하단 바처럼 입력 없이 바로 적용하는 경로) */
 export const MODIFY_FAILED_QUICK_MESSAGE = "적용하지 못했습니다. 다시 눌러 주세요.";
+
+/**
+ * 글자를 입력하는 칸인지. 모바일에서 키보드가 올라오는 칸에 포커스가 있는 동안만 하단 바를 숨긴다.
+ * 버튼·추가/차감 토글(role=radio)·바 버튼에 포커스가 가도 바는 그대로 둔다
+ */
+function isTextEntry(el: EventTarget | null): boolean {
+  if (el instanceof HTMLTextAreaElement) return true;
+  if (!(el instanceof HTMLInputElement)) return false;
+  return ["text", "number", "search", "tel", "email", "url", ""].includes(el.type);
+}
 
 /**
  * 인라인 오류가 보이는 자리인지. 오류 문구는 확인 버튼 바로 위에 뜨므로 그 버튼이 뷰포트 안(모바일은 하단 바 위)에 있는지 본다
@@ -95,11 +118,12 @@ function isInlineErrorVisible(anchor: HTMLElement | null): boolean {
   const rect = anchor.getBoundingClientRect();
   // 하단 바가 떠 있으면(모바일) 그 위까지만 보이는 영역이다. md 이상에서는 display:none이라 높이가 0이다
   const bar = document.querySelector<HTMLElement>("[data-quick-bar]")?.getBoundingClientRect();
-  const visibleBottom = bar && bar.height > 0 ? bar.top : window.innerHeight;
+  // 낮은 화면(max-height 480px)에서 바는 문서 흐름(static)에 놓여 뷰포트 아래에 있을 수 있으므로 뷰포트 높이를 넘지 않게 한다
+  const visibleBottom = bar && bar.height > 0 ? Math.min(bar.top, window.innerHeight) : window.innerHeight;
   return rect.top >= 0 && rect.bottom <= visibleBottom;
 }
 
-export function TimerControls({ timerId, status, remainingSeconds, selectedAction, onActionChange, onModified, onTimerRemoved, quickActorRef, className }: TimerControlsProps) {
+export function TimerControls({ timerId, status, remainingSeconds, selectedAction, onActionChange, onModified, onTimerRemoved, quickActorRef, nicknamePromptRef, expired: expiredProp, disconnected, className }: TimerControlsProps) {
   const { toast } = useToast();
   const showModifiedToast = useUndoableModifyToast(timerId, onModified);
   const [actorName, setActorName] = useState("");
@@ -124,7 +148,18 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   useEffect(() => () => clearTimeout(barCooldownTimerRef.current), []);
   const actionGroupLabelId = useId();
   const submitHintId = useId();
+  const disconnectedHintId = useId();
+  const nicknamePromptId = useId();
   const formRef = useRef<HTMLFormElement>(null);
+  const actorInputRef = useRef<HTMLInputElement>(null);
+  // 닉네임 없이 바를 눌렀을 때 입력란 옆에 띄우는 안내. 닉네임을 입력하면 사라진다(누른 프리셋은 따로 기억하지 않는다)
+  const [nicknamePrompt, setNicknamePrompt] = useState(false);
+  // 글자 입력 칸에 포커스가 있는 동안 모바일 하단 바를 숨긴다(키보드 위로 떠서 입력란을 가리지 않게)
+  const [typing, setTyping] = useState(false);
+  // 추가/차감 토글에 포커스가 있는지. 만료로 토글이 사라질 때 포커스가 body로 떨어지지 않게 재시작 안내로 옮긴다
+  const actionFocusedRef = useRef(false);
+  const actionWrapperRef = useRef<HTMLDivElement>(null);
+  const restartNoticeRef = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
     setRecentActors(getRecentActors());
@@ -136,14 +171,86 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   }, []);
 
   const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+  // 만료(잔여 0)에서는 차감할 시간이 없으므로 세그먼트를 숨기고 '추가'로만 적용한다.
+  // 선택 상태는 상위(TimerConsole)가 만료로 들어갈 때 '추가'로 되돌린다. 여기서도 실효 동작을 고정해 그 사이 렌더를 막는다
+  const expired = status === "EXPIRED" || !!expiredProp;
+  // 토글은 사용자 조작 없이(카운트다운이 0에 닿아) 사라질 수 있다. 그때 포커스가 토글 안이었으면 새로 나타난 안내로 옮긴다.
+  // 지워진 노드의 blur는 브라우저마다 다르므로, 포커스가 이미 다른 곳으로 옮겨 갔으면 건드리지 않는다
+  useLayoutEffect(() => {
+    if (!expired || !actionFocusedRef.current) return;
+    actionFocusedRef.current = false;
+    const active = document.activeElement;
+    if (active && active !== document.body && document.contains(active)) return;
+    // 사용자가 보던 위치(기록·그래프)로 화면이 끌려가지 않게 스크롤은 하지 않는다
+    restartNoticeRef.current?.focus({ preventScroll: true });
+  }, [expired]);
+
+  // 반대 방향: 재시작 안내에 포커스가 있는 채로 시간이 추가돼 안내가 사라지면, 돌아온 토글의 선택된 항목으로 옮긴다
+  const noticeFocusedRef = useRef(false);
+  useLayoutEffect(() => {
+    if (expired || !noticeFocusedRef.current) return;
+    noticeFocusedRef.current = false;
+    const active = document.activeElement;
+    if (active && active !== document.body && document.contains(active)) return;
+    actionWrapperRef.current?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]')?.focus({ preventScroll: true });
+  }, [expired]);
+  function handleNoticeBlur(e: React.FocusEvent<HTMLParagraphElement>) {
+    if (e.relatedTarget) {
+      noticeFocusedRef.current = false;
+      return;
+    }
+    // 노드 제거로 생긴 blur는 같은 커밋의 layout effect가 처리한다. 안내가 남아 있는데 포커스가 떠났으면 실제로 떠난 것이다
+    setTimeout(() => {
+      const notice = restartNoticeRef.current;
+      if (notice && notice.isConnected && document.activeElement !== notice) noticeFocusedRef.current = false;
+    }, 0);
+  }
+
+  // 토글을 떠난 blur. relatedTarget이 있으면 그 자리에서 판단하고, 없으면(빈 곳 클릭·창 전환·노드 제거) 다음 틱에 본다.
+  // 그때 토글이 아직 화면에 있고 포커스가 그 밖이면 실제로 떠난 것이다. 노드 제거로 생긴 blur는 같은 커밋의
+  // layout effect가 먼저 처리하고 토글이 사라져 있으므로 건드리지 않는다. 창 전환은 activeElement가 radio로 남아 유지된다
+  function handleActionBlur(e: React.FocusEvent<HTMLDivElement>) {
+    if (e.relatedTarget) {
+      if (!e.currentTarget.contains(e.relatedTarget as Node)) actionFocusedRef.current = false;
+      return;
+    }
+    setTimeout(() => {
+      const wrapper = actionWrapperRef.current;
+      if (wrapper && wrapper.isConnected && !wrapper.contains(document.activeElement)) actionFocusedRef.current = false;
+    }, 0);
+  }
+  const action: ModifyAction = expired ? "ADD" : selectedAction;
+  const actionLabel = action === "ADD" ? "추가" : "차감";
   // 즉시 적용(모바일 하단 바·숫자 단축키)이 기록할 닉네임. 표시와 제출이 어긋나지 않도록 한 곳에서 정한다
-  const actionLabel = selectedAction === "ADD" ? "추가" : "차감";
   const quickActor = resolveQuickActor(actorName, defaultActor);
   if (quickActorRef) quickActorRef.current = quickActor;
+  if (nicknamePromptRef) nicknamePromptRef.current = () => focusNickname(false);
   // 모바일 하단 바: 입력값이 있으면 프리셋 대신 그 값을 적용하는 제출 버튼 하나가 된다.
   // 제출은 폼(handleSubmit)이라 입력란의 닉네임이 있어야 하므로, 바의 캡션·활성도 그 이름을 따른다
   const barSubmits = totalSeconds > 0;
   const barActor = barSubmits ? actorName.trim() : quickActor;
+
+  /**
+   * 닉네임 입력란으로 안내한다. 누른 프리셋을 대기열에 두었다가 나중에 적용하지 않는다(기록은 실제 닉네임으로만).
+   * withAlert: 입력란 옆 한 줄(role=alert). 숫자 단축키는 토스트가 같은 안내를 하므로 끈다
+   */
+  function focusNickname(withAlert: boolean) {
+    const input = actorInputRef.current;
+    if (withAlert) {
+      setNicknamePrompt(true);
+      // 같은 뜻의 폼 오류가 떠 있으면 내린다(입력란 아래 안내 한 줄만 남긴다)
+      setError((prev) => (prev === NICKNAME_REQUIRED_MESSAGE ? "" : prev));
+    }
+    if (!input) return;
+    input.focus();
+    input.scrollIntoView?.({ block: "center" });
+  }
+
+  // 닉네임이 생기면 바 안내(role=alert)를 끈다. 입력·칩 어느 쪽으로 채워도 같은 규칙이라, 나중에 다시 비워도 안내가 되살아나지 않는다
+  function changeActorName(name: string) {
+    setActorName(name);
+    if (name.trim()) setNicknamePrompt(false);
+  }
 
   function setTime({ hours, minutes, seconds }: TimeParts) {
     setHours(hours);
@@ -253,16 +360,25 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   // 모바일 하단 바: 프리셋 탭 한 번으로 즉시 적용
   async function handleQuickApply(presetSeconds: number) {
     if (!quickActor) {
-      toast(NICKNAME_REQUIRED_MESSAGE, "error");
+      focusNickname(true);
       return;
     }
-    await submitModify(selectedAction, presetSeconds, quickActor, false);
+    await submitModify(action, presetSeconds, quickActor, false);
+  }
+
+  // 바가 제출 버튼일 때(입력값이 있을 때). 제출은 입력란의 닉네임을 쓰므로 비어 있으면 프리셋과 같이 입력란으로 안내한다
+  function handleBarSubmitClick(e: React.MouseEvent<HTMLButtonElement>) {
+    if (!actorName.trim()) {
+      e.preventDefault();
+      focusNickname(true);
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!actorName.trim()) {
-      setError(NICKNAME_REQUIRED_MESSAGE);
+      // 바가 띄운 입력란 안내가 이미 같은 말을 하고 있으면 폼 오류를 겹쳐 띄우지 않는다
+      if (!nicknamePrompt) setError(NICKNAME_REQUIRED_MESSAGE);
       return;
     }
     if (totalSeconds <= 0) {
@@ -272,7 +388,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
     setBarCooldown(true);
     clearTimeout(barCooldownTimerRef.current);
     barCooldownTimerRef.current = setTimeout(() => setBarCooldown(false), BAR_SUBMIT_COOLDOWN_MS);
-    await submitModify(selectedAction, totalSeconds, actorName.trim(), true);
+    await submitModify(action, totalSeconds, actorName.trim(), true);
   }
 
   function handleSetDefault() {
@@ -348,27 +464,52 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
     }
   }
 
+  // 포커스가 폼 밖으로 나가거나 버튼·토글로 옮겨 가면 바를 다시 보인다
+  function handleFormFocus(e: React.FocusEvent<HTMLFormElement>) {
+    setTyping(isTextEntry(e.target));
+  }
+  function handleFormBlur(e: React.FocusEvent<HTMLFormElement>) {
+    if (!isTextEntry(e.relatedTarget) || !formRef.current?.contains(e.relatedTarget as Node)) setTyping(false);
+  }
+
+  const showNicknamePrompt = nicknamePrompt && !actorName.trim();
+
   return (
     // Enter로 제출한다. 오류 안내는 아래 role=alert 문구가 맡으므로 브라우저 기본 검증 말풍선은 끈다
-    <form ref={formRef} noValidate onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className={cn("space-y-5", className)}>
-      {/* 만료 상태에서 추가는 곧 재시작이므로 미리 알린다 */}
-      {status === "EXPIRED" && (
-        <p className="text-sm text-muted-foreground">
-          만료된 타이머입니다. 시간을 추가하면 타이머가 다시 시작됩니다.
+    <form ref={formRef} noValidate onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} onFocus={handleFormFocus} onBlur={handleFormBlur} className={cn("space-y-5", className)}>
+      {/* 만료 상태에서 추가는 곧 재시작이므로 결과를 한 줄로 미리 알린다 */}
+      {/* tabIndex -1: 추가/차감 토글이 사라질 때 그 안에 있던 포커스를 받는다(Tab 순서에는 넣지 않는다) */}
+      {expired && (
+        <p
+          ref={restartNoticeRef}
+          tabIndex={-1}
+          onFocus={() => { noticeFocusedRef.current = true; }}
+          onBlur={handleNoticeBlur}
+          className="text-sm text-muted-foreground"
+        >
+          시간을 추가하면 다시 시작됩니다
         </p>
       )}
-      {/* 시청자 닉네임과 추가/차감은 넓은 화면에서 한 줄에 두어 조작 카드 높이를 줄인다 */}
-      <div className="flex flex-col gap-5 md:grid md:grid-cols-[minmax(0,1fr)_14rem] md:gap-4">
+      {/* 시청자 닉네임과 추가/차감은 넓은 화면에서 한 줄에 두어 조작 카드 높이를 줄인다. 만료면 닉네임만 */}
+      <div className={cn("flex flex-col gap-5", !expired && "md:grid md:grid-cols-[minmax(0,1fr)_14rem] md:gap-4")}>
         <div>
           <Input
+            ref={actorInputRef}
             label="시청자 닉네임"
             value={actorName}
-            onChange={(e) => setActorName(e.target.value)}
+            onChange={(e) => changeActorName(e.target.value)}
             required
             maxLength={50}
             autoComplete="off"
             placeholder={defaultActor ? `기본: ${defaultActor}` : "시간 변경을 요청한 시청자"}
+            // 안내(role=alert)는 포커스 이동과 같은 틱에 나타나 낭독이 끊기거나, 두 번째 탭에는 다시 읽히지 않는다.
+            // 입력란 설명으로 이어 두어 포커스가 닿을 때 이유를 함께 읽게 한다
+            aria-describedby={showNicknamePrompt ? nicknamePromptId : undefined}
+            aria-invalid={showNicknamePrompt || undefined}
           />
+          {showNicknamePrompt && (
+            <p id={nicknamePromptId} className="mt-1.5 text-sm text-red-600 dark:text-red-400" role="alert">{NICKNAME_PROMPT_MESSAGE}</p>
+          )}
           {/* 최근 닉네임 칩 */}
           {recentActors.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2">
@@ -379,7 +520,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
                   <button
                     key={name}
                     type="button"
-                    onClick={() => setActorName(name)}
+                    onClick={() => changeActorName(name)}
                     className={cn(
                       "rounded-full border px-3 py-2 text-xs cursor-pointer transition-colors",
                       isDefault
@@ -396,21 +537,26 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
             </div>
           )}
           {/* 버튼 터치 영역(px-2)만 넓히고 글자는 칩과 왼쪽 정렬을 맞춘다 */}
-          <div className="mt-1.5 -ml-2 flex items-center gap-2">
+          <div className="mt-1.5 -ml-2 flex flex-wrap items-center gap-x-2">
+            {/* 설명 문구와 구분되도록 글자색·밑줄로 버튼임을 드러낸다 */}
             {actorName.trim() && actorName.trim() !== defaultActor && (
               <button
                 type="button"
                 onClick={handleSetDefault}
-                className="min-h-11 px-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                className="min-h-11 whitespace-nowrap px-2 text-xs font-medium text-foreground underline underline-offset-4 decoration-border-input hover:decoration-foreground transition-colors"
               >
                 기본 닉네임으로 설정
               </button>
+            )}
+            {/* 기본 닉네임 안내는 그 버튼이 보이는 자리에서만, 버튼 아래 한 줄로(버튼 라벨과 한 문장처럼 이어지지 않게) */}
+            {actorName.trim() && !defaultActor && (
+              <p className="basis-full -mt-2 pl-2 text-xs text-muted-foreground">다음부터 입력 없이 바로 적용됩니다</p>
             )}
             {defaultActor && (
               <button
                 type="button"
                 onClick={handleClearDefault}
-                className="min-h-11 px-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                className="min-h-11 whitespace-nowrap px-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
                 기본 닉네임 해제
               </button>
@@ -418,16 +564,22 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
           </div>
         </div>
 
-        {/* 추가/차감 토글. X 단축키는 포커스를 받는 라디오에 알려야 스크린리더가 읽는다 */}
-        <div>
-          <span id={actionGroupLabelId} className="mb-1.5 block text-sm font-medium text-foreground">변경 유형</span>
-          <SegmentedControl
-            options={ACTION_OPTIONS}
-            value={selectedAction}
-            onChange={onActionChange}
-            ariaLabelledBy={actionGroupLabelId}
-          />
-        </div>
+        {/* 추가/차감 토글. X 단축키는 포커스를 받는 라디오에 알려야 스크린리더가 읽는다. 만료면 추가만 되므로 숨긴다 */}
+        {!expired && (
+          <div
+            ref={actionWrapperRef}
+            onFocus={() => { actionFocusedRef.current = true; }}
+            onBlur={handleActionBlur}
+          >
+            <span id={actionGroupLabelId} className="mb-1.5 block text-sm font-medium text-foreground">변경 유형</span>
+            <SegmentedControl
+              options={ACTION_OPTIONS}
+              value={selectedAction}
+              onChange={onActionChange}
+              ariaLabelledBy={actionGroupLabelId}
+            />
+          </div>
+        )}
       </div>
 
       {/* 시간 입력 */}
@@ -491,6 +643,13 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
             시간을 입력하면 {actionLabel}할 수 있습니다.
           </p>
         )}
+        {/* 연결이 끊긴 동안 덧붙이는 줄(버튼은 막지 않는다. 눌러 실패하면 롤백·안내가 따른다). 비활성 이유는 위 줄이 그대로 맡는다.
+            모바일에도 보인다. 바 캡션('즉시 적용 → 이름')은 모드 단서라 그대로 두고 이 줄이 안내한다 */}
+        {disconnected && (
+          <p id={disconnectedHintId} className="mt-1 text-xs text-muted-foreground">
+            {DISCONNECTED_HINT_MESSAGE}
+          </p>
+        )}
       </div>
 
       {/* 에러 메시지 */}
@@ -501,33 +660,35 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
       <Button
         type="submit"
         size="lg"
-        variant={selectedAction === "SUBTRACT" ? "danger" : "primary"}
+        variant={action === "SUBTRACT" ? "danger" : "primary"}
         disabled={totalSeconds <= 0}
-        aria-describedby={totalSeconds <= 0 ? submitHintId : undefined}
+        aria-describedby={[totalSeconds <= 0 && submitHintId, disconnected && disconnectedHintId].filter(Boolean).join(" ") || undefined}
         className="w-full max-md:hidden"
       >
         {totalSeconds > 0 ? `시간 ${actionLabel} (${formatDelta(totalSeconds)})` : `시간 ${actionLabel}`}
       </Button>
 
       {/* 모바일 하단 고정 빠른 액션 바 */}
-      {/* data-quick-bar: 바가 있을 때 body 하단 여백을 잡는다(globals.css) */}
-      <div data-quick-bar className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background/95 backdrop-blur-sm px-4 py-3 safe-area-bottom">
+      {/* data-quick-bar: 바가 있을 때 body 하단 여백을 잡는다(globals.css). 낮은 화면(max-height 480px)에서는 문서 흐름에 놓인다.
+          글자 입력 칸에 포커스가 있는 동안은 숨긴다(언마운트하지 않아 하단 여백은 그대로라 화면이 튀지 않는다) */}
+      <div data-quick-bar className={cn("md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background/95 backdrop-blur-sm px-4 py-3 safe-area-bottom", typing && "hidden")}>
         {/* grid-cols-3 = repeat(3, minmax(0, 1fr)): 좁은 폭에서도 버튼이 바 밖으로 밀리지 않는다.
             값이 0이면 프리셋 세 개(탭 한 번에 바로 적용), 값이 있으면 그 값을 적용하는 제출 버튼 하나(같은 높이) */}
         <div className="grid grid-cols-3 gap-2">
           {(barSubmits
             ? [{ key: "submit", label: `시간 ${actionLabel} (${formatDelta(totalSeconds)})`, seconds: totalSeconds }]
-            : PRESETS.map((preset) => ({ key: preset.label, label: `${selectedAction === "SUBTRACT" ? "-" : "+"}${preset.label}`, seconds: preset.seconds }))
+            : PRESETS.map((preset) => ({ key: preset.label, label: `${action === "SUBTRACT" ? "-" : "+"}${preset.label}`, seconds: preset.seconds }))
           ).map((item) => (
+            // 닉네임이 없어도 막지 않는다. 누르면 닉네임 입력란으로 안내한다
             <button
               key={item.key}
               type={barSubmits ? "submit" : "button"}
-              disabled={!barActor || (!barSubmits && barCooldown)}
-              onClick={barSubmits ? undefined : () => handleQuickApply(item.seconds)}
+              disabled={!barSubmits && barCooldown}
+              onClick={barSubmits ? handleBarSubmitClick : () => handleQuickApply(item.seconds)}
               className={cn(
                 "rounded-lg py-3 min-h-[48px] text-sm font-bold transition-colors disabled:opacity-50",
                 barSubmits && "col-span-3",
-                selectedAction === "ADD"
+                action === "ADD"
                   ? "bg-green-700 text-white hover:bg-green-800 active:bg-green-900"
                   : "bg-red-600 text-white hover:bg-red-700 active:bg-red-800",
               )}
@@ -536,9 +697,9 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
             </button>
           ))}
         </div>
-        {/* 확인 없이 바로 적용되고, 누구 이름으로 기록되는지 항상 보여 준다 */}
+        {/* 확인 없이 바로 적용되고, 누구 이름으로 기록되는지 항상 보여 준다(모드의 색 외 단서라 연결이 끊겨도 바꾸지 않는다) */}
         <p className="mt-1.5 truncate text-center text-xs text-muted-foreground">
-          {barActor ? `즉시 적용 → ${barActor}` : "닉네임을 먼저 입력하세요"}
+          {barActor ? `즉시 적용 → ${barActor}` : "즉시 적용 → 닉네임 칸의 이름"}
         </p>
       </div>
     </form>

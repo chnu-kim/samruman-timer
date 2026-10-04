@@ -23,6 +23,20 @@ describe("Toast", () => {
     expect(item.parentElement?.className).toMatch(/pointer-events-none/);
   });
 
+  // R02: 데스크톱에서 한 줄 토스트가 화면 폭을 가로지르지 않게 컨테이너 폭을 제한한다(24rem ≤ 420px)
+  it("컨테이너는 md 이상에서 max-w-sm으로 폭을 제한하고, 하단 위치는 바 높이와 safe-area 중 큰 쪽을 따른다", () => {
+    render(
+      <ToastProvider>
+        <Trigger />
+      </ToastProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "알림" }));
+    const container = screen.getByText("추가 완료", { selector: "span" }).parentElement!.parentElement!.parentElement!;
+    expect(container.className).toMatch(/(^|\s)md:max-w-sm(\s|$)/);
+    // 낮은 화면에서 --quick-bar-h가 0px이 되어도 홈 인디케이터 위에 뜬다
+    expect(container.className).toContain("bottom-[calc(max(var(--quick-bar-h,0px),env(safe-area-inset-bottom,0px))+0.5rem)]");
+  });
+
   // UX-65: 마운트와 동시에 삽입된 status 노드는 읽히지 않을 수 있으므로 live region을 미리 둔다
   it("성공 토스트는 처음부터 렌더된 polite live region에 들어간다", () => {
     render(

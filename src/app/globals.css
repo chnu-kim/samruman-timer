@@ -220,3 +220,14 @@ body {
     padding-bottom: var(--quick-bar-h);
   }
 }
+
+/* 낮은 화면(가로 모드 휴대폰, 400% 확대 320×200)에서는 고정 바가 화면의 절반 가까이를 덮는다.
+   바를 문서 흐름(시간 조작 카드 끝)에 두고 바 높이를 0으로 둬 하단 여백·토스트 위치가 함께 따라오게 한다 */
+@media (width < 48rem) and (max-height: 480px) {
+  html:has([data-quick-bar]) {
+    --quick-bar-h: 0px;
+  }
+  [data-quick-bar] {
+    position: static;
+  }
+}

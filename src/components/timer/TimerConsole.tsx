@@ -342,6 +342,19 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
   // 숫자 단축키가 기록할 닉네임. 시간 조작 카드(TimerControls)가 모바일 하단 바와 같은 규칙으로 렌더마다 채운다
   // (입력란의 이름 우선, 비면 기본 닉네임). 단축키 핸들러가 다시 만들어지지 않도록 ref로 들고 있는다
   const quickActorRef = useRef("");
+  // 닉네임 없이 숫자키를 눌렀을 때 입력란으로 포커스를 옮기는 함수. TimerControls가 렌더마다 채운다
+  const nicknamePromptRef = useRef<(() => void) | null>(null);
+
+  // 카운트다운이 0에 닿으면 다음 폴링을 기다리지 않고 배지를 '만료'로 보여 준다
+  const countdownEnded = useCountdownEnded(timer?.remainingSeconds, timer?.status);
+  // 만료(잔여 0)면 차감할 시간이 없으므로 숫자키·바·카드 모두 '추가'로만 적용한다
+  const expired = countdownEnded || timer?.status === "EXPIRED";
+  // 만료로 들어가면 선택도 '추가'로 되돌린다. 숨긴 세그먼트의 '차감'을 남겨 두면 '+'로 재시작한 직후 같은 자리
+  // 바 버튼이 '−'로 바뀌어, 연달아 누른 두 번째 탭이 방금 더한 시간을 빼 버린다. 효과가 돌기 전 렌더는 아래 강제값이 맡는다
+  useEffect(() => {
+    if (expired) setSelectedAction("ADD");
+  }, [expired]);
+  const effectiveAction: ModifyAction = expired ? "ADD" : selectedAction;
 
   // 키보드 단축키 핸들러
   const handleKeyboardPreset = useCallback(async (seconds: number) => {
@@ -352,7 +365,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
         const res = await authFetch(`/api/timers/${timerId}/modify`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: selectedAction, deltaSeconds: seconds, actorName: actor }),
+          body: JSON.stringify({ action: effectiveAction, deltaSeconds: seconds, actorName: actor }),
         });
         if (res.ok) {
           const json = (await res.json()) as ApiSuccessResponse<TimerModifyResponse>;
@@ -367,14 +380,19 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
         toast(MODIFY_FAILED_QUICK_MESSAGE, "error");
       }
     } else {
-      toast("시청자 닉네임을 입력하면 숫자키로 즉시 적용됩니다. 닉네임 입력 후 ‘기본 닉네임으로 설정’을 누르면 다음부터 입력 없이 적용됩니다", "info");
+      // 누른 키를 기억해 두었다 나중에 적용하지 않는다. 입력란으로 보내고 한 문장만 알린다
+      // (기본 닉네임 안내는 그 버튼이 보이는 입력란 옆 한 줄이 맡는다)
+      nicknamePromptRef.current?.();
+      toast("닉네임을 먼저 입력하세요", "info");
     }
     // handleModified가 읽는 기록 상태(필터, 펼침)가 바뀌면 다시 만들어 오래된 값으로 기록을 불러오지 않게 한다
-  }, [isOwner, timer, toast, showModifiedToast, timerId, selectedAction, activeFilters, logsExpanded]);
+  }, [isOwner, timer, toast, showModifiedToast, timerId, effectiveAction, activeFilters, logsExpanded]);
 
+  // 만료 중에는 세그먼트가 없으므로 X로 보이지 않는 선택을 바꾸지 않는다
   const handleToggleAction = useCallback(() => {
+    if (expired) return;
     setSelectedAction((prev) => (prev === "ADD" ? "SUBTRACT" : "ADD"));
-  }, []);
+  }, [expired]);
 
   const handleRefresh = useCallback(() => {
     fetchTimer();
@@ -390,9 +408,6 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
     onToggleAction: handleToggleAction,
     onRefresh: handleRefresh,
   });
-
-  // 카운트다운이 0에 닿으면 다음 폴링을 기다리지 않고 배지를 '만료'로 보여 준다
-  const countdownEnded = useCountdownEnded(timer?.remainingSeconds, timer?.status);
 
   const isFilterOn = (actions: ActionType[]) => actions.every((a) => activeFilters.has(a));
 
@@ -440,22 +455,23 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
   return (
     <div className="space-y-8">
       {/* 카운트다운 */}
-      <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
-        <CountdownDisplay
-          remainingSeconds={timer.remainingSeconds}
-          status={timer.status}
-          scheduledStartAt={timer.scheduledStartAt}
-          size="large"
-        />
-        {/* 연결이 끊기면 서버 상태를 알 수 없으므로 상태 배지 자리를 연결 끊김으로 바꾼다. 숫자는 로컬 추정값으로 계속 흐른다 */}
-        {connection.disconnected ? (
-          <ConnectionLostBadge lastSyncedAtMs={connection.lastSuccessAtMs} className="mt-2" />
-        ) : (
-          <Badge variant={statusBadgeVariant} className="mt-2">
-            {statusLabel}
-          </Badge>
-        )}
-      </div>
+      {/* 배지는 숫자와 같은 행에 둔다. 좁은 폭에서 줄바꿈돼도 숫자 바로 아래, 보조 문구('종료 예정')보다 위에 붙는다 */}
+      <CountdownDisplay
+        remainingSeconds={timer.remainingSeconds}
+        status={timer.status}
+        scheduledStartAt={timer.scheduledStartAt}
+        size="large"
+        aside={
+          // 연결이 끊기면 서버 상태를 알 수 없으므로 상태 배지 자리를 연결 끊김으로 바꾼다. 숫자는 로컬 추정값으로 계속 흐른다
+          connection.disconnected ? (
+            <ConnectionLostBadge lastSyncedAtMs={connection.lastSuccessAtMs} className="mt-2" />
+          ) : (
+            <Badge variant={statusBadgeVariant} className="mt-2">
+              {statusLabel}
+            </Badge>
+          )
+        }
+      />
 
       {/* 시간 조작 + 곁 영역(목표). 방송 중 가장 자주 쓰는 두 가지를 첫 화면에 나란히 둔다 */}
       {(isOwner || aside) && (
@@ -486,6 +502,9 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                 onModified={handleModified}
                 onTimerRemoved={() => onTimerRemovedRef.current?.()}
                 quickActorRef={quickActorRef}
+                nicknamePromptRef={nicknamePromptRef}
+                expired={expired}
+                disconnected={connection.disconnected}
                 className="mt-3"
               />
             </section>
@@ -646,8 +665,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
               ))}
             </div>
             <p className="mt-4 text-xs text-muted-foreground">
-              입력 필드에 포커스가 없을 때만 동작합니다. 숫자키는 입력한 시청자 닉네임(비어 있으면 기본 닉네임)으로 즉시 적용됩니다.
-              기본 닉네임은 닉네임 입력 후 &lsquo;기본 닉네임으로 설정&rsquo;을 누르면 정해집니다.
+              숫자키는 닉네임 칸의 이름(없으면 기본 닉네임)으로 바로 적용됩니다.
             </p>
           </>
         )}

@@ -39,8 +39,9 @@ export const Subtract: Story = {
   args: { selectedAction: "SUBTRACT" },
 };
 
+// 만료: 추가/차감 세그먼트 없이 '추가'로 고정된다(차감을 골라 두었어도)
 export const Expired: Story = {
-  args: { status: "EXPIRED", remainingSeconds: 0 },
+  args: { status: "EXPIRED", remainingSeconds: 0, selectedAction: "SUBTRACT" },
 };
 
 // 예약 대기: 시간 조작 대신 '지금 시작' 하나
@@ -52,4 +53,9 @@ export const Scheduled: Story = {
 // 시/분/초에 값을 넣으면 바가 '시간 추가 (…)' 제출 버튼 하나로 바뀐다
 export const Mobile: Story = {
   parameters: { viewport: { defaultViewport: "mobile1" } },
+};
+
+// 연결 끊김: 버튼은 그대로 두고 안내 줄 문구만 바뀐다
+export const Disconnected: Story = {
+  args: { disconnected: true },
 };
