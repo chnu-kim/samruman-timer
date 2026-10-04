@@ -156,6 +156,93 @@ describe("detectTimerChange", () => {
   });
 });
 
+describe("detectTimerChange — 서버의 실제 변경량 (C062)", () => {
+  const BASE_TIME = 1700000000000;
+  const prev = { remainingSeconds: 3600, updatedAt: "2024-01-01T00:00:00Z", fetchedAt: BASE_TIME, status: "RUNNING" as const };
+
+  it("+60초를 10번 추가해도 폴링 시각 오차와 상관없이 모두 '+1:00'", () => {
+    // 폴링 사이 경과(4.2~5.8초)와 서버의 초 내림 때문에 추정값은 58~62초로 흔들린다
+    const cases = [
+      { elapsedMs: 4200, remaining: 3655 },
+      { elapsedMs: 4600, remaining: 3656 },
+      { elapsedMs: 4999, remaining: 3654 },
+      { elapsedMs: 5000, remaining: 3655 },
+      { elapsedMs: 5001, remaining: 3656 },
+      { elapsedMs: 5400, remaining: 3654 },
+      { elapsedMs: 5499, remaining: 3655 },
+      { elapsedMs: 5500, remaining: 3655 },
+      { elapsedMs: 5800, remaining: 3653 },
+      { elapsedMs: 4500, remaining: 3657 },
+    ];
+    for (const { elapsedMs, remaining } of cases) {
+      const result = detectTimerChange(
+        prev,
+        { remainingSeconds: remaining, updatedAt: "2024-01-01T00:00:05Z", deltaSinceSeconds: 60 },
+        BASE_TIME + elapsedMs,
+      );
+      expect(result?.floatingText).toBe("+1:00");
+    }
+  });
+
+  it("차감도 실제 변경량(음수)을 쓴다", () => {
+    const result = detectTimerChange(
+      prev,
+      { remainingSeconds: 2994, updatedAt: "2024-01-01T00:00:05Z", deltaSinceSeconds: -600 },
+      BASE_TIME + 5000,
+    );
+    expect(result?.animClass).toBe("overlay-anim-subtract");
+    expect(result?.floatingText).toBe("-10:00");
+  });
+
+  it("폴링 사이에 여러 번 바뀌면 서버가 준 합계를 그대로 쓴다", () => {
+    const result = detectTimerChange(
+      prev,
+      { remainingSeconds: 3715, updatedAt: "2024-01-01T00:00:05Z", deltaSinceSeconds: 120 },
+      BASE_TIME + 5000,
+    );
+    expect(result?.floatingText).toBe("+2:00");
+  });
+
+  it("만료 상태에서 +60초로 재오픈된 뒤 몇 초 지나 폴링해도 '+1:00'", () => {
+    const expired = { remainingSeconds: 0, updatedAt: "2024-01-01T00:00:00Z", fetchedAt: BASE_TIME, status: "EXPIRED" as const };
+    for (const remaining of [60, 57, 55]) {
+      const result = detectTimerChange(
+        expired,
+        { remainingSeconds: remaining, updatedAt: "2024-01-01T00:00:05Z", deltaSinceSeconds: 60 },
+        BASE_TIME + 5000,
+      );
+      expect(result?.floatingText).toBe("+1:00");
+    }
+  });
+
+  it("그사이 추가·차감이 없었다고(null) 하면 추정값이 어긋나도 연출하지 않는다", () => {
+    // 제목 수정 + 폴링 지연(추정 +10초)
+    const result = detectTimerChange(
+      prev,
+      { remainingSeconds: 3600, updatedAt: "2024-01-01T00:00:05Z", deltaSinceSeconds: null },
+      BASE_TIME + 10_000,
+    );
+    expect(result).toBeNull();
+  });
+
+  it("실제 값은 오차 범위 없이 작은 변경도 연출하고, 합계가 0이면 연출하지 않는다", () => {
+    const at = (deltaSinceSeconds: number) =>
+      detectTimerChange(prev, { remainingSeconds: 3596, updatedAt: "2024-01-01T00:00:05Z", deltaSinceSeconds }, BASE_TIME + 5000);
+    expect(at(1)?.floatingText).toBe("+1초");
+    expect(at(-2)?.floatingText).toBe("-2초");
+    expect(at(0)).toBeNull();
+  });
+
+  it("서버 값이 없으면(undefined) 반올림한 경과 시간으로 추정한다", () => {
+    const result = detectTimerChange(
+      prev,
+      { remainingSeconds: 3655, updatedAt: "2024-01-01T00:00:05Z" },
+      BASE_TIME + 4600, // 내림이면 4초 → '+59초', 반올림이면 5초 → '+1:00'
+    );
+    expect(result?.floatingText).toBe("+1:00");
+  });
+});
+
 describe("isStaleResponse", () => {
   const snap = { remainingSeconds: 600, updatedAt: "2024-01-01T00:00:10.000Z", fetchedAt: 0, status: "RUNNING" as const };
 

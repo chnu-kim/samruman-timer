@@ -407,12 +407,14 @@ CHZZK OAuth 콜백을 처리한다.
     },
     "projectOwnerId": "user_id",
     "createdAt": "2025-01-01T00:00:00Z",
-    "updatedAt": "2025-01-01T00:00:00Z"
+    "updatedAt": "2025-01-01T00:00:00Z",
+    "deltaSinceSeconds": 600 | -300 | null
   }
 }
 ```
 - 조회 시 예약 활성화 감지 → 만료 감지 로직 체이닝 실행 (TIMER-LOGIC.md 참조)
 - `SCHEDULED` 상태: `remainingSeconds`는 `baseRemainingSeconds` (고정값)
+- 쿼리 `since`(선택, ISO 8601): 직전에 본 `updatedAt`. 주면 `deltaSinceSeconds`에 `since` 뒤부터 지금 `updatedAt`까지 기록된 `ADD`·`SUBTRACT` 로그의 실제 변경량 합계(초, `after_seconds - before_seconds`라 차감은 음수, 0에서 멈춘 차감은 실제로 줄어든 만큼)를 준다. 그사이 추가·차감이 없으면(제목 수정, 예약 활성화·만료 기록 등) `null`, `since`가 없거나 잘못된 값이거나 지금 `updatedAt`보다 늦으면 필드를 넣지 않는다. 그사이 되돌린 기록(`reverted_at`이 구간 안)이 있어도 필드를 넣지 않는다. 되돌리기는 `ADD`·`SUBTRACT` 행을 새로 쓰지 않고 원래 행에 `reverted_at`만 채우므로 합계가 실제 변경과 어긋나기 때문이다(추가 후 바로 되돌리면 잔여는 그대로인데 합계는 양수, 되돌리기만 있으면 잔여가 바뀌었는데 합계는 없음). 오버레이가 변경량 연출('+1:00')에 쓰고, 필드가 없을 때만 폴링 시각으로 추정한다
 - **에러**: `404`: 타이머 없음 또는 삭제됨
 
 ### PATCH /api/timers/[id]
