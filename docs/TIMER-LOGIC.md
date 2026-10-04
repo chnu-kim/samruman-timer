@@ -86,7 +86,7 @@ if status === SCHEDULED && now >= scheduledStartAt:
 if status === SCHEDULED:
   status = RUNNING
   lastCalculatedAt = now
-  scheduledStartAt = now   // 실제 시작 시각. 오버레이 '경과' 등 시작 시각을 읽는 곳이 어긋나지 않게
+  scheduledStartAt = now   // 실제 시작 시각. 시작 시각을 읽는 곳이 어긋나지 않게
 ```
 - 로그: `ACTIVATE` (delta_seconds = 0, before_seconds = after_seconds = baseRemainingSeconds, created_at = now, actor_name = 소유자 닉네임, actor_user_id = 소유자)
 - 원래 예약 시각은 덮어쓴다. 상태 쓰기는 `STATE_GUARD` 조건이라 동시에 자동 활성화·삭제가 먼저 커밋되면 쓰지 않는다. 이미 시작된 타이머는 현재 상태를 그대로 돌려주고(200), 삭제됐으면 404

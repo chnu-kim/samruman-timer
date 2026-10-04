@@ -51,6 +51,9 @@ function matchesPreset(config: OverlayConfig, preset: (typeof PRESETS)[number]):
 
 // 투명은 type=color가 표현하지 못해 검정으로 그려지므로 견본 자리에 체커보드를 깐다
 const CHECKERBOARD = "repeating-conic-gradient(#d4d4d4 0% 25%, #ffffff 0% 50%) 50% / 12px 12px";
+// 투명 배경을 미리 볼 때 깔 방송 화면 색. 어두운 쪽이 기본이고, 밝은 게임·캠 화면에서 글자가 읽히는지는 밝은 쪽으로 확인한다
+const PREVIEW_DARK = "#3f3f46";
+const PREVIEW_LIGHT = "#ffffff";
 // 배경색 칸에 CSS 키워드(transparent) 대신 보여 주는 말. 입력으로도 받는다
 const TRANSPARENT_LABEL = "투명";
 
@@ -93,6 +96,8 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
   const [colorDraft, setColorDraft] = useState<string | null>(null);
   const [bgDraft, setBgDraft] = useState<string | null>(null);
   const [iframeSrc, setIframeSrc] = useState<string>("");
+  // 미리보기 전용 배경. 설정(config.bg)·URL에는 넣지 않는다(방송 화면이 흰색으로 덮이면 안 된다)
+  const [lightPreview, setLightPreview] = useState(false);
   // 타이머 제목은 오버레이의 '제목 표시'에서만 화면에 나오므로 여기서 함께 고친다.
   // 저장 전 변경 여부와 닫기 경고에 포함되도록 설정과 같은 저장 흐름에 둔다
   const [savedTitle, setSavedTitle] = useState<string | null>(null);
@@ -350,8 +355,34 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
         {/* 미리보기 — 1920×1080 방송 화면을 그대로 그린 뒤 축소해 크기·위치를 실제 비율로 보여 준다.
             세로 여유가 있는 데스크톱(높이 896px 이상)에서는 아래 설정을 바꾸는 동안에도 보이게 붙여 둔다 */}
         <div className="mb-5 bg-background pb-1 [@media(min-width:48rem)_and_(min-height:56rem)]:sticky [@media(min-width:48rem)_and_(min-height:56rem)]:top-0 [@media(min-width:48rem)_and_(min-height:56rem)]:z-10">
-          <span className="text-sm font-medium text-foreground">미리보기</span>
-          <OverlayPreview src={iframeSrc} background={config.bg === "transparent" ? "#3f3f46" : config.bg} />
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-medium text-foreground">미리보기</span>
+            {/* 배경색을 정했으면 오버레이가 그 색을 직접 칠하므로 투명일 때만 의미가 있다 */}
+            {config.bg === "transparent" && (
+              <button
+                type="button"
+                aria-pressed={lightPreview}
+                onClick={() => setLightPreview((v) => !v)}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs text-muted-foreground transition-colors hover:text-foreground aria-pressed:text-foreground pointer-coarse:min-h-11"
+              >
+                {/* 프리셋 버튼과 같이 켜진 상태는 체크로 알린다(C004). 꺼져 있을 때는 흰 견본으로 무엇을 켜는지 보여 준다 */}
+                {lightPreview ? (
+                  <CheckIcon className="h-3.5 w-3.5" />
+                ) : (
+                  <span
+                    aria-hidden="true"
+                    className="h-3.5 w-3.5 rounded-full border border-border-input"
+                    style={{ background: PREVIEW_LIGHT }}
+                  />
+                )}
+                밝은 화면에서 보기
+              </button>
+            )}
+          </div>
+          <OverlayPreview
+            src={iframeSrc}
+            background={config.bg === "transparent" ? (lightPreview ? PREVIEW_LIGHT : PREVIEW_DARK) : config.bg}
+          />
         </div>
 
         {/* 프리셋 테마 */}

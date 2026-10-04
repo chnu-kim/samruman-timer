@@ -178,7 +178,10 @@ describe("CountdownDisplay 서브텍스트", () => {
 
   it("실행 중에는 생성 시각부터 잰 경과를 붙이지 않고 종료 예정 시각만 보여 준다", () => {
     render(<CountdownDisplay remainingSeconds={3600} status="RUNNING" size="large" />);
-    expect(screen.getByText(/종료 예정/)).not.toHaveTextContent("경과");
+    const line = screen.getByText(/종료 예정/);
+    expect(line).not.toHaveTextContent("경과");
+    // 오버레이와 같은 포맷: 연도·초 없이 '종료 예정 오후 1:33'
+    expect(line.textContent).toMatch(/^종료 예정 (\d{1,2}\. \d{1,2}\. )?(오전|오후) \d{1,2}:\d{2}$/);
   });
 
   // UX-54: 만료 상태에도 상태를 알리는 서브텍스트를 둔다

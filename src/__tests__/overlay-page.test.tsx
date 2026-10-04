@@ -96,6 +96,60 @@ describe("오버레이 긴급·만료 펄스 (UX-24)", () => {
   });
 });
 
+describe("오버레이 보조 줄 (R11·R12)", () => {
+  beforeEach(() => {
+    // Date만 고정하고 폴링 타이머는 실제로 돌린다
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 4, 12, 0, 0));
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    search = "";
+  });
+
+  it("종료 예정은 연도·초·경과 없이 '종료 예정 오후 1:33' 꼴이다(오래전에 만든 타이머도 경과를 붙이지 않는다)", async () => {
+    search = "showEndDate=true";
+    // createdAt이 2026-01-01이라 예전 규칙이면 수천 시간 경과가 붙었다
+    stubTimer("RUNNING", 5580);
+    render(<TimerOverlayPage />);
+
+    const line = await screen.findByTestId("overlay-end-time");
+    expect(line.textContent).toBe("종료 예정 오후 1:33");
+    expect(line.textContent).not.toContain("경과");
+  });
+
+  it("보조 줄은 본문 산세리프·불투명·600이고, 카운트다운만 고정폭 서체다", async () => {
+    search = "showEndDate=true&showTitle=true";
+    stubTimer("RUNNING", 5580);
+    render(<TimerOverlayPage />);
+
+    const line = await screen.findByTestId("overlay-end-time");
+    expect(line.style.fontFamily).toContain("--font-noto-kr");
+    expect(line.style.fontFamily).not.toContain("mono");
+    expect(line.style.opacity).toBe("");
+    expect(line.style.fontWeight).toBe("600");
+    expect(line.style.fontVariantNumeric).toBe("tabular-nums");
+    expect(screen.getByText("테스트 타이머").style.fontFamily).not.toContain("mono");
+    expect(screen.getByRole("timer").style.fontFamily).toContain("--font-geist-mono");
+  });
+
+  it("그림자를 켜면 보조 줄에 외곽선형 그림자를 겹치고, 끄면 없다", async () => {
+    search = "showEndDate=true&showTitle=true";
+    stubTimer("RUNNING", 5580);
+    const { unmount } = render(<TimerOverlayPage />);
+    expect((await screen.findByTestId("overlay-end-time")).style.textShadow).toContain("0 0 3px rgba(0,0,0,0.9), 0 0 3px");
+    unmount();
+
+    search = "showEndDate=true&showTitle=true&shadow=false";
+    render(<TimerOverlayPage />);
+    expect((await screen.findByTestId("overlay-end-time")).style.textShadow).toBe("none");
+    expect(screen.getByText("테스트 타이머").style.textShadow).toBe("none");
+  });
+});
+
 describe("오버레이 URL 오류 (UX-56)", () => {
   afterEach(() => {
     cleanup();
