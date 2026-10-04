@@ -34,6 +34,9 @@ export default function TimerStatsPage() {
   const [notice, setNotice] = useState<{ title: string; message: string; action: { href: string; label: string } } | null>(null);
 
   const fetchData = useCallback(async () => {
+    // 같은 화면에서 다른 타이머를 다시 불러올 때 이전 결과의 안내·오류가 남지 않게 지운다
+    setNotice(null);
+    setError(false);
     try {
       const [timerRes, statsRes, cumulativeRes] = await Promise.all([
         fetch(`/api/timers/${timerId}`),

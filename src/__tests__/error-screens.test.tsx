@@ -5,8 +5,11 @@ import ProjectDetailPage from "@/app/projects/[id]/page";
 import TimerStatsPage from "@/app/timers/[id]/stats/page";
 import { ErrorState } from "@/components/ui/ErrorState";
 
+// 화면 인스턴스를 유지한 채 경로의 id만 바뀌는 경우를 흉내 낼 수 있게 바꿀 수 있는 값으로 둔다
+const route = vi.hoisted(() => ({ id: "x1" }));
+
 vi.mock("next/navigation", () => ({
-  useParams: () => ({ id: "x1" }),
+  useParams: () => ({ id: route.id }),
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 
@@ -24,6 +27,7 @@ function stubFetch(handler: (url: string) => Response) {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  route.id = "x1";
 });
 
 // 찾을 수 없음·권한 없음은 다시 시도로 풀리지 않는 안내라
@@ -86,6 +90,29 @@ describe("오류 화면", () => {
     render(<TimerStatsPage />);
     await screen.findByRole("heading", { level: 1, name: "타이머를 찾을 수 없습니다" });
     expectNoticeScreen("타이머를 찾을 수 없습니다", { name: "프로젝트 목록으로", href: "/projects" });
+  });
+
+  it("안내를 띄운 뒤 다른 타이머를 정상으로 불러오면 이전 안내가 남지 않는다", async () => {
+    stubFetch((url) => {
+      if (url.startsWith("/api/timers/x1")) return new Response(null, { status: 404 });
+      if (url === "/api/timers/x2") return jsonResponse({ id: "x2", projectId: "p2", projectName: "주말 서브어톤" });
+      if (url === "/api/timers/x2/stats") {
+        return jsonResponse({
+          summary: { totalEvents: 0, totalAddedSeconds: 0, totalSubtractedSeconds: 0, netAddedSeconds: 0, uniqueDonors: 0, peakHour: null },
+          topDonors: [],
+          hourlyDistribution: [],
+          dailyActivity: [],
+        });
+      }
+      return jsonResponse({ mode: "cumulative", points: [] });
+    });
+    const { rerender } = render(<TimerStatsPage />);
+    await screen.findByRole("heading", { level: 1, name: "타이머를 찾을 수 없습니다" });
+
+    route.id = "x2";
+    rerender(<TimerStatsPage />);
+    expect(await screen.findByRole("heading", { level: 1, name: /주말 서브어톤 통계/ })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "타이머를 찾을 수 없습니다" })).not.toBeInTheDocument();
   });
 
   it("일시적 오류는 지금처럼 다시 시도를 보여 주고 링크는 없다", async () => {
