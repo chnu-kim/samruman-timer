@@ -114,8 +114,9 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
   const [logTotalPages, setLogTotalPages] = useState(1);
   const [activeFilters, setActiveFilters] = useState<Set<ActionType>>(new Set());
   const [logsLoading, setLogsLoading] = useState(false);
-  // 마지막으로 받은 결과가 필터 없는 조회의 것인지. 필터 결과가 0건인 것(칩이 있어야 풀 수 있다)과 기록이 아직 없는 것을 구분한다
-  const [logsUnfiltered, setLogsUnfiltered] = useState(true);
+  // 타이머 전체에 CREATE 외 기록이 없는지. 필터 없는 첫 페이지(최신순이라 CREATE뿐이면 그게 전부다)를 받을 때만 갱신해,
+  // 펼친 기록의 페이지 이동·필터 결과에 따라 바뀌지 않게 한다. null은 아직 모른다
+  const [logsBaseEmpty, setLogsBaseEmpty] = useState<boolean | null>(null);
 
   // 그래프(잔여 시간 추이. 누적 변경량은 통계 페이지에 있다)
   const [graphData, setGraphData] = useState<GraphResponse | null>(null);
@@ -183,7 +184,9 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
         const json = (await res.json()) as ApiSuccessResponse<TimerLogsResponse>;
         if (seq !== logsSeqRef.current) return;
         setLogs(json.data.logs);
-        setLogsUnfiltered(!(expanded && filters.size > 0));
+        if (!(expanded && filters.size > 0) && (!expanded || page === 1)) {
+          setLogsBaseEmpty(json.data.logs.every((log) => log.actionType === "CREATE"));
+        }
         setLogTotalPages(json.data.pagination.totalPages);
         setLogsError(false);
       } else if (res.status !== 401) {
@@ -452,13 +455,12 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
     );
   }
 
-  // 예약·만료 상태의 시간 카드는 안내와 버튼 하나뿐이라 제목을 숨긴다
-  const hideControlsHeading = timer.status === "SCHEDULED" || expired;
-  // 기록이 아직 하나도 없다: 로드가 끝났고(null 아님·오류 아님) 필터 없는 조회에 0건이거나 생성(CREATE) 행뿐이며 필터도 꺼져 있다.
+  // 예약 상태의 시간 카드는 안내와 버튼 하나뿐이라 제목을 숨긴다. 만료 상태는 재시작 안내와 입력 폼이 모두 보이므로 제목을 둔다
+  const hideControlsHeading = timer.status === "SCHEDULED" && !expired;
+  // 기록이 아직 하나도 없다: 타이머 전체에 0건이거나 생성(CREATE) 행뿐이다(logsBaseEmpty).
   // 타이머는 만들 때 CREATE 기록이 항상 생기므로 0건만 보면 이 분기에 닿지 못한다. 시간을 한 번도 바꾸지 않았으면 '없음'으로 본다.
-  // 로딩 중·오류·필터 결과 0건에는 해당하지 않는다(숨겼다가 다시 보이면 레이아웃이 밀린다)
-  const noLogsYet =
-    logs !== null && !logsError && logs.every((log) => log.actionType === "CREATE") && logsUnfiltered && activeFilters.size === 0;
+  // 로딩 중·오류에는 해당하지 않고, 이미 펼친 뒤에는 숨기지 않는다(누른 '접기'가 사라지면 포커스를 잃고, 필터 결과 0건에도 칩이 있어야 풀 수 있다)
+  const noLogsYet = logsBaseEmpty === true && !logsError && !logsExpanded;
 
   const displayStatus = countdownEnded ? "EXPIRED" : timer.status;
   const statusBadgeVariant = displayStatus === "SCHEDULED" ? "scheduled" : displayStatus === "RUNNING" ? "running" : "expired";

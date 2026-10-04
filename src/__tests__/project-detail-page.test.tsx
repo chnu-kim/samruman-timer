@@ -769,11 +769,10 @@ describe("시간 카드 제목 (W25)", () => {
     expect(screen.getByText("예약됨")).toBeInTheDocument();
   });
 
-  it("만료 상태에도 제목이 없고 '만료' 배지는 남는다", async () => {
+  it("만료 상태에는 재시작 안내와 입력 폼이 보이므로 '시간' 제목을 보이고 '만료' 배지도 남는다", async () => {
     stubApi({ timers: [timer], goals: [], me: owner });
     render(<ProjectDetailPage />);
-    await screen.findByRole("region", { name: "시간" });
-    expect(screen.queryByRole("heading", { name: "시간" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "시간" })).toBeInTheDocument();
     expect(screen.getAllByText("만료").length).toBeGreaterThan(0);
   });
 });

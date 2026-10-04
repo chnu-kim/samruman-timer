@@ -198,6 +198,32 @@ describe("콘솔 조회 실패 표시 (W31)", () => {
     expect(within(logSection()).queryByRole("button", { name: "전체 기록" })).not.toBeInTheDocument();
   });
 
+  it("펼친 기록의 마지막 페이지가 CREATE 한 건뿐이어도 '접기'와 필터 칩을 그대로 둔다", async () => {
+    const create = { id: "l0", actionType: "CREATE", actorName: "tester", actorUserId: "u1", deltaSeconds: 0, beforeSeconds: 0, afterSeconds: 3600, createdAt: "2026-01-01T00:00:00.000Z" };
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/api/auth/me")) return jsonResponse(owner);
+      if (url === "/api/projects/p1/timers") return jsonResponse([timer]);
+      if (url === "/api/projects/p1/goals") return jsonResponse([]);
+      if (url.startsWith("/api/timers/t1/logs")) {
+        const page2 = new URL(url, "http://x").searchParams.get("page") === "2";
+        return jsonResponse({ logs: page2 ? [create] : logs, pagination: { page: page2 ? 2 : 1, limit: 20, total: 21, totalPages: 2 } });
+      }
+      if (url.startsWith("/api/timers/t1/graph")) return jsonResponse({ mode: "remaining", points: [] });
+      if (url === "/api/timers/t1") return jsonResponse(timerDetail);
+      return jsonResponse(project);
+    }) as typeof fetch;
+    render(<ProjectDetailPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "전체 기록" }));
+    const expandedLogs = () => screen.getByRole("region", { name: "기록" });
+    await within(expandedLogs()).findByRole("button", { name: "추가" });
+    fireEvent.click(within(expandedLogs()).getByRole("button", { name: /다음/ }));
+    await waitFor(() => expect(within(expandedLogs()).getAllByText(/tester/).length).toBeGreaterThan(0));
+    expect(within(expandedLogs()).getByRole("button", { name: "접기" })).toBeInTheDocument();
+    expect(within(expandedLogs()).getByRole("button", { name: "추가" })).toBeInTheDocument();
+  });
+
   it("목표·기록을 받기 전과 실패했을 때는 탭과 '전체 기록'을 숨기지 않는다", async () => {
     api.goals = "pending";
     api.logs = "pending";
