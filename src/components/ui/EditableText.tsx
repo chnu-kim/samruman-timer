@@ -100,7 +100,7 @@ export function EditableText({
           onMouseDown={(e) => e.preventDefault()}
           onClick={handleSave}
           disabled={saving}
-          className="rounded p-1 text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex items-center justify-center pointer-coarse:min-h-11 pointer-coarse:min-w-11 rounded p-1 text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label="저장"
         >
           <CheckIcon className="w-4 h-4" />
@@ -110,7 +110,7 @@ export function EditableText({
           onMouseDown={(e) => e.preventDefault()}
           onClick={handleCancel}
           disabled={saving}
-          className="rounded p-1 text-muted-foreground hover:bg-foreground/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex items-center justify-center pointer-coarse:min-h-11 pointer-coarse:min-w-11 rounded p-1 text-muted-foreground hover:bg-foreground/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label="취소"
         >
           <XIcon className="w-4 h-4" />
@@ -128,10 +128,11 @@ export function EditableText({
       >
         {value || <span className="text-muted-foreground">{placeholder}</span>}
       </Tag>
+      {/* 보이는 크기(22px)는 그대로 두고 터치 기기에서만 ::before로 누르는 영역을 44px로 넓힌다. 버튼을 키우면 제목 줄이 높아진다 */}
       <button
         type="button"
         onClick={() => setEditing(true)}
-        className="mt-1 rounded p-1 text-muted-foreground opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:bg-foreground/10 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="relative pointer-coarse:before:absolute pointer-coarse:before:-inset-[11px] mt-1 rounded p-1 text-muted-foreground opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:bg-foreground/10 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label={Tag === "h1" ? "제목 편집" : "설명 편집"}
       >
         <PencilIcon className="w-3.5 h-3.5" />

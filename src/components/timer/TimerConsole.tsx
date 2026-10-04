@@ -538,7 +538,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                 <p className="text-sm">그래프를 불러오는데 실패했습니다.</p>
                 <button
                   onClick={() => fetchGraph()}
-                  className="rounded-md px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent-light transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="rounded-md px-3 py-1.5 pointer-coarse:min-h-11 text-xs font-medium text-accent hover:bg-accent-light transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   다시 시도
                 </button>

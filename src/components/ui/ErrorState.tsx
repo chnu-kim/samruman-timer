@@ -48,7 +48,7 @@ export function ErrorState({
         // Button은 <button>이라 링크용으로 같은 secondary·sm 모양을 옮겨 쓴다
         <Link
           href={action.href}
-          className="mt-4 inline-flex h-8 max-md:min-h-11 items-center justify-center rounded-lg border border-border px-3 text-sm font-medium text-foreground transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className="mt-4 inline-flex h-8 pointer-coarse:min-h-11 items-center justify-center rounded-lg border border-border px-3 text-sm font-medium text-foreground transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           {action.label}
         </Link>

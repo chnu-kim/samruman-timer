@@ -393,7 +393,8 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                 setConfig((prev) => ({ ...prev, fontSize: v }));
                 setFontSizeInput(String(v));
               }}
-              className="flex-1 accent-accent"
+              // 터치 기기에서는 입력 상자를 44px로 키워 트랙 위아래를 눌러도 값이 바뀌게 한다(트랙·썸 모양은 그대로)
+              className="flex-1 accent-accent pointer-coarse:h-11"
               aria-label="폰트 크기 슬라이더"
             />
             <div className="flex items-center gap-1">
@@ -555,9 +556,9 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
 
         </div>
 
-        {/* 토글 옵션 */}
-        <div className="mb-5 space-y-3">
-          <label className="flex items-center gap-3 cursor-pointer">
+        {/* 토글 옵션 — 터치 기기에서는 행마다 44px 높이로 누르게 하고, 그만큼 행 사이 간격을 없앤다 */}
+        <div className="mb-5 space-y-3 pointer-coarse:space-y-0">
+          <label className="flex pointer-coarse:min-h-11 items-center gap-3 cursor-pointer">
             <input
               type="checkbox"
               checked={config.showTitle}
@@ -583,7 +584,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
               <p className="mt-1 text-xs text-muted-foreground">제목은 저장하면 방송 화면에 바로 반영됩니다.</p>
             </div>
           )}
-          <label className="flex items-center gap-3 cursor-pointer">
+          <label className="flex pointer-coarse:min-h-11 items-center gap-3 cursor-pointer">
             <input
               type="checkbox"
               checked={config.shadow}
@@ -592,7 +593,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
             />
             <span className="text-sm">텍스트 그림자</span>
           </label>
-          <label className="flex items-center gap-3 cursor-pointer">
+          <label className="flex pointer-coarse:min-h-11 items-center gap-3 cursor-pointer">
             <input
               type="checkbox"
               checked={config.animation}

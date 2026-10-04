@@ -56,7 +56,7 @@ function GoalSection({
   const inactiveGoals = goals.filter((g) => g.status !== "ACTIVE");
 
   const tabClass = (active: boolean) =>
-    `px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+    `px-4 py-2 pointer-coarse:min-h-11 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
       active
         ? "border-accent text-accent"
         : "border-transparent text-muted-foreground hover:text-foreground"
