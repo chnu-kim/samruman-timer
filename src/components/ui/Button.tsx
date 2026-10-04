@@ -17,8 +17,9 @@ const variantStyles: Record<NonNullable<ButtonProps["variant"]>, string> = {
 };
 
 const sizeStyles: Record<NonNullable<ButtonProps["size"]>, string> = {
-  // 모바일에서는 터치 타겟 44px을 보장한다. min-height가 height보다 우선하므로 데스크톱(h-8)은 그대로다
-  sm: "h-8 px-3 text-sm max-md:min-h-11",
+  // 터치 기기(폰·태블릿)에서는 터치 타깃 44px을 보장한다. 화면 폭이 아니라 입력 방식으로 갈라서 가로 태블릿도 포함한다.
+  // min-height가 height보다 우선하므로 마우스 환경(h-8)은 그대로다
+  sm: "h-8 px-3 text-sm pointer-coarse:min-h-11",
   md: "h-10 px-4",
   lg: "h-12 px-5 text-lg",
 };

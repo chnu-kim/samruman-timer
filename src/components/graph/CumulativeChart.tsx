@@ -21,6 +21,7 @@ import {
   formatTimestampShort,
 } from "@/lib/utils";
 import type { CumulativeGraphPoint } from "@/types";
+import { chartTooltipStyle } from "./tooltip-style";
 
 interface CumulativeChartProps {
   points: CumulativeGraphPoint[];
@@ -91,14 +92,7 @@ export function CumulativeChart({ points, className }: CumulativeChartProps) {
               formatHoursFromSeconds(Number(value)),
               name === "totalAdded" ? "누적 추가" : "누적 차감",
             ]}
-            contentStyle={{
-              backgroundColor: "var(--color-background)",
-              border: "1px solid var(--color-border)",
-              borderRadius: "8px",
-              fontSize: "12px",
-              color: "var(--color-foreground)",
-              opacity: 0.9,
-            }}
+            {...chartTooltipStyle}
           />
           <Legend
             formatter={(value: string) =>

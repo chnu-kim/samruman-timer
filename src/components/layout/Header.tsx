@@ -52,14 +52,14 @@ export function Header({ initialUser }: HeaderProps = {}) {
       {/* 글자를 크게 키워 한 줄에 다 들어가지 않으면 높이를 고정하지 않고 오른쪽 묶음을 다음 줄로 내린다 */}
       <div className="mx-auto flex min-h-14 max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-1.5">
         <div className="flex items-center gap-3 sm:gap-6">
-          <Link href="/" className="flex items-center gap-2 text-base sm:text-lg font-bold text-accent whitespace-nowrap">
+          <Link href="/" className="flex pointer-coarse:min-h-11 items-center gap-2 text-base sm:text-lg font-bold text-accent whitespace-nowrap">
             <LogoIcon className="w-5 h-5" />
             삼루먼타이머
           </Link>
           <nav aria-label="메인 네비게이션" className="hidden sm:block">
             <Link
               href="/projects"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              className="inline-flex pointer-coarse:min-h-11 items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               프로젝트
             </Link>
@@ -82,10 +82,11 @@ export function Header({ initialUser }: HeaderProps = {}) {
               </Button>
             </>
           ) : onLoginPage ? null : (
+            // 테두리가 있어 보이는 높이(32px)는 두고, 터치 기기에서는 ::before로 위아래 누르는 영역만 44px로 넓힌다(::before는 테두리 안쪽 30px 기준이라 7px씩)
             <Link
               href="/login"
               onClick={handleLoginClick}
-              className="inline-flex items-center justify-center rounded-lg border border-border bg-transparent px-3 h-8 text-sm font-medium hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="relative pointer-coarse:before:absolute pointer-coarse:before:inset-x-0 pointer-coarse:before:-inset-y-[7px] inline-flex items-center justify-center rounded-lg border border-border bg-transparent px-3 h-8 text-sm font-medium hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               로그인
             </Link>

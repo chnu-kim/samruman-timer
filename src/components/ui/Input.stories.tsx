@@ -11,7 +11,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
-  args: { placeholder: "Enter text..." },
+  args: { placeholder: "텍스트 입력…" },
 };
 
 export const WithLabel: Story = {

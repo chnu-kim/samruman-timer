@@ -129,8 +129,7 @@ export function GoalCard({ goal, projectId, isOwner, onUpdate, compact = false }
         open={showCancelDialog}
         title="목표 취소"
         description="취소한 목표는 종료 탭에 기록으로 남고, 다시 진행할 수 없습니다."
-        confirmLabel="취소하기"
-        cancelLabel="돌아가기"
+        confirmLabel="목표 취소"
         variant="danger"
         onConfirm={handleCancel}
         onCancel={() => setShowCancelDialog(false)}
@@ -140,7 +139,7 @@ export function GoalCard({ goal, projectId, isOwner, onUpdate, compact = false }
         open={showDeleteDialog}
         title="목표 삭제"
         description="이 목표가 기록에서 사라집니다. 되돌릴 수 없습니다."
-        confirmLabel="삭제"
+        confirmLabel="목표 삭제"
         variant="danger"
         onConfirm={handleDelete}
         onCancel={() => setShowDeleteDialog(false)}
