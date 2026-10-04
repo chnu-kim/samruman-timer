@@ -82,10 +82,15 @@ describe("터치 타깃 44px (pointer-coarse)", () => {
     ];
     for (const f of files) {
       const src = readFileSync(join(process.cwd(), f), "utf8");
-      for (const m of src.matchAll(/<(?:input|select)\b[^>]*className="([^"]+)"/g)) {
+      // 속성 안의 화살표 함수(=>)를 지나 그 태그의 className까지 본다.
+      // 태그 끝(/>)이나 식 className={...}(selectClass를 cn으로 쓰는 경우, 아래에서 따로 본다)을 먼저 만나면 건너뛴다
+      const tags = [...src.matchAll(/<(?:input|select)\b[\s\S]*?(?:className=(?:"([^"]+)"|\{)|\/>)/g)];
+      for (const m of tags) {
+        if (m[1] === undefined) continue;
         expect(m[1], f).toContain("h-10");
         expect(m[1], f).toContain("pointer-coarse:min-h-11");
       }
+      if (f === "src/app/projects/page.tsx") expect(tags.filter((m) => m[1]).length).toBe(2);
       for (const m of src.matchAll(/const selectClass =\s*"([^"]+)"/g)) {
         expect(m[1], f).toContain("h-10");
         expect(m[1], f).toContain("pointer-coarse:min-h-11");

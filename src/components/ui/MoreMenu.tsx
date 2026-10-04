@@ -94,10 +94,13 @@ export function MoreMenu({ label, items, className }: MoreMenuProps) {
                   item.onSelect();
                 }}
                 className={cn(
-                  "flex min-h-11 w-full items-center rounded-control px-3 text-left text-sm transition-colors disabled:opacity-50",
-                  item.danger
-                    ? "text-red-600 hover:bg-red-500/10 dark:text-red-400"
-                    : "text-foreground hover:bg-foreground/10",
+                  "flex min-h-11 w-full items-center rounded-control px-3 text-left text-sm transition-colors",
+                  // 비활성은 opacity 대신 중립 글자색(Button과 같은 규칙). 색·hover를 붙이지 않아 CSS 순서와 무관하다
+                  item.disabled
+                    ? "text-muted-foreground cursor-not-allowed"
+                    : item.danger
+                      ? "text-red-600 hover:bg-red-500/10 dark:text-red-400"
+                      : "text-foreground hover:bg-foreground/10",
                 )}
               >
                 {item.label}
