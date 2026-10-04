@@ -206,7 +206,7 @@ export default function ProjectsPage() {
             tabIndex={activeTab === "mine" ? 0 : -1}
             onClick={() => setActiveTab("mine")}
             onKeyDown={handleTabKeyDown}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            className={`px-4 py-2 pointer-coarse:min-h-11 text-sm font-medium transition-colors border-b-2 -mb-px ${
               activeTab === "mine"
                 ? "border-accent text-accent"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -222,7 +222,7 @@ export default function ProjectsPage() {
             tabIndex={activeTab === "others" ? 0 : -1}
             onClick={() => setActiveTab("others")}
             onKeyDown={handleTabKeyDown}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            className={`px-4 py-2 pointer-coarse:min-h-11 text-sm font-medium transition-colors border-b-2 -mb-px ${
               activeTab === "others"
                 ? "border-accent text-accent"
                 : "border-transparent text-muted-foreground hover:text-foreground"

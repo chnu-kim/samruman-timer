@@ -201,7 +201,7 @@
 - **근거**: [11-timer-running-owner--m-light.png](ux-review/11-timer-running-owner--m-light.png), [24-timer-add-flow--m-light.png](ux-review/24-timer-add-flow--m-light.png) · `src/components/timer/TimerControls.tsx:220-263`
 
 #### UX-19. `Button size="sm"`(32px)이 모바일의 로그아웃과 확인 다이얼로그 버튼에 그대로 쓰인다
-- **상태**: 해결 — Button `sm`에 `max-md:min-h-11`을 더해 md 미만에서만 44px이다(데스크톱 32px 그대로). 로그아웃은 이 변경만으로 390px에서 48x44가 되어 별도 클래스를 주지 않았다(`cn`이 클래스 충돌을 병합하지 않아 `h-11`/`h-8` 덮어쓰기는 순서에 의존한다). 확인 다이얼로그 버튼 간격은 `max-md:gap-3`. 관찰에 함께 적힌 그래프 탭은 Button이 아니어서 같은 `max-md:min-h-11`을 직접 줬다. 페이지네이션·목표 버튼은 Button sm이라 함께 해결된다.
+- **상태**: 해결 — Button `sm`에 `max-md:min-h-11`을 더해 md 미만에서만 44px이다(데스크톱 32px 그대로). 이후(C051) 가로 태블릿 같은 넓은 터치 화면도 포함하도록 `pointer-coarse:min-h-11`로 바꿨다. 로그아웃은 이 변경만으로 390px에서 48x44가 되어 별도 클래스를 주지 않았다(`cn`이 클래스 충돌을 병합하지 않아 `h-11`/`h-8` 덮어쓰기는 순서에 의존한다). 확인 다이얼로그 버튼 간격은 `max-md:gap-3`. 관찰에 함께 적힌 그래프 탭은 Button이 아니어서 같은 `max-md:min-h-11`을 직접 줬다. 페이지네이션·목표 버튼은 Button sm이라 함께 해결된다.
 - **심각도**: minor · **영역**: 모바일 / 인증
 - **관찰**: 측정값은 헤더 로그아웃 약 40~48x32(아바타와 테마 토글 바로 옆, 확인 없이 즉시 로그아웃), 삭제 확인 다이얼로그의 '취소'와 '삭제' 높이 32px에 간격 8px, 목표 취소와 삭제, 페이지네이션, 그래프 탭도 32px이다.
 - **이유**: 프로젝트 규칙(44px) 위반이다. 방송 중 로그아웃을 잘못 누르면 OAuth를 다시 거치는 동안 시간 조작이 끊긴다.
