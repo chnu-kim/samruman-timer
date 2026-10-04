@@ -471,7 +471,7 @@ export default function ProjectDetailPage() {
               label="더보기"
               items={[
                 { label: "링크 복사", onSelect: handleCopyLink },
-                ...(timer ? [{ label: "타이머 초기화(목표 유지)", onSelect: () => setShowTimerDeleteDialog(true), danger: true, disabled: deleting }] : []),
+                ...(timer ? [{ label: "타이머 초기화(목표 기록 유지)", onSelect: () => setShowTimerDeleteDialog(true), danger: true, disabled: deleting }] : []),
                 { label: "프로젝트 삭제", onSelect: () => setShowDeleteDialog(true), danger: true, disabled: deleting },
               ]}
             />
@@ -549,7 +549,10 @@ export default function ProjectDetailPage() {
       <ConfirmDialog
         open={showTimerDeleteDialog}
         title="타이머 초기화"
-        description="지금 타이머와 변경 기록이 지워지고 방송 화면의 오버레이가 사라집니다. 되돌릴 수 없으며 목표 기록은 남습니다. 새 타이머는 오버레이 주소가 달라서 OBS 브라우저 소스에 새 주소를 다시 넣어야 합니다."
+        // 목표 진행률은 지금 타이머의 변경 기록으로 계산한다(src/lib/goal.ts). 목표 행은 남아도 진행 중인 목표는 0부터 다시 쌓이므로 그 사실을 알린다
+        description={`지금 타이머와 변경 기록이 지워지고 방송 화면의 오버레이가 사라집니다. 되돌릴 수 없으며 목표 기록은 남습니다.${
+          goals.some((g) => g.status === "ACTIVE") ? " 진행 중인 목표의 진행률은 새 타이머 기준으로 처음부터 다시 쌓입니다." : ""
+        } 새 타이머는 오버레이 주소가 달라서 OBS 브라우저 소스에 새 주소를 다시 넣어야 합니다.`}
         confirmLabel="타이머 초기화"
         variant="danger"
         onConfirm={handleDeleteTimer}

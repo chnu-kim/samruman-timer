@@ -317,11 +317,11 @@ describe("프로젝트 콘솔", () => {
   });
 
   // C109: 1:1인 대상을 '타이머 삭제'·'프로젝트 삭제' 두 개념 대신 결과로 부른다
-  it("더보기 메뉴는 결과 기준으로 '타이머 초기화(목표 유지)'와 '프로젝트 삭제'를 보인다", async () => {
+  it("더보기 메뉴는 결과 기준으로 '타이머 초기화(목표 기록 유지)'와 '프로젝트 삭제'를 보인다", async () => {
     stubApi({ timers: [timer], goals: [], me: owner });
     render(<ProjectDetailPage />);
     fireEvent.click(await screen.findByRole("button", { name: "더보기" }));
-    expect(screen.getByRole("button", { name: "타이머 초기화(목표 유지)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "타이머 초기화(목표 기록 유지)" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "프로젝트 삭제" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "타이머 삭제" })).not.toBeInTheDocument();
   });
@@ -332,7 +332,7 @@ describe("프로젝트 콘솔", () => {
     await screen.findByRole("heading", { name: "시간 조작" });
 
     fireEvent.click(screen.getByRole("button", { name: "더보기" }));
-    fireEvent.click(screen.getByRole("button", { name: "타이머 초기화(목표 유지)" }));
+    fireEvent.click(screen.getByRole("button", { name: "타이머 초기화(목표 기록 유지)" }));
     const confirmTitle = await screen.findByRole("heading", { name: "타이머 초기화" });
     // 새 타이머는 오버레이 주소가 달라진다. '초기화'를 같은 타이머 재시작으로 오해해 OBS 소스를 그대로 두지 않게 알린다
     expect(within(confirmTitle.closest("dialog")!).getByText(/OBS 브라우저 소스에 새 주소를 다시 넣어야/)).toBeInTheDocument();
@@ -348,6 +348,40 @@ describe("프로젝트 콘솔", () => {
 
     expect(await screen.findByText("아직 타이머가 없습니다.")).toBeInTheDocument();
     expect(calls.some((c) => c.url === "/api/timers/t1" && c.method === "DELETE")).toBe(true);
+  });
+
+  // 목표 진행률은 현재 타이머의 변경 기록으로 계산된다. 목표 행은 남아도 진행 중인 목표는 0부터 다시 쌓인다는 것을 되돌릴 수 없는 동작 앞에서 알린다
+  it("진행 중인 목표가 있으면 초기화 확인창이 진행률이 처음부터 다시 쌓인다고 알린다", async () => {
+    const activeGoal = {
+      id: "g2",
+      projectId: "p1",
+      type: "DURATION",
+      title: "12시간 달성",
+      targetSeconds: 43200,
+      targetDatetime: null,
+      status: "ACTIVE",
+      progress: { percentage: 80, currentSeconds: 34560, remainingToTarget: 8640 },
+      createdAt: "2026-01-01T00:00:00.000Z",
+      completedAt: null,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    stubApi({ timers: [timer], goals: [activeGoal], me: owner });
+    render(<ProjectDetailPage />);
+    await screen.findByText("12시간 달성");
+    fireEvent.click(screen.getByRole("button", { name: "더보기" }));
+    fireEvent.click(screen.getByRole("button", { name: "타이머 초기화(목표 기록 유지)" }));
+    const dialog = (await screen.findByRole("heading", { name: "타이머 초기화" })).closest("dialog")!;
+    expect(within(dialog).getByText(/진행 중인 목표의 진행률은 새 타이머 기준으로 처음부터 다시 쌓입니다/)).toBeInTheDocument();
+  });
+
+  it("진행 중인 목표가 없으면 진행률 안내 문장을 넣지 않는다", async () => {
+    stubApi({ timers: [timer], goals: [goal], me: owner });
+    render(<ProjectDetailPage />);
+    await screen.findByRole("heading", { name: "시간 조작" });
+    fireEvent.click(screen.getByRole("button", { name: "더보기" }));
+    fireEvent.click(screen.getByRole("button", { name: "타이머 초기화(목표 기록 유지)" }));
+    const dialog = (await screen.findByRole("heading", { name: "타이머 초기화" })).closest("dialog")!;
+    expect(within(dialog).queryByText(/처음부터 다시 쌓입니다/)).not.toBeInTheDocument();
   });
 
   it("다른 곳에서 타이머가 삭제되면 폴링이 404를 받는 즉시 '타이머 없음' 상태로 바꾼다", async () => {
