@@ -180,6 +180,24 @@ describe("콘솔 조회 실패 표시 (W31)", () => {
     expect(within(logSection()).queryAllByRole("button", { pressed: false })).toHaveLength(0);
   });
 
+  it("생성(CREATE) 기록뿐이어도 시간을 바꾼 적이 없으면 '전체 기록'과 필터를 숨긴다", async () => {
+    const create = { id: "l0", actionType: "CREATE", actorName: "tester", actorUserId: "u1", deltaSeconds: 0, beforeSeconds: 0, afterSeconds: 3600, createdAt: "2026-01-01T00:00:00.000Z" };
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/api/auth/me")) return jsonResponse(owner);
+      if (url === "/api/projects/p1/timers") return jsonResponse([timer]);
+      if (url === "/api/projects/p1/goals") return jsonResponse([]);
+      if (url.startsWith("/api/timers/t1/logs")) return jsonResponse({ logs: [create], pagination: { page: 1, limit: 5, total: 1, totalPages: 1 } });
+      if (url.startsWith("/api/timers/t1/graph")) return jsonResponse({ mode: "remaining", points: [] });
+      if (url === "/api/timers/t1") return jsonResponse(timerDetail);
+      return jsonResponse(project);
+    }) as typeof fetch;
+    render(<ProjectDetailPage />);
+    await screen.findByRole("heading", { name: "최근 기록" });
+    await waitFor(() => expect(screen.getAllByText(/tester/).length).toBeGreaterThan(0));
+    expect(within(logSection()).queryByRole("button", { name: "전체 기록" })).not.toBeInTheDocument();
+  });
+
   it("목표·기록을 받기 전과 실패했을 때는 탭과 '전체 기록'을 숨기지 않는다", async () => {
     api.goals = "pending";
     api.logs = "pending";

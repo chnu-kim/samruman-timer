@@ -538,7 +538,7 @@ export default function ProjectDetailPage() {
               // 시청자에게 빈 목표 영역은 의미가 없으므로 목표가 있을 때만 보여 준다.
               // 받지 못했으면 있는지 모르므로 오류 줄을 보인다(실패를 '목표 없음'으로 가리지 않는다)
               isOwner || goalsError || (goals?.length ?? 0) > 0
-                ? goalSection()
+                ? goalSection(isOwner ? "lg:pt-[1.3125rem]" : undefined) // 왼쪽 시간 카드의 테두리 1px + 안쪽 여백 20px에 제목 줄을 맞춘다
                 : undefined
             }
           />

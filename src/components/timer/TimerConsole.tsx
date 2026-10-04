@@ -454,9 +454,11 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
 
   // 예약·만료 상태의 시간 카드는 안내와 버튼 하나뿐이라 제목을 숨긴다
   const hideControlsHeading = timer.status === "SCHEDULED" || expired;
-  // 기록이 아직 하나도 없다: 로드가 끝났고(null 아님·오류 아님) 필터 없는 조회가 0건이며 필터도 꺼져 있다.
+  // 기록이 아직 하나도 없다: 로드가 끝났고(null 아님·오류 아님) 필터 없는 조회에 0건이거나 생성(CREATE) 행뿐이며 필터도 꺼져 있다.
+  // 타이머는 만들 때 CREATE 기록이 항상 생기므로 0건만 보면 이 분기에 닿지 못한다. 시간을 한 번도 바꾸지 않았으면 '없음'으로 본다.
   // 로딩 중·오류·필터 결과 0건에는 해당하지 않는다(숨겼다가 다시 보이면 레이아웃이 밀린다)
-  const noLogsYet = logs !== null && !logsError && logs.length === 0 && logsUnfiltered && activeFilters.size === 0;
+  const noLogsYet =
+    logs !== null && !logsError && logs.every((log) => log.actionType === "CREATE") && logsUnfiltered && activeFilters.size === 0;
 
   const displayStatus = countdownEnded ? "EXPIRED" : timer.status;
   const statusBadgeVariant = displayStatus === "SCHEDULED" ? "scheduled" : displayStatus === "RUNNING" ? "running" : "expired";
@@ -490,26 +492,35 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
             <section
               aria-labelledby={hideControlsHeading ? undefined : "timer-controls-heading"}
               aria-label={hideControlsHeading ? "시간" : undefined}
-              className="rounded-xl border border-border bg-surface p-5"
+              className="rounded-xl border border-border bg-background p-5"
             >
               {/* 단축키가 있다는 사실을 '?'를 몰라도 알 수 있게, 도움말로 가는 진입점을 제목 줄에 하나만 둔다.
                   키보드가 있는 포인터 기기에서만 보인다(터치 기기에서는 단축키를 쓸 수 없다).
                   예약·만료 상태의 내용은 안내와 버튼 하나뿐이라 제목은 숨긴다(상태는 배지·보조 문구가 알린다) */}
               {(!hideControlsHeading || shortcutsEnabled) && (
-                <div className={cn("flex items-center gap-3", hideControlsHeading ? "justify-end" : "justify-between")}>
+                <div
+                  className={cn(
+                    "items-center gap-3",
+                    // 터치 기기에서는 버튼만 있는 줄 전체를 접어 빈 줄 높이가 생기지 않게 한다
+                    hideControlsHeading ? "hidden justify-end pointer-fine:flex" : "flex min-h-10 justify-between",
+                  )}
+                >
                   {!hideControlsHeading && (
                     <h2 id="timer-controls-heading" className="text-base font-semibold text-foreground">시간</h2>
                   )}
                   {shortcutsEnabled && (
-                    <Button
-                      type="button"
-                      variant="link"
-                      onClick={() => setShowHelp(true)}
-                      aria-haspopup="dialog"
-                      className="hidden pointer-fine:inline-flex -my-3 -mr-2"
-                    >
-                      단축키
-                    </Button>
+                    // Button 기본 클래스에 inline-flex가 있어 같은 요소에 hidden을 두면 진다. 표시 여부는 래퍼가 정한다
+                    <span className="hidden pointer-fine:inline-flex">
+                      <Button
+                        type="button"
+                        variant="link"
+                        onClick={() => setShowHelp(true)}
+                        aria-haspopup="dialog"
+                        className="-my-0.5 -mr-2"
+                      >
+                        단축키
+                      </Button>
+                    </span>
                   )}
                 </div>
               )}
@@ -525,7 +536,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                 nicknamePromptRef={nicknamePromptRef}
                 expired={expired}
                 disconnected={connection.disconnected}
-                className="mt-3"
+                className={hideControlsHeading ? "pointer-fine:mt-3" : "mt-3"}
               />
             </section>
           )}
@@ -544,6 +555,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
               <Button
                 type="button"
                 variant="link"
+                className="-my-2.5 -mr-2"
                 onClick={toggleLogsExpanded}
                 aria-expanded={logsExpanded}
               >

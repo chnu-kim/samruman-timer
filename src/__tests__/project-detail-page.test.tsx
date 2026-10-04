@@ -317,7 +317,9 @@ describe("프로젝트 콘솔", () => {
 
       const entry = screen.getByRole("button", { name: "단축키" });
       // 터치 기기(pointer: coarse)에서는 숨긴다. 숫자키·X를 누를 키보드가 없기 때문이다
-      expect(entry).toHaveClass("hidden", "pointer-fine:inline-flex");
+      // 표시 여부는 래퍼가 정한다. Button 자체의 inline-flex가 hidden을 이기므로 버튼에는 두지 않는다
+      expect(entry).not.toHaveClass("hidden");
+      expect(entry.parentElement).toHaveClass("hidden", "pointer-fine:inline-flex");
       expect(entry).toHaveAttribute("aria-haspopup", "dialog");
 
       fireEvent.click(entry);
