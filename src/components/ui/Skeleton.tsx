@@ -155,24 +155,24 @@ export function ConsoleSkeleton({ shape, className, busy = false }: { shape: Con
       {showOwner && (
         <div className={cn("grid gap-x-5 gap-y-8 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start", ownerOnly)}>
           {/* 시간 카드. md부터 프리셋 줄과 확인 버튼이 생겨 높아진다(모바일은 하단 바가 맡는다) */}
-          <div className="h-70 overflow-hidden rounded-card border border-border p-5 md:h-87">
+          <div className="h-70 overflow-hidden rounded-card border border-border p-5 pointer-coarse:h-72 md:h-87 pointer-coarse:md:h-90">
             <HeadingSkeleton className="w-12" />
             {/* 시청자 닉네임 라벨·입력 | 추가/차감(md부터 옆, 모바일은 아래) */}
             <div className="mt-3 flex h-5 items-center">
               <Skeleton className="h-3.5 w-24" />
             </div>
             <div className="mt-1.5 flex gap-4">
-              <Skeleton className="h-10 min-w-0 flex-1" />
+              <Skeleton className="h-10 min-w-0 flex-1 pointer-coarse:h-11" />
               <Skeleton className="hidden h-12 w-56 -translate-y-1 md:block" />
             </div>
             <Skeleton className="mt-5 h-12 w-full md:hidden" />
             {/* 프리셋 칩(md부터)과 시·분·초 입력 */}
             <div className="mt-5 hidden gap-1.5 md:flex">
-              <Skeleton className="h-10 w-17" />
-              <Skeleton className="h-10 w-17" />
-              <Skeleton className="h-10 w-19" />
+              <Skeleton className="h-10 w-17 pointer-coarse:h-11" />
+              <Skeleton className="h-10 w-17 pointer-coarse:h-11" />
+              <Skeleton className="h-10 w-19 pointer-coarse:h-11" />
             </div>
-            <Skeleton className="mt-5 h-10 w-full md:mt-2.5" />
+            <Skeleton className="mt-5 h-10 w-full pointer-coarse:h-11 md:mt-2.5" />
             {/* 확인 버튼. 위에 '시간을 입력하면…' 안내 줄(20px)과 간격(20px)이 있다 */}
             <Skeleton className="mt-10 hidden h-12 w-full md:block" />
           </div>
@@ -182,7 +182,7 @@ export function ConsoleSkeleton({ shape, className, busy = false }: { shape: Con
               <Skeleton className="h-4 w-12" />
               <Skeleton className="-my-2 h-10 w-26 pointer-coarse:-my-2.5 pointer-coarse:h-11" />
             </div>
-            <div className="mt-3 flex h-10 items-center gap-6 border-b border-border px-4">
+            <div className="mt-3 flex h-10 items-center gap-6 border-b border-border px-4 pointer-coarse:h-11">
               <Skeleton className="h-3.5 w-16" />
               <Skeleton className="h-3.5 w-12" />
             </div>
