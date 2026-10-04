@@ -6,7 +6,6 @@ import { buttonClassName } from "../Button";
 // 다른 작업이 진행 중인 파일은 그 작업에서 정리할 때까지 지금 남은 개수만 허용한다(새로 늘면 실패, 줄면 숫자를 낮춘다)
 const PENDING: Record<string, { max: number; why: string }> = {
   "src/components/timer/OverlaySettings.tsx": { max: 9, why: "W35 진행 중(미리보기 견본·체크박스)" },
-  "src/components/timer/TimerConsole.tsx": { max: 1, why: "그래프 '다시 시도'는 W31·W25에서 link 변형으로 바꾼다" },
 };
 
 // rounded, rounded-xs/sm/md, 16px 이상(2xl·3xl·4xl), 방향 지정(rounded-t-md·rounded-tl 등), 임의값(rounded-[4px])
