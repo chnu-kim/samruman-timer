@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { buttonClassName } from "../Button";
 
 // W33: 모서리는 세 단계(컨트롤 8px·카드 12px·pill)만 쓴다. rounded(4px)·rounded-sm·rounded-md(6px)가 다시 들어오면 실패한다.
 // 다른 작업이 진행 중인 파일은 그 작업에서 정리할 때까지 지금 남은 개수만 허용한다(새로 늘면 실패, 줄면 숫자를 낮춘다)
@@ -8,10 +9,10 @@ const PENDING: Record<string, { max: number; why: string }> = {
   "src/components/timer/TimerConsole.tsx": { max: 1, why: "그래프 '다시 시도'는 W31·W25에서 link 변형으로 바꾼다" },
 };
 
-// rounded, rounded-xs/sm/md, 방향 지정(rounded-t-md·rounded-tl 등), 임의값(rounded-[4px])
+// rounded, rounded-xs/sm/md, 16px 이상(2xl·3xl·4xl), 방향 지정(rounded-t-md·rounded-tl 등), 임의값(rounded-[4px])
 const SIDE = "(?:t|r|b|l|s|e|tl|tr|br|bl|ss|se|es|ee)";
 const BANNED = new RegExp(
-  `(?<![\\w-])(?:[a-z-]+:)*rounded(?:-${SIDE})?(?:-(?:xs|sm|md)|-\\[[^\\]]+\\])?(?=["'\`\\s;])`,
+  `(?<![\\w-])(?:[a-z-]+:)*rounded(?:-${SIDE})?(?:-(?:xs|sm|md|2xl|3xl|4xl)|-\\[[^\\]]+\\])?(?=["'\`\\s;])`,
   "g",
 );
 
@@ -53,15 +54,21 @@ describe("radius 토큰", () => {
   });
 
   it("금지 패턴이 4·6px 변형을 잡고 토큰·8px 이상은 통과시킨다", () => {
-    const bad = ['"rounded"', '"rounded-md"', '"p-1 rounded-t-md"', '"rounded-tl"', '"rounded-[6px]"', '"hover:rounded-sm"', "@apply rounded-md;"];
+    const bad = ['"rounded"', '"rounded-md"', '"p-1 rounded-t-md"', '"rounded-tl"', '"rounded-[6px]"', '"hover:rounded-sm"', '"rounded-2xl"', "@apply rounded-md;"];
     const ok = ['"rounded-lg"', '"rounded-xl"', '"rounded-full"', '"rounded-control"', '"rounded-card"', '"rounded-t-lg"', '"max-md:rounded-b-none"'];
     for (const s of bad) expect(s.match(BANNED), s).not.toBeNull();
     for (const s of ok) expect(s.match(BANNED), s).toBeNull();
   });
 
-  it("Button·Input·다이얼로그는 토큰 유틸리티를 쓴다", () => {
+  it("Button·buttonClassName은 렌더된 클래스에 컨트롤 토큰을 쓴다", () => {
+    expect(buttonClassName().split(/\s+/)).toContain("rounded-control");
+    expect(buttonClassName({ variant: "secondary" }).split(/\s+/)).toEqual(
+      expect.arrayContaining(["h-10", "pointer-coarse:min-h-11", "border-border", "hover:bg-foreground/5"]),
+    );
+  });
+
+  it("Input·다이얼로그 파일은 토큰 유틸리티를 쓴다", () => {
     const read = (f: string) => readFileSync(join(process.cwd(), "src/components/ui", f), "utf8");
-    expect(read("Button.tsx")).toContain("rounded-control");
     expect(read("Input.tsx")).toContain("rounded-control");
     expect(read("FormDialog.tsx")).toContain("rounded-card");
     expect(read("ConfirmDialog.tsx")).toContain("rounded-card");

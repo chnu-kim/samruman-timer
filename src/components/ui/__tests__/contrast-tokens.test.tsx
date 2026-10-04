@@ -180,6 +180,15 @@ describe("비활성 버튼", () => {
     expect(el.className).not.toMatch(/bg-accent|bg-red-|hover:bg-/);
   });
 
+  // 저장·생성 요청 중에 잠깐 막힌 버튼은 '쓸 수 없음'으로 보이지 않게 변형 색을 유지한다(hover만 뺀다)
+  it("처리 중(aria-busy) 비활성은 변형 색을 유지하고 cursor-wait다", () => {
+    render(<Button disabled aria-busy>저장 중…</Button>);
+    const el = screen.getByRole("button", { name: "저장 중…" });
+    expect(el).toHaveClass("bg-accent", "cursor-wait");
+    expect(el).not.toHaveClass("bg-muted");
+    expect(el.className).not.toMatch(/hover:/);
+  });
+
   it.each(themes)("%s: 비활성 글자(--muted-foreground)는 --muted 배경에서 4.5:1 이상", (selector) => {
     const body = block(selector);
     expect(contrast(token(body, "muted-foreground"), token(body, "muted"))).toBeGreaterThanOrEqual(4.5);

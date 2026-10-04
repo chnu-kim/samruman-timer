@@ -43,6 +43,11 @@ export const Disabled: Story = {
   args: { disabled: true },
 };
 
+/** 저장·생성 요청 중(aria-busy). 비활성이지만 변형 색을 유지한다 */
+export const Busy: Story = {
+  args: { disabled: true, "aria-busy": true, children: "저장 중…" },
+};
+
 export const DisabledVariants: Story = {
   render: () => (
     <div className="flex flex-wrap items-center gap-4">
