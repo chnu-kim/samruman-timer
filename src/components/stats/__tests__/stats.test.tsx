@@ -34,14 +34,14 @@ describe("summarizeDaily", () => {
       { date: "2026-03-01", eventCount: 2, addedSeconds: 3600, subtractedSeconds: 0 },
       { date: "2026-03-02", eventCount: 4, addedSeconds: 18000, subtractedSeconds: 1800 },
     ]);
-    expect(label).toBe("일별 활동 그래프(기록 있는 날 2일), 추가 합계 6시간, 차감 합계 30분, 추가 최다 3월 2일 5시간");
+    expect(label).toBe("일별 활동 그래프(3월 1일~3월 2일, 기록 있는 날 2일), 추가 합계 6시간, 차감 합계 30분, 추가 최다 3월 2일 5시간");
   });
 
   it("추가가 없으면 최다 날짜를 생략한다", () => {
     const label = summarizeDaily([
       { date: "2026-03-01", eventCount: 1, addedSeconds: 0, subtractedSeconds: 600 },
     ]);
-    expect(label).toBe("일별 활동 그래프(기록 있는 날 1일), 추가 합계 0분, 차감 합계 10분");
+    expect(label).toBe("일별 활동 그래프(3월 1일~3월 1일, 기록 있는 날 1일), 추가 합계 0분, 차감 합계 10분");
   });
 });
 
@@ -82,7 +82,7 @@ describe("StatsCardGrid", () => {
     for (const caption of ["추가가 더 많음", "추가 + 차감", "가장 활발한 시간"]) {
       expect(screen.queryByText(caption)).not.toBeInTheDocument();
     }
-    for (const label of ["총 추가 시간", "변경 횟수", "시청자 수"]) {
+    for (const label of ["총 추가 시간", "변경 횟수", "추가한 시청자"]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
     expect(document.body.textContent).not.toMatch(/후원|이벤트/);

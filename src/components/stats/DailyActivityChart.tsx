@@ -57,18 +57,26 @@ export function formatSignedDurationTick(seconds: number, ticks: number[]): stri
   return seconds < 0 ? `-${label}` : label;
 }
 
-/** 스크린리더용 차트 요약. 기록이 있는 날 수와 추가·차감 합계, 추가가 가장 많은 날을 알린다 */
+function formatMonthDay(date: string): string {
+  const [, month, day] = date.split("-");
+  return `${Number(month)}월 ${Number(day)}일`;
+}
+
+/**
+ * 스크린리더용 차트 요약. 표시 기간과 추가·차감 합계, 추가가 가장 많은 날을 알린다.
+ * 창은 오늘이 아니라 마지막 기록일에서 끝나므로 기간을 날짜로 밝힌다.
+ */
 export function summarizeDaily(data: DailyActivity[]): string {
   const active = data.filter((d) => d.eventCount > 0 || d.addedSeconds > 0 || d.subtractedSeconds > 0);
   if (active.length === 0) return "일별 활동 그래프, 기록 없음";
   const added = active.reduce((sum, d) => sum + d.addedSeconds, 0);
   const subtracted = active.reduce((sum, d) => sum + d.subtractedSeconds, 0);
   const peak = active.reduce((best, d) => (d.addedSeconds > best.addedSeconds ? d : best));
-  const [, month, day] = peak.date.split("-");
   const peakText = peak.addedSeconds > 0
-    ? `, 추가 최다 ${Number(month)}월 ${Number(day)}일 ${formatDuration(peak.addedSeconds)}`
+    ? `, 추가 최다 ${formatMonthDay(peak.date)} ${formatDuration(peak.addedSeconds)}`
     : "";
-  return `일별 활동 그래프(기록 있는 날 ${active.length}일), 추가 합계 ${formatDuration(added)}, 차감 합계 ${formatDuration(subtracted)}${peakText}`;
+  const range = `${formatMonthDay(data[0].date)}~${formatMonthDay(data[data.length - 1].date)}`;
+  return `일별 활동 그래프(${range}, 기록 있는 날 ${active.length}일), 추가 합계 ${formatDuration(added)}, 차감 합계 ${formatDuration(subtracted)}${peakText}`;
 }
 
 export function DailyActivityChart({ data, className }: DailyActivityChartProps) {
@@ -124,10 +132,7 @@ export function DailyActivityChart({ data, className }: DailyActivityChartProps)
           />
           <ReferenceLine y={0} stroke="var(--color-muted-foreground)" />
           <Tooltip
-            labelFormatter={(label) => {
-              const [, month, day] = String(label).split("-");
-              return `${Number(month)}월 ${Number(day)}일`;
-            }}
+            labelFormatter={(label) => formatMonthDay(String(label))}
             formatter={(value, name) =>
               name === "added"
                 ? [`+${formatDuration(Number(value))}`, "추가"]

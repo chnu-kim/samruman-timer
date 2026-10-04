@@ -16,6 +16,7 @@ export function formatNetDuration(seconds: number): string {
   return text;
 }
 
+// uniqueDonors는 ADD 기록의 고유 닉네임만 센다(차감만 한 사람은 빠진다). 그래서 '시청자 수'가 아니라 '추가한 시청자'다
 // 숫자만 봐도 아는 보조문구('추가가 더 많음', '추가 + 차감', '가장 활발한 시간')는 두지 않는다
 export function StatsCardGrid({ summary }: StatsCardGridProps) {
   return (
@@ -37,7 +38,7 @@ export function StatsCardGrid({ summary }: StatsCardGridProps) {
         value={summary.totalEvents.toLocaleString()}
       />
       <StatsCard
-        label="시청자 수"
+        label="추가한 시청자"
         value={summary.uniqueDonors.toLocaleString()}
         subtext="고유 닉네임 기준"
       />
