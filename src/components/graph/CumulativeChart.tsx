@@ -102,7 +102,7 @@ export function CumulativeChart({ points, className }: CumulativeChartProps) {
           />
           <Legend
             formatter={(value: string) =>
-              value === "totalAdded" ? "누적 추가" : "누적 차감"
+              value === "totalAdded" ? "+ 누적 추가" : "- 누적 차감"
             }
             wrapperStyle={{ fontSize: "12px" }}
             labelStyle={{ color: "var(--color-foreground)" }}
@@ -110,15 +110,19 @@ export function CumulativeChart({ points, className }: CumulativeChartProps) {
           <Area
             type="stepAfter"
             dataKey="totalAdded"
+            legendType="plainline"
             stroke="#22c55e"
             fill="#22c55e"
             fillOpacity={0.2}
             strokeWidth={2}
           />
+          {/* 차감은 점선으로 그려 색을 구분하기 어려워도 추가와 갈린다. 범례 아이콘도 같은 점선이다 */}
           <Area
             type="stepAfter"
             dataKey="totalSubtracted"
             stroke="#ef4444"
+            strokeDasharray="6 4"
+            legendType="plainline"
             fill="#ef4444"
             fillOpacity={0.2}
             strokeWidth={2}
