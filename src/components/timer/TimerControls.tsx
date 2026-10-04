@@ -384,14 +384,13 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
           </div>
         </div>
 
-        {/* 추가/차감 토글 */}
+        {/* 추가/차감 토글. X 단축키는 포커스를 받는 라디오에 알려야 스크린리더가 읽는다 */}
         <div>
           <span id={actionGroupLabelId} className="mb-1.5 block text-sm font-medium text-foreground">변경 유형</span>
           <div
             className="relative grid grid-cols-2 rounded-xl border border-border bg-muted p-1"
             role="radiogroup"
             aria-labelledby={actionGroupLabelId}
-            aria-keyshortcuts="X"
           >
             {/* 슬라이딩 인디케이터 */}
             <div
@@ -404,6 +403,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
               ref={addRadioRef}
               role="radio"
               aria-checked={selectedAction === "ADD"}
+              aria-keyshortcuts="X"
               tabIndex={selectedAction === "ADD" ? 0 : -1}
               onClick={() => onActionChange("ADD")}
               onKeyDown={(e) => handleActionKeyDown(e, "ADD")}
@@ -420,6 +420,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
               ref={subtractRadioRef}
               role="radio"
               aria-checked={selectedAction === "SUBTRACT"}
+              aria-keyshortcuts="X"
               tabIndex={selectedAction === "SUBTRACT" ? 0 : -1}
               onClick={() => onActionChange("SUBTRACT")}
               onKeyDown={(e) => handleActionKeyDown(e, "SUBTRACT")}

@@ -72,8 +72,9 @@ describe("TimerControls", () => {
   // C122: 단축키를 알리는 것은 추가/차감 토글의 X 하나뿐이다(프리셋 칩은 숫자키와 동작이 달라 붙이지 않는다)
   it("추가/차감 토글만 aria-keyshortcuts='X'를 가진다", () => {
     const { container } = render(<Harness timerId={timerId} status="RUNNING" />);
-    expect(screen.getByRole("radiogroup", { name: "변경 유형" })).toHaveAttribute("aria-keyshortcuts", "X");
-    expect(container.querySelectorAll("[aria-keyshortcuts]")).toHaveLength(1);
+    const radios = [screen.getByRole("radio", { name: "추가" }), screen.getByRole("radio", { name: "차감" })];
+    for (const radio of radios) expect(radio).toHaveAttribute("aria-keyshortcuts", "X");
+    expect([...container.querySelectorAll("[aria-keyshortcuts]")]).toEqual(radios);
   });
 
   // C031: 예약 타이머는 시간 조작 대신 '지금 시작' 하나만 둔다
