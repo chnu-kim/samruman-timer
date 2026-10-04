@@ -490,13 +490,14 @@ CHZZK OAuth 콜백을 처리한다.
   - `403`: 프로젝트 소유자 아님
   - `404`: 타이머 없음 또는 삭제됨 (처리 중 다른 요청이 삭제한 경우 포함)
   - `409`: 동시 변경과 5번 연속 겹침. 다시 시도하면 된다
-- **응답**: `200 OK` (`status`는 `RUNNING` 또는 `EXPIRED`, `log`는 이번 요청의 `ADD`/`SUBTRACT` 로그다. 차감으로 0초가 돼 `EXPIRE`를 함께 남겨도 `log`는 `SUBTRACT`이며, 되돌리기는 이 `log.id`를 쓴다)
+- **응답**: `200 OK` (`status`는 `RUNNING` 또는 `EXPIRED`, `updatedAt`은 변경 뒤 타이머의 `updatedAt`이다. 콘솔이 저장해 두고 다음 폴링과 비교해 자기 조작을 다른 기기의 변경으로 보지 않는다. `log`는 이번 요청의 `ADD`/`SUBTRACT` 로그다. 차감으로 0초가 돼 `EXPIRE`를 함께 남겨도 `log`는 `SUBTRACT`이며, 되돌리기는 이 `log.id`를 쓴다)
 ```json
 {
   "data": {
     "id": "timer_id",
     "remainingSeconds": 7200,
     "status": "RUNNING",
+    "updatedAt": "2025-01-01T00:00:00Z",
     "log": {
       "id": "log_id",
       "actionType": "ADD",
@@ -532,6 +533,7 @@ CHZZK OAuth 콜백을 처리한다.
     "id": "timer_id",
     "remainingSeconds": 3600,
     "status": "RUNNING",
+    "updatedAt": "2025-01-01T00:00:05Z",
     "log": {
       "id": "log_id",
       "actionType": "ADD",

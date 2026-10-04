@@ -123,6 +123,25 @@ describe("OverlaySettings 저장을 포함한 URL 복사 (UX-11·C069)", () => {
     expect(mockToast).not.toHaveBeenCalledWith(expect.anything(), "success");
     expect(screen.getByRole("button", { name: "변경 취소" })).toHaveAttribute("tabindex", "0");
   });
+
+  // G2: 토스트 자리는 하나라 이 창의 저장·복사 결과를 알리면 세션 만료 안내(로그인 화면으로 이동)를 덮는다
+  it("저장이 세션 만료(401 SESSION_EXPIRED)면 저장·복사 결과를 알리지 않는다", async () => {
+    writeText.mockResolvedValueOnce(undefined);
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(input), init });
+      if (init?.method === "PUT") {
+        return new Response(JSON.stringify({ error: { code: "SESSION_EXPIRED", message: "유효하지 않은 세션입니다" } }), { status: 401 });
+      }
+      return { ok: true, status: 200, json: async () => ({ data: null }) };
+    }));
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: "게이밍 네온" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "URL 복사" }));
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    expect(mockToast).not.toHaveBeenCalled();
+  });
 });
 
 describe("OverlaySettings OBS 연결 안내 (UX-20·C108)", () => {

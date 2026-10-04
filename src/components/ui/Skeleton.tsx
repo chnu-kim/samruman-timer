@@ -92,49 +92,59 @@ export function ProjectDetailSkeleton() {
         </div>
       </div>
 
-      <div className="mt-6 space-y-8">
-        {/* 카운트다운(숫자 48/60px + 종료 예정 줄)과 상태 배지 */}
-        <div className="flex h-18 items-start gap-4 sm:h-21">
-          <Skeleton className="h-12 w-56 sm:h-15 sm:w-72" />
-          <Skeleton className="mt-2 h-6 w-16 rounded-full" />
-        </div>
+      <ConsoleSkeleton className="mt-6" />
+    </section>
+  );
+}
 
-        <div className="grid gap-x-5 gap-y-8 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
-          {/* 시간 카드. md부터 프리셋·입력이 두 열이 되어 높아진다 */}
-          <div className="h-70 rounded-card border border-border p-5 md:h-89">
-            <Skeleton className="my-1 h-4 w-12" />
-            <Skeleton className="mt-3 h-11 w-full" />
-            <Skeleton className="mt-5 h-12 w-full" />
-          </div>
-          <div className="lg:pt-[1.3125rem]">
-            <Skeleton className="my-1 h-4 w-12" />
-            <div className="mt-3 h-55 space-y-4 border-t border-border pt-4">
-              <Skeleton className="h-4 w-3/4" />
-              <Skeleton className="h-2 w-full rounded-full" />
-            </div>
-          </div>
-        </div>
+/**
+ * 콘솔(`TimerConsole`) 부분의 골격: 카운트다운, 시간 카드 | 목표, 최근 기록 | 잔여 시간 추이.
+ * 프로젝트 화면 골격의 일부이고, 상위가 상세를 받지 못해 콘솔이 직접 다시 부르는 동안에도 같은 자리에 쓴다(busy)
+ */
+export function ConsoleSkeleton({ className, busy = false }: { className?: string; busy?: boolean }) {
+  return (
+    <div className={cn("space-y-8", className)} aria-busy={busy || undefined}>
+      {/* 카운트다운(숫자 48/60px + 종료 예정 줄)과 상태 배지 */}
+      <div className="flex h-18 items-start gap-4 sm:h-21">
+        <Skeleton className="h-12 w-56 sm:h-15 sm:w-72" />
+        <Skeleton className="mt-2 h-6 w-16 rounded-full" />
+      </div>
 
-        <div className="grid gap-x-5 gap-y-8 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
-          <div>
-            <Skeleton className="my-1 h-4 w-20" />
-            {/* 최근 기록 5행 */}
-            <div className="mt-3 h-[19.0625rem] space-y-6 pt-3">
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-full" />
-            </div>
-          </div>
-          <div>
-            <Skeleton className="my-1 h-4 w-28" />
-            {/* 그래프 상자(안쪽 h-64 + 여백·테두리) */}
-            <div className="mt-3 h-[18.625rem] rounded-card border border-border p-5">
-              <Skeleton className="h-full w-full" />
-            </div>
+      <div className="grid gap-x-5 gap-y-8 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
+        {/* 시간 카드. md부터 프리셋·입력이 두 열이 되어 높아진다 */}
+        <div className="h-70 rounded-card border border-border p-5 md:h-89">
+          <Skeleton className="my-1 h-4 w-12" />
+          <Skeleton className="mt-3 h-11 w-full" />
+          <Skeleton className="mt-5 h-12 w-full" />
+        </div>
+        <div className="lg:pt-[1.3125rem]">
+          <Skeleton className="my-1 h-4 w-12" />
+          <div className="mt-3 h-55 space-y-4 border-t border-border pt-4">
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-2 w-full rounded-full" />
           </div>
         </div>
       </div>
-    </section>
+
+      <div className="grid gap-x-5 gap-y-8 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
+        <div>
+          <Skeleton className="my-1 h-4 w-20" />
+          {/* 최근 기록 5행 */}
+          <div className="mt-3 h-[19.0625rem] space-y-6 pt-3">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-full" />
+          </div>
+        </div>
+        <div>
+          <Skeleton className="my-1 h-4 w-28" />
+          {/* 그래프 상자(안쪽 h-64 + 여백·테두리) */}
+          <div className="mt-3 h-[18.625rem] rounded-card border border-border p-5">
+            <Skeleton className="h-full w-full" />
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

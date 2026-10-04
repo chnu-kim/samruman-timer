@@ -144,6 +144,9 @@ describe("POST /api/timers/[id]/modify", () => {
     expect(res.status).toBe(200);
     const body = await parseJson(res);
     expect(body.data.status).toBe("RUNNING");
+    // 콘솔이 다음 폴링과 비교해 자기 조작을 외부 변경으로 보지 않도록 변경 뒤 updatedAt을 함께 준다
+    expect(body.data.updatedAt).toEqual(expect.any(String));
+    expect(body.data.updatedAt > TIMER_ROW.updated_at).toBe(true);
   });
 
   it("동시 변경이 계속 겹치면 409 CONFLICT + conflict_exhausted 경고(actorName 제외)", async () => {

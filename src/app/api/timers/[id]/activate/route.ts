@@ -121,6 +121,7 @@ export const POST = withErrorHandler(async (
       ? calculateRemaining(current.baseRemainingSeconds, current.lastCalculatedAt)
       : 0,
     status: current.status,
+    updatedAt: current.updatedAt,
     log: {
       id: log.id,
       actionType: log.actionType,

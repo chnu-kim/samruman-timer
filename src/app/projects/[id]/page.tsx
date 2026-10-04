@@ -334,29 +334,32 @@ export default function ProjectDetailPage() {
     }
   }
 
-  async function handleSaveName(name: string) {
-    const res = await authFetch(`/api/projects/${projectId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
-    if (!res.ok) throw new Error();
+  // 이름·설명 수정. 실패하면 EditableText가 이전 값으로 되돌리고, 여기서 한 줄 알린다.
+  // 세션 만료(로그인이 풀린 경우 포함)는 그 안내가 로그인 화면으로 보내므로 따로 알리지 않는다(토스트 자리는 하나다)
+  async function patchProject(patch: { name: string } | { description: string }, label: "이름" | "설명") {
+    const failed = `프로젝트 ${label}을 수정하지 못했습니다`;
+    let res: Response;
+    try {
+      res = await authFetch(`/api/projects/${projectId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+    } catch (err) {
+      toast(failed, "error");
+      throw err;
+    }
+    if (!res.ok) {
+      if (!isSessionExpired(res)) toast(failed, "error");
+      throw new Error(failed);
+    }
     const json = (await res.json()) as ApiSuccessResponse<ProjectDetailResponse>;
     setProject(json.data);
-    toast("프로젝트 이름이 수정되었습니다", "success");
+    toast(`프로젝트 ${label}이 수정되었습니다`, "success");
   }
 
-  async function handleSaveDescription(description: string) {
-    const res = await authFetch(`/api/projects/${projectId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ description }),
-    });
-    if (!res.ok) throw new Error();
-    const json = (await res.json()) as ApiSuccessResponse<ProjectDetailResponse>;
-    setProject(json.data);
-    toast("프로젝트 설명이 수정되었습니다", "success");
-  }
+  const handleSaveName = (name: string) => patchProject({ name }, "이름");
+  const handleSaveDescription = (description: string) => patchProject({ description }, "설명");
 
   // 못 찾은 화면도 탭 제목이 이전 화면 것으로 남지 않게 바꾼다(서버 layout의 '프로젝트 상세'는 클라이언트 이동 때 다시 적용되지 않는다)
   useDocumentTitle(project ? pageTitle(project.name) : notFound ? pageTitle("찾을 수 없음") : null);

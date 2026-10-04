@@ -112,6 +112,7 @@ export const POST = withErrorHandler(async (
       id: result.timer.id,
       remainingSeconds,
       status: result.timer.status,
+      updatedAt: result.timer.updatedAt,
       log: result.log,
     },
   });

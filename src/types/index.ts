@@ -217,6 +217,11 @@ export interface TimerModifyResponse {
   remainingSeconds: number;
   status: TimerStatus;
   /**
+   * 변경 뒤 타이머의 updatedAt. 콘솔이 저장해 두었다 다음 폴링 값과 비교해 자기 조작을 다른 기기의 변경으로 보지 않는다.
+   * 서버 응답(modify·revert·activate)에는 늘 있고, 클라이언트가 만드는 낙관적 반영·롤백 값에는 없다
+   */
+  updatedAt?: string;
+  /**
    * 시간 변경: 이번 ADD/SUBTRACT 기록(차감으로 만료돼도 EXPIRE가 아니라 SUBTRACT). 되돌리기가 이 id를 쓴다.
    * 되돌리기: 되돌린 기록(revertedAt 채워짐)
    */
