@@ -3,8 +3,9 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import ProjectsPage from "@/app/projects/page";
 import { SITE_DESCRIPTION } from "@/lib/site";
 
+const push = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push }),
 }));
 
 vi.mock("@/components/ui/Toast", () => ({
@@ -27,6 +28,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  push.mockReset();
 });
 
 describe("프로젝트 목록 탭", () => {
@@ -165,8 +167,87 @@ describe("신규 유저의 검색·정렬 (UX-46)", () => {
 describe("새 프로젝트 폼 (UX-47)", () => {
   it("폼을 열면 이름 입력칸에 포커스가 간다", async () => {
     render(<ProjectsPage />);
-    fireEvent.click(await screen.findByRole("button", { name: /새 프로젝트/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /첫 프로젝트 만들기/ }));
     expect(screen.getByLabelText("프로젝트 이름")).toHaveFocus();
+  });
+
+  // C109: 프로젝트와 타이머는 1:1이라 만든 직후 상세 화면에서 타이머 만들기 창을 바로 열게 플래그를 붙여 보낸다
+  it("프로젝트를 만들면 타이머 만들기 플래그를 붙여 상세 화면으로 보낸다", async () => {
+    const listFetch = global.fetch;
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/projects" && init?.method === "POST") {
+        return new Response(JSON.stringify({ data: { id: "new1" } }), { status: 201 });
+      }
+      return listFetch(input, init);
+    }) as typeof fetch;
+    render(<ProjectsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /첫 프로젝트 만들기/ }));
+    fireEvent.change(screen.getByLabelText("프로젝트 이름"), { target: { value: "주말 서브어톤" } });
+    fireEvent.click(screen.getByRole("button", { name: "프로젝트 만들기" }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/projects/new1?new=timer"));
+  });
+});
+
+// C103: 빈 목록에서는 같은 동작의 강조 버튼 두 개가 경쟁하지 않게 본문 CTA 하나만 남긴다
+describe("빈 목록의 만들기 버튼 (C103)", () => {
+  function stubMine(total: number) {
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/api/auth/me")) {
+        return jsonResponse({ id: "u1", chzzkUserId: "c1", nickname: "삼루먼", profileImageUrl: null });
+      }
+      const n = url.startsWith("/api/projects/mine") ? total : 2;
+      return jsonResponse({ projects: [], pagination: { page: 1, limit: 12, total: n, totalPages: 1 } });
+    }) as typeof fetch;
+  }
+
+  it("내 프로젝트가 0개면 헤더 '새 프로젝트'를 숨기고 본문 버튼 하나만 보인다", async () => {
+    stubMine(0);
+    render(<ProjectsPage />);
+    await screen.findByRole("button", { name: /첫 프로젝트 만들기/ });
+    await waitFor(() => expect(screen.queryByRole("button", { name: /새 프로젝트/ })).not.toBeInTheDocument());
+  });
+
+  it("빈 목록에서 폼을 열면 헤더에 '취소'가 나와 닫을 수 있다", async () => {
+    stubMine(0);
+    render(<ProjectsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /첫 프로젝트 만들기/ }));
+    fireEvent.click(screen.getByRole("button", { name: "취소" }));
+    expect(screen.queryByLabelText("프로젝트 이름")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /첫 프로젝트 만들기/ })).toBeInTheDocument();
+  });
+
+  it("다른 프로젝트 탭에서는 본문 버튼이 없으므로 헤더 버튼을 보인다", async () => {
+    stubMine(0);
+    render(<ProjectsPage />);
+    await screen.findByRole("tab", { name: /내 프로젝트 \(0\)/ });
+    fireEvent.click(screen.getByRole("tab", { name: /다른 프로젝트/ }));
+    expect(await screen.findByRole("button", { name: /새 프로젝트/ })).toBeInTheDocument();
+  });
+
+  it("개수는 0개지만 목록 요청이 실패하면 본문 버튼이 없으므로 헤더 버튼을 보인다", async () => {
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/api/auth/me")) {
+        return jsonResponse({ id: "u1", chzzkUserId: "c1", nickname: "삼루먼", profileImageUrl: null });
+      }
+      if (url.endsWith("?limit=1")) {
+        return jsonResponse({ projects: [], pagination: { page: 1, limit: 1, total: 0, totalPages: 0 } });
+      }
+      return new Response(null, { status: 500 });
+    }) as typeof fetch;
+    render(<ProjectsPage />);
+    await screen.findByText("프로젝트를 불러오지 못했습니다.");
+    await screen.findByRole("tab", { name: /내 프로젝트 \(0\)/ });
+    expect(screen.getByRole("button", { name: /새 프로젝트/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /첫 프로젝트 만들기/ })).not.toBeInTheDocument();
+  });
+
+  it("내 프로젝트가 있으면 헤더 버튼을 보인다", async () => {
+    stubMine(3);
+    render(<ProjectsPage />);
+    await screen.findByRole("tab", { name: /내 프로젝트 \(3\)/ });
+    expect(screen.getByRole("button", { name: /새 프로젝트/ })).toBeInTheDocument();
   });
 });
 

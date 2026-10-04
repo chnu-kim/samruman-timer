@@ -77,7 +77,7 @@ export function MoreMenu({ label, items, className }: MoreMenuProps) {
       {open && (
         <div
           id={panelId}
-          className="absolute right-0 top-full z-30 mt-1 min-w-40 rounded-lg border border-border bg-background p-1 shadow-dialog"
+          className="absolute right-0 top-full z-30 mt-1 min-w-40 whitespace-nowrap rounded-lg border border-border bg-background p-1 shadow-dialog"
         >
           {items.map((item, index) => (
             <Fragment key={item.label}>

@@ -158,6 +158,51 @@ describe("프로젝트 상세 목표 섹션 (UX-50)", () => {
   });
 });
 
+// C109: 목록에서 프로젝트를 막 만들고 넘어오면(?new=timer) 타이머 만들기 창이 바로 열린다
+describe("프로젝트 생성 직후 타이머 만들기 자동 열기 (C109)", () => {
+  afterEach(() => {
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("소유자이고 타이머가 없으면 창을 열고 주소에서 플래그를 지운다", async () => {
+    window.history.replaceState(null, "", "/projects/p1?new=timer");
+    stubApi({ timers: [], goals: [], me: owner });
+    render(<ProjectDetailPage />);
+    const title = await screen.findByRole("heading", { name: "새 타이머 만들기" }, { timeout: 5000 });
+    await waitFor(() => expect(title.closest("dialog")).toHaveAttribute("open"));
+    expect(window.location.search).toBe("");
+  });
+
+  it("플래그가 없으면 열지 않는다", async () => {
+    window.history.replaceState(null, "", "/projects/p1");
+    stubApi({ timers: [], goals: [], me: owner });
+    render(<ProjectDetailPage />);
+    await screen.findByRole("button", { name: /타이머 만들기/ });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.getByRole("heading", { name: "새 타이머 만들기", hidden: true }).closest("dialog")).not.toHaveAttribute("open");
+  });
+
+  it("시청자에게는 플래그가 있어도 열지 않는다", async () => {
+    window.history.replaceState(null, "", "/projects/p1?new=timer");
+    stubApi({ timers: [], goals: [] });
+    render(<ProjectDetailPage />);
+    await screen.findByText("아직 타이머가 없습니다.");
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByRole("heading", { name: "새 타이머 만들기" })).not.toBeInTheDocument();
+    // 열지 않아도 플래그는 지운다. 남기면 '링크 복사'가 플래그 붙은 주소를 건넨다
+    await waitFor(() => expect(window.location.search).toBe(""));
+  });
+
+  it("타이머가 이미 있으면 플래그가 있어도 열지 않고 플래그만 지운다", async () => {
+    window.history.replaceState(null, "", "/projects/p1?new=timer");
+    stubApi({ timers: [timer], goals: [], me: owner });
+    render(<ProjectDetailPage />);
+    await screen.findByRole("heading", { name: "시간 조작" });
+    await waitFor(() => expect(window.location.search).toBe(""));
+    expect(screen.getByRole("heading", { name: "새 타이머 만들기", hidden: true }).closest("dialog")).not.toHaveAttribute("open");
+  });
+});
+
 // 프로젝트와 타이머는 1:1이라 프로젝트 화면이 곧 조작 콘솔이다
 describe("프로젝트 콘솔", () => {
   it("소유자는 이 화면에서 바로 시간을 조작하고 목표를 함께 본다", async () => {
@@ -365,14 +410,26 @@ describe("프로젝트 콘솔", () => {
     });
   });
 
+  // C109: 1:1인 대상을 '타이머 삭제'·'프로젝트 삭제' 두 개념 대신 결과로 부른다
+  it("더보기 메뉴는 결과 기준으로 '타이머 초기화(목표 기록 유지)'와 '프로젝트 삭제'를 보인다", async () => {
+    stubApi({ timers: [timer], goals: [], me: owner });
+    render(<ProjectDetailPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "더보기" }));
+    expect(screen.getByRole("button", { name: "타이머 초기화(목표 기록 유지)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "프로젝트 삭제" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "타이머 삭제" })).not.toBeInTheDocument();
+  });
+
   it("타이머만 삭제하면 화면에 남아 '타이머 없음' 상태가 된다", async () => {
     const calls = stubApi({ timers: [timer], goals: [], me: owner });
     render(<ProjectDetailPage />);
     await screen.findByRole("heading", { name: "시간 조작" });
 
     fireEvent.click(screen.getByRole("button", { name: "더보기" }));
-    fireEvent.click(screen.getByRole("button", { name: "타이머 삭제" }));
-    const confirmTitle = await screen.findByRole("heading", { name: "타이머 삭제" });
+    fireEvent.click(screen.getByRole("button", { name: "타이머 초기화(목표 기록 유지)" }));
+    const confirmTitle = await screen.findByRole("heading", { name: "타이머 초기화" });
+    // 새 타이머는 오버레이 주소가 달라진다. '초기화'를 같은 타이머 재시작으로 오해해 OBS 소스를 그대로 두지 않게 알린다
+    expect(within(confirmTitle.closest("dialog")!).getByText(/OBS 브라우저 소스에 새 주소를 다시 넣어야/)).toBeInTheDocument();
     // 삭제 뒤 목록을 다시 부르면 타이머가 없다
     global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -381,11 +438,44 @@ describe("프로젝트 콘솔", () => {
       if (url === "/api/projects/p1/goals") return jsonResponse([]);
       return jsonResponse({ id: "t1" });
     }) as typeof fetch;
-    // C093: 확인 버튼에 대상을 넣는다
-    fireEvent.click(within(confirmTitle.closest("dialog")!).getByRole("button", { name: "타이머 삭제" }));
+    fireEvent.click(within(confirmTitle.closest("dialog")!).getByRole("button", { name: "타이머 초기화" }));
 
     expect(await screen.findByText("타이머를 만들면 방송 화면에 띄울 카운트다운과 OBS 주소가 생깁니다.")).toBeInTheDocument();
     expect(calls.some((c) => c.url === "/api/timers/t1" && c.method === "DELETE")).toBe(true);
+  });
+
+  // 목표 진행률은 현재 타이머의 변경 기록으로 계산된다. 목표 행은 남아도 진행 중인 목표는 0부터 다시 쌓인다는 것을 되돌릴 수 없는 동작 앞에서 알린다
+  it("진행 중인 목표가 있으면 초기화 확인창이 진행률이 처음부터 다시 쌓인다고 알린다", async () => {
+    const activeGoal = {
+      id: "g2",
+      projectId: "p1",
+      type: "DURATION",
+      title: "12시간 달성",
+      targetSeconds: 43200,
+      targetDatetime: null,
+      status: "ACTIVE",
+      progress: { percentage: 80, currentSeconds: 34560, remainingToTarget: 8640 },
+      createdAt: "2026-01-01T00:00:00.000Z",
+      completedAt: null,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    stubApi({ timers: [timer], goals: [activeGoal], me: owner });
+    render(<ProjectDetailPage />);
+    await screen.findByText("12시간 달성");
+    fireEvent.click(screen.getByRole("button", { name: "더보기" }));
+    fireEvent.click(screen.getByRole("button", { name: "타이머 초기화(목표 기록 유지)" }));
+    const dialog = (await screen.findByRole("heading", { name: "타이머 초기화" })).closest("dialog")!;
+    expect(within(dialog).getByText(/진행 중인 목표의 진행률은 새 타이머 기준으로 처음부터 다시 쌓입니다/)).toBeInTheDocument();
+  });
+
+  it("진행 중인 목표가 없으면 진행률 안내 문장을 넣지 않는다", async () => {
+    stubApi({ timers: [timer], goals: [goal], me: owner });
+    render(<ProjectDetailPage />);
+    await screen.findByRole("heading", { name: "시간 조작" });
+    fireEvent.click(screen.getByRole("button", { name: "더보기" }));
+    fireEvent.click(screen.getByRole("button", { name: "타이머 초기화(목표 기록 유지)" }));
+    const dialog = (await screen.findByRole("heading", { name: "타이머 초기화" })).closest("dialog")!;
+    expect(within(dialog).queryByText(/처음부터 다시 쌓입니다/)).not.toBeInTheDocument();
   });
 
   it("다른 곳에서 타이머가 삭제되면 폴링이 404를 받는 즉시 '타이머 없음' 상태로 바꾼다", async () => {
