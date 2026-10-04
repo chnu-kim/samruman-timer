@@ -85,16 +85,32 @@ describe("TimerControls", () => {
     expect(onModified).toHaveBeenCalledTimes(1);
   });
 
+  it("'지금 시작'이 409(이미 시작됨)면 오류 대신 현재 상태로 상위를 맞춘다", async () => {
+    mockFetch
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: { code: "CONFLICT", message: "이미 시작된 타이머입니다" } }), { status: 409 }),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { id: timerId, remainingSeconds: 3500, status: "RUNNING" } }), { status: 200 }));
+    const onModified = vi.fn();
+    render(<Harness timerId={timerId} status="SCHEDULED" onModified={onModified} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "지금 시작" }));
+
+    await waitFor(() => expect(onModified).toHaveBeenCalledWith(expect.objectContaining({ id: timerId, remainingSeconds: 3500, status: "RUNNING" })));
+    expect(mockFetch.mock.calls[1][0]).toBe(`/api/timers/${timerId}`);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("'지금 시작'이 실패하면 서버 메시지를 버튼 아래에 알리고 상위를 바꾸지 않는다", async () => {
     mockFetch.mockResolvedValueOnce(
-      new Response(JSON.stringify({ error: { code: "CONFLICT", message: "이미 시작된 타이머입니다" } }), { status: 409 }),
+      new Response(JSON.stringify({ error: { code: "NOT_FOUND", message: "타이머를 찾을 수 없습니다" } }), { status: 404 }),
     );
     const onModified = vi.fn();
     render(<Harness timerId={timerId} status="SCHEDULED" onModified={onModified} />);
 
     fireEvent.click(screen.getByRole("button", { name: "지금 시작" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("이미 시작된 타이머입니다");
+    expect(await screen.findByRole("alert")).toHaveTextContent("타이머를 찾을 수 없습니다");
     expect(screen.getByRole("button", { name: "지금 시작" })).toBeEnabled();
     expect(onModified).not.toHaveBeenCalled();
   });

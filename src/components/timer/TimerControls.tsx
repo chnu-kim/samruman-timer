@@ -250,6 +250,20 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
     }
   }
 
+  /** 이미 시작된 타이머의 현재 상태를 받아 상위에 넘긴다. 받지 못하면 false */
+  async function syncStartedTimer(): Promise<boolean> {
+    try {
+      const res = await fetch(`/api/timers/${timerId}`);
+      if (!res.ok) return false;
+      const json = (await res.json()) as ApiSuccessResponse<{ remainingSeconds: number; status: TimerStatus }>;
+      if (json.data.status === "SCHEDULED") return false;
+      onModified?.({ id: timerId, remainingSeconds: json.data.remainingSeconds, status: json.data.status, log: {} as TimerLogResponse });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   // 낙관적 반영 없이 서버 확정 후에만 바꾼다. 응답은 modify와 같은 형태라 상위가 기록·그래프·목표를 새로 불러온다
   async function handleActivate() {
     setActivateError("");
@@ -258,6 +272,8 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
       const res = await authFetch(`/api/timers/${timerId}/activate`, { method: "POST" });
       if (!res.ok) {
         const json = (await res.json().catch(() => null)) as ApiErrorResponse | null;
+        // 409: 예약 시각이 지나 자동으로 시작됐거나 다른 탭이 먼저 시작했다. 원하던 결과이므로 오류로 보이지 않고 현재 상태로 맞춘다
+        if (res.status === 409 && (await syncStartedTimer())) return;
         setActivateError(json?.error?.message || "타이머를 시작하지 못했습니다.");
         return;
       }
