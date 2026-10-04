@@ -56,6 +56,16 @@ describe("터치 타깃 44px (pointer-coarse)", () => {
     expect(cls).toContain("pointer-coarse:before:absolute");
     expect(cls).toContain("p-2");
     expect(cls).toContain("pointer-coarse:before:-inset-[7px]");
+    // 아래 설명 연필의 영역과 겹치므로 제목 연필이 위에 놓인다
+    expect(cls).toContain("z-10");
+  });
+
+  it("설명 연필은 제목 연필 영역을 덮지 않도록 위로 넓히지 않고 아래로만 넓힌다", () => {
+    render(<EditableText value="설명" onSave={noopSave} editable as="p" />);
+    const cls = screen.getByRole("button", { name: "설명 편집" }).className;
+    expect(cls).toContain("pointer-coarse:before:top-0");
+    expect(cls).toContain("pointer-coarse:before:-bottom-[21px]");
+    expect(cls).not.toContain("pointer-coarse:before:-inset-[7px]");
   });
 
   it("편집 중 저장·취소는 겹치지 않게 상자 자체를 44px로 키운다", () => {
