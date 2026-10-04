@@ -108,15 +108,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
       {/* 컨테이너는 탭을 아래(모바일 하단 빠른 액션 바 등)로 통과시킨다. 버튼이 있는 토스트만 포인터를 받는다.
           모바일 하단 바가 있으면 그 바로 위(--quick-bar-h, globals.css)에 띄워 바와 입력부를 가리지 않는다 */}
-      <div className="fixed left-4 right-4 bottom-[calc(var(--quick-bar-h,0px)+1rem)] z-50 flex flex-col items-stretch gap-2 pointer-events-none md:left-auto md:items-end">
+      <div className="fixed left-4 right-4 bottom-[calc(var(--quick-bar-h,0px)+0.5rem)] md:bottom-4 z-50 flex flex-col items-stretch gap-2 pointer-events-none md:left-auto md:items-end">
         {current && (
+          // 바깥은 불투명 배경(다크의 반투명 틴트 아래로 콘텐츠가 비치지 않게), 안쪽이 변형 색
           <div
             key={current.id}
-            className={cn(
-              "flex items-center gap-2 rounded-lg border text-sm font-medium shadow-md",
-              current.action ? "pointer-events-auto py-1 pl-4 pr-1" : "px-4 py-3",
-              variantStyles[current.variant],
-            )}
+            className={cn("rounded-lg bg-background shadow-md", current.action && "pointer-events-auto")}
             style={{
               animation: current.exiting
                 ? `toast-out ${EXIT_MS / 1000}s ease-in forwards`
@@ -129,31 +126,39 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             // 오류는 개별 alert로 즉시 읽힌다. 성공·정보는 아래 상시 live region이 읽는다
             role={current.variant === "error" ? "alert" : undefined}
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5 shrink-0"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-              aria-hidden="true"
+            <div
+              className={cn(
+                "flex items-center gap-2 rounded-lg border text-sm font-medium",
+                current.action ? "py-1 pl-4 pr-1" : "px-4 py-3",
+                variantStyles[current.variant],
+              )}
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d={iconPaths[current.variant]} />
-            </svg>
-            <span className="min-w-0 flex-1">{current.message}</span>
-            {current.action && (
-              <button
-                type="button"
-                onClick={() => {
-                  const action = current.action;
-                  dismiss();
-                  action?.onClick();
-                }}
-                className="min-h-11 shrink-0 rounded-md px-3 font-semibold underline underline-offset-2 hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5 shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+                aria-hidden="true"
               >
-                {current.action.label}
-              </button>
-            )}
+                <path strokeLinecap="round" strokeLinejoin="round" d={iconPaths[current.variant]} />
+              </svg>
+              <span className="min-w-0 flex-1">{current.message}</span>
+              {current.action && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const action = current.action;
+                    dismiss();
+                    action?.onClick();
+                  }}
+                  className="min-h-11 shrink-0 rounded-md px-3 font-semibold underline underline-offset-2 hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {current.action.label}
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

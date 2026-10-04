@@ -17,8 +17,9 @@ describe("Toast", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "알림" }));
 
-    const item = screen.getByText("추가 완료", { selector: "span" }).parentElement!;
+    const item = screen.getByText("추가 완료", { selector: "span" }).parentElement!.parentElement!;
     expect(item.className).not.toMatch(/pointer-events-auto/);
+    expect(item.className).toMatch(/bg-background/); // 불투명 바탕
     expect(item.parentElement?.className).toMatch(/pointer-events-none/);
   });
 
@@ -92,7 +93,7 @@ describe("Toast", () => {
       );
       fireEvent.click(screen.getByRole("button", { name: "추가" }));
       const undo = screen.getByRole("button", { name: "되돌리기" });
-      expect(undo.parentElement!.className).toMatch(/pointer-events-auto/);
+      expect(undo.parentElement!.parentElement!.className).toMatch(/pointer-events-auto/);
       expect(undo.className).toMatch(/min-h-11/); // 44px 터치 타깃
 
       fireEvent.click(undo);
@@ -110,7 +111,7 @@ describe("Toast", () => {
       act(() => vi.advanceTimersByTime(5900));
       expect(screen.getByRole("button", { name: "되돌리기" })).toBeInTheDocument();
 
-      const item = screen.getByRole("button", { name: "되돌리기" }).parentElement!;
+      const item = screen.getByRole("button", { name: "되돌리기" }).parentElement!.parentElement!;
       fireEvent.mouseEnter(item);
       act(() => vi.advanceTimersByTime(20000));
       expect(screen.getByRole("button", { name: "되돌리기" })).toBeInTheDocument();
