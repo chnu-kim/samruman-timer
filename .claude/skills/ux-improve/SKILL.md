@@ -1,6 +1,6 @@
 ---
 name: ux-improve
-description: docs/UX-IMPROVEMENTS.md(기능 개선 백로그)에서 항목을 골라 구현하고 체크리스트를 갱신한다. UI/UX 품질 루프(docs/UX-LOOP.md)는 ux-loop 스킬. 인자로 항목 ID(P0-1, R-2 등), next, status를 받는다.
+description: docs/UX-IMPROVEMENTS.md(기능 개선 백로그)에서 항목을 골라 구현하고 체크리스트를 갱신한다. 인자로 항목 ID(P0-1, R-2 등), next, status를 받는다.
 argument-hint: "<항목 ID | next | status>"
 ---
 

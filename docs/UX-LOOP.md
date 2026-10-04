@@ -1,6 +1,6 @@
 # UX 개선 루프
 
-2026-10-04에 시작한 서비스 전체 UI/UX 개선 루프의 기준·결정·남은 작업이다. 목표는 사용자가 Apple 수준의 완성도를 느끼는 것이고, 요소를 더하기보다 덜어내는 쪽을 고른다. 진행 방법은 `ux-loop` 스킬에 있다.
+2026-10-04에 시작한 서비스 전체 UI/UX 개선 루프의 기준·결정·남은 작업이다. 목표는 사용자가 Apple 수준의 완성도를 느끼는 것이고, 요소를 더하기보다 덜어내는 쪽을 고른다.
 
 - 평가 기준: [ux/RUBRIC.md](ux/RUBRIC.md)(논문·표준 근거, 심각도 S1~S4), [ux/APPLE-HIG.md](ux/APPLE-HIG.md)(Apple HIG 기반 측정 체크리스트)
 - 이전 리뷰: [UI-UX-REVIEW.md](UI-UX-REVIEW.md)(2026-10-02, 기록용). 기능 백로그는 [UX-IMPROVEMENTS.md](UX-IMPROVEMENTS.md)
