@@ -210,6 +210,9 @@ RootLayout (ThemeProvider, ToastProvider, SessionExpiredHandler)
 | 640-1024px (태블릿) | 2열 그리드, 그래프 전체 폭 |
 | > 1024px (데스크톱) | 3열 그리드, 콘솔의 시간 조작·목표와 기록·그래프를 3:2로 나란히 |
 
+- 320px 폭까지 가로 스크롤이 없어야 한다(WCAG 1.4.10). 시·분·초처럼 한 줄에 여러 칸을 두는 입력은 고정 폭(`w-20`) 대신 줄 폭을 나눠 쓴다(`[&>div]:flex-1 [&>div]:min-w-0` + 입력 `w-full`, `Input`이 div로 감싸여 있어서). 숫자 칸에는 `inputMode="numeric"`.
+- 모바일 하단 고정 바의 높이는 `globals.css`의 `--quick-bar-h` 하나로 두고, body 하단 여백과 `scroll-padding-bottom`이 같이 쓴다. 그래서 Tab으로 포커스가 간 요소가 바 뒤에 숨지 않는다(WCAG 2.4.11). 바 높이를 바꾸면 이 변수만 고친다.
+
 ## 접근성 고려사항
 
 - 시맨틱 HTML 사용 (button, nav, main, section)
