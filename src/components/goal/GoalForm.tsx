@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
+import { changeTimeField, EMPTY_TIME_FIELDS, timeFieldsToSeconds, type TimeFields } from "@/lib/timer-input";
 import type { ApiSuccessResponse, ApiErrorResponse, GoalResponse } from "@/types";
 
 const GOAL_TYPE_OPTIONS = [
@@ -66,8 +67,10 @@ export function GoalForm({ projectId, onSuccess }: GoalFormProps) {
   const [title, setTitle] = useState("");
   const [goalType, setGoalType] = useState<"DURATION" | "DEADLINE">("DURATION");
   const goalTypeLabelId = useId();
-  const [hours, setHours] = useState(0);
-  const [minutes, setMinutes] = useState(0);
+  // 문자열로 들고 있어야 칸을 지웠을 때 '0'이 다시 채워지지 않는다. 초 칸은 없어 늘 빈 값이다
+  const [time, setTime] = useState<TimeFields>(EMPTY_TIME_FIELDS);
+  const targetSeconds = timeFieldsToSeconds(time);
+  const submitHintId = useId();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -116,6 +119,23 @@ export function GoalForm({ projectId, onSuccess }: GoalFormProps) {
   const maxDay = daysInMonth(schedYear, schedMonth);
   const clampedDay = Math.min(schedDay, maxDay);
 
+  const deadlinePast = useMemo(
+    () => deadlineDatetime !== "" && new Date(deadlineDatetime).getTime() <= Date.now(),
+    [deadlineDatetime],
+  );
+
+  // 만들 수 없는 이유. 타이머 만들기와 같은 규칙으로 버튼을 비활성으로 두고 그 아래 한 줄로 알린다
+  // (제출 뒤 오류는 상한 초과·서버 오류용으로만 남는다)
+  const submitHint = (() => {
+    const noTitle = !title.trim();
+    if (goalType === "DURATION") {
+      if (targetSeconds <= 0) return noTitle ? "제목과 목표 시간을 입력하면 만들 수 있습니다." : "목표 시간을 입력하면 만들 수 있습니다.";
+    } else if (!deadlineDatetime || deadlinePast) {
+      return noTitle ? "제목을 입력하고 지금 이후의 날짜를 고르면 만들 수 있습니다." : "지금 이후의 날짜를 고르면 만들 수 있습니다.";
+    }
+    return noTitle ? "제목을 입력하면 만들 수 있습니다." : "";
+  })();
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -126,7 +146,6 @@ export function GoalForm({ projectId, onSuccess }: GoalFormProps) {
     }
 
     if (goalType === "DURATION") {
-      const targetSeconds = hours * 3600 + minutes * 60;
       if (targetSeconds <= 0) {
         setError("목표 시간은 1분 이상이어야 합니다.");
         return;
@@ -222,10 +241,10 @@ export function GoalForm({ projectId, onSuccess }: GoalFormProps) {
               type="number"
               inputMode="numeric"
               min={0}
-              value={hours}
-              onChange={(e) => setHours(Number(e.target.value))}
+              value={time.hours}
+              onChange={(e) => setTime((t) => changeTimeField(t, "hours", e.target.value))}
               className="w-full text-center"
-              placeholder="시"
+              placeholder="0"
               aria-label="시간"
             />
             <span className="text-sm text-muted-foreground">시간</span>
@@ -233,11 +252,10 @@ export function GoalForm({ projectId, onSuccess }: GoalFormProps) {
               type="number"
               inputMode="numeric"
               min={0}
-              max={59}
-              value={minutes}
-              onChange={(e) => setMinutes(Number(e.target.value))}
+              value={time.minutes}
+              onChange={(e) => setTime((t) => changeTimeField(t, "minutes", e.target.value))}
               className="w-full text-center"
-              placeholder="분"
+              placeholder="0"
               aria-label="분"
             />
             <span className="text-sm text-muted-foreground">분</span>
@@ -299,11 +317,23 @@ export function GoalForm({ projectId, onSuccess }: GoalFormProps) {
 
       {error && <p className="text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>}
 
-      {/* 다이얼로그 푸터: 주 동작 하나를 오른쪽에. 닫기(X)가 있어 취소 버튼은 두지 않는다 */}
-      <div className="flex justify-end pt-2">
-        <Button type="submit" size="sm" disabled={loading || !title.trim()}>
+      {/* 다이얼로그 푸터: 주 동작 하나를 오른쪽에. 닫기(X)가 있어 취소 버튼은 두지 않는다.
+          본문 주 버튼과 같은 md(40px), 터치 기기에서는 44px */}
+      <div className="flex flex-col items-end gap-1 pt-2">
+        <Button
+          type="submit"
+          size="md"
+          disabled={loading || submitHint !== ""}
+          aria-describedby={submitHint ? submitHintId : undefined}
+          className="whitespace-nowrap pointer-coarse:min-h-11"
+        >
           {loading ? "생성 중…" : "목표 만들기"}
         </Button>
+        {submitHint && (
+          <p id={submitHintId} className="text-xs text-muted-foreground">
+            {submitHint}
+          </p>
+        )}
       </div>
     </form>
   );

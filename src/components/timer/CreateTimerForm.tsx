@@ -8,7 +8,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
 import { authFetch } from "@/lib/auth-fetch";
-import { normalizeTimeParts, type TimeParts } from "@/lib/timer-input";
+import { changeTimeField, EMPTY_TIME_FIELDS, timeFieldsToSeconds, type TimeFields, type TimeParts } from "@/lib/timer-input";
 import type { ApiSuccessResponse, ApiErrorResponse, TimerCreateResponse } from "@/types";
 
 function formatRelativeTime(targetMs: number): string {
@@ -97,20 +97,15 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess }: Cre
   const { toast } = useToast();
   const [title, setTitle] = useState(defaultTitle);
   const titleHintId = useId();
-  const timeHintId = useId();
+  const submitHintId = useId();
   const startModeLabelId = useId();
-  const [hours, setHours] = useState(0);
-  const [minutes, setMinutes] = useState(0);
-  const [seconds, setSeconds] = useState(0);
-  const initialSeconds = hours * 3600 + minutes * 60 + seconds;
+  // 문자열로 들고 있어야 칸을 지웠을 때 '0'이 다시 채워지지 않는다(빈 칸은 placeholder '0')
+  const [time, setTime] = useState<TimeFields>(EMPTY_TIME_FIELDS);
+  const initialSeconds = timeFieldsToSeconds(time);
 
   // 시간 조작 폼과 같은 규칙: 60 이상의 분·초는 윗자리로 올린다(90분 → 1시간 30분)
-  function changeTime(field: keyof TimeParts, value: number) {
-    const next = { hours, minutes, seconds, [field]: value };
-    const normalized = normalizeTimeParts(next.hours, next.minutes, next.seconds);
-    setHours(normalized.hours);
-    setMinutes(normalized.minutes);
-    setSeconds(normalized.seconds);
+  function changeTime(field: keyof TimeParts, raw: string) {
+    setTime((t) => changeTimeField(t, field, raw));
   }
   const [useScheduled, setUseScheduled] = useState(false);
   const [scheduledStartAt, setScheduledStartAt] = useState("");
@@ -259,6 +254,13 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess }: Cre
 
   const scheduledDate = scheduledStartAt ? new Date(scheduledStartAt) : null;
 
+  // 만들기 버튼이 비활성인 이유. 기본값을 채우지 않고 막기만 하며, 새 목표와 같은 자리(버튼 아래)에 한 줄로 알린다
+  const noTitle = !title.trim();
+  const submitHint =
+    initialSeconds <= 0
+      ? noTitle ? "제목과 초기 시간을 입력하면 만들 수 있습니다." : "초기 시간을 입력하면 만들 수 있습니다."
+      : noTitle ? "제목을 입력하면 만들 수 있습니다." : "";
+
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       {/* 화면에서는 프로젝트 이름을 쓰므로 타이머 제목은 오버레이의 '제목 표시'에만 나온다 */}
@@ -286,10 +288,10 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess }: Cre
             type="number"
             inputMode="numeric"
             min={0}
-            value={hours}
-            onChange={(e) => changeTime("hours", Number(e.target.value))}
+            value={time.hours}
+            onChange={(e) => changeTime("hours", e.target.value)}
             className="w-full text-center"
-            placeholder="시"
+            placeholder="0"
             aria-label="시간"
             // 제목은 프로젝트 이름으로 미리 채워지므로 모달을 열면 비어 있는 시간부터 입력한다
             data-autofocus
@@ -299,10 +301,10 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess }: Cre
             type="number"
             inputMode="numeric"
             min={0}
-            value={minutes}
-            onChange={(e) => changeTime("minutes", Number(e.target.value))}
+            value={time.minutes}
+            onChange={(e) => changeTime("minutes", e.target.value)}
             className="w-full text-center"
-            placeholder="분"
+            placeholder="0"
             aria-label="분"
           />
           <span className="text-sm text-muted-foreground">분</span>
@@ -310,20 +312,14 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess }: Cre
             type="number"
             inputMode="numeric"
             min={0}
-            value={seconds}
-            onChange={(e) => changeTime("seconds", Number(e.target.value))}
+            value={time.seconds}
+            onChange={(e) => changeTime("seconds", e.target.value)}
             className="w-full text-center"
-            placeholder="초"
+            placeholder="0"
             aria-label="초"
           />
           <span className="text-sm text-muted-foreground">초</span>
         </div>
-        {/* 만들기 버튼이 비활성인 이유. 기본값을 채우지 않고 0이면 막기만 한다 */}
-        {initialSeconds <= 0 && (
-          <p id={timeHintId} className="mt-1 text-xs text-muted-foreground">
-            초기 시간을 입력하면 만들 수 있습니다.
-          </p>
-        )}
       </div>
 
       {/* 시작 방식 */}
@@ -423,16 +419,22 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess }: Cre
 
       {error && <p className="text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>}
       {/* 다이얼로그 푸터: 주 동작 하나를 오른쪽에. 닫기(X)가 있어 취소 버튼은 두지 않는다 */}
-      <div className="flex justify-end pt-2">
+      {/* 본문 주 버튼과 같은 md(40px), 터치 기기에서는 44px */}
+      <div className="flex flex-col items-end gap-1 pt-2">
         <Button
           type="submit"
-          size="sm"
-          disabled={loading || !title.trim() || initialSeconds <= 0}
-          aria-describedby={initialSeconds <= 0 ? timeHintId : undefined}
-          className="whitespace-nowrap"
+          size="md"
+          disabled={loading || submitHint !== ""}
+          aria-describedby={submitHint ? submitHintId : undefined}
+          className="whitespace-nowrap pointer-coarse:min-h-11"
         >
           {loading ? "생성 중…" : "타이머 만들기"}
         </Button>
+        {submitHint && (
+          <p id={submitHintId} className="text-xs text-muted-foreground">
+            {submitHint}
+          </p>
+        )}
       </div>
     </form>
   );

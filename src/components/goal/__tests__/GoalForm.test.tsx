@@ -12,8 +12,10 @@ describe("GoalForm", () => {
       </ToastProvider>,
     );
     fireEvent.change(screen.getByLabelText("목표 제목"), { target: { value: "오류 확인" } });
+    // 0은 버튼이 막으므로 제출 뒤 오류는 상한 초과로 만든다
+    fireEvent.change(screen.getByRole("spinbutton", { name: "시간" }), { target: { value: "3000" } });
     fireEvent.click(screen.getByRole("button", { name: "목표 만들기" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("목표 시간은 1분 이상이어야 합니다.");
+    expect(screen.getByRole("alert")).toHaveTextContent("목표 시간은 최대 약 100일까지 설정할 수 있습니다.");
 
     fireEvent.click(screen.getByRole("radio", { name: "데드라인 목표" }));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -43,5 +45,91 @@ describe("GoalForm", () => {
     fireEvent.keyDown(radios[0], { key: "ArrowRight" });
     expect(screen.getByRole("radio", { name: "데드라인 목표" })).toHaveAttribute("aria-checked", "true");
     expect(screen.queryByRole("button", { name: "취소" })).not.toBeInTheDocument();
+  });
+
+  // R13: 시·분 칸은 빈 값으로 시작하고(placeholder '0'), 지우면 '0'이 다시 채워지지 않는다
+  it("시·분 칸은 비어 있고 지우면 빈 칸으로 남는다", () => {
+    render(
+      <ToastProvider>
+        <GoalForm projectId="p1" />
+      </ToastProvider>,
+    );
+    const hours = screen.getByRole("spinbutton", { name: "시간" });
+    const minutes = screen.getByRole("spinbutton", { name: "분" });
+    for (const input of [hours, minutes]) {
+      expect(input).toHaveValue(null);
+      expect(input).toHaveAttribute("placeholder", "0");
+    }
+    fireEvent.change(hours, { target: { value: "2" } });
+    expect(hours).toHaveValue(2);
+    fireEvent.change(hours, { target: { value: "" } });
+    expect(hours).toHaveValue(null);
+  });
+
+  // R13: 타이머 만들기와 같은 규칙. 시간이 0이면 제출 전에 막고 이유를 버튼 아래 한 줄로 알린다
+  it("제목만 입력하면 버튼이 비활성이고 이유가 연결되며, 시간을 넣으면 활성이 된다", () => {
+    render(
+      <ToastProvider>
+        <GoalForm projectId="p1" />
+      </ToastProvider>,
+    );
+    const submit = screen.getByRole("button", { name: "목표 만들기" });
+    expect(submit).toBeDisabled();
+    expect(submit).toHaveAccessibleDescription("제목과 목표 시간을 입력하면 만들 수 있습니다.");
+
+    fireEvent.change(screen.getByLabelText("목표 제목"), { target: { value: "10시간 돌파" } });
+    expect(submit).toBeDisabled();
+    expect(submit).toHaveAccessibleDescription("목표 시간을 입력하면 만들 수 있습니다.");
+
+    fireEvent.change(screen.getByRole("spinbutton", { name: "분" }), { target: { value: "30" } });
+    expect(submit).toBeEnabled();
+    expect(submit).not.toHaveAttribute("aria-describedby");
+    expect(screen.queryByText(/만들 수 있습니다/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  // 타이머 생성·시간 조작과 같은 올림 규칙
+  it("분 90은 1시간 30분으로 올린다", () => {
+    render(
+      <ToastProvider>
+        <GoalForm projectId="p1" />
+      </ToastProvider>,
+    );
+    fireEvent.change(screen.getByRole("spinbutton", { name: "분" }), { target: { value: "90" } });
+    expect(screen.getByRole("spinbutton", { name: "시간" })).toHaveValue(1);
+    expect(screen.getByRole("spinbutton", { name: "분" })).toHaveValue(30);
+    expect(screen.getByRole("spinbutton", { name: "분" })).not.toHaveAttribute("max");
+  });
+
+  it("데드라인 목표는 제목과 미래 날짜가 있으면 만들 수 있다", () => {
+    render(
+      <ToastProvider>
+        <GoalForm projectId="p1" />
+      </ToastProvider>,
+    );
+    fireEvent.click(screen.getByRole("radio", { name: "데드라인 목표" }));
+    const submit = screen.getByRole("button", { name: "목표 만들기" });
+    expect(submit).toHaveAccessibleDescription("제목을 입력하면 만들 수 있습니다.");
+    fireEvent.change(screen.getByLabelText("목표 제목"), { target: { value: "마감" } });
+    expect(submit).toBeEnabled();
+
+    // 올해 1월 1일 0시는 (1월 1일 0시 정각이 아닌 한) 지난 시각이다
+    const year = screen.getByRole("combobox", { name: "연도" }) as HTMLSelectElement;
+    fireEvent.change(year, { target: { value: year.options[0].value } });
+    fireEvent.change(screen.getByRole("combobox", { name: "월" }), { target: { value: "1" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "일" }), { target: { value: "1" } });
+    fireEvent.change(screen.getAllByRole("combobox", { name: "시" })[0], { target: { value: "0" } });
+    expect(submit).toBeDisabled();
+    expect(submit).toHaveAccessibleDescription("지금 이후의 날짜를 고르면 만들 수 있습니다.");
+  });
+
+  // R04: 다이얼로그 제출도 본문 주 버튼과 같은 md(데스크톱 40px, 터치 44px)
+  it("제출 버튼은 md 크기이고 터치 기기에서 44px을 보장한다", () => {
+    render(
+      <ToastProvider>
+        <GoalForm projectId="p1" />
+      </ToastProvider>,
+    );
+    expect(screen.getByRole("button", { name: "목표 만들기" })).toHaveClass("h-10", "pointer-coarse:min-h-11");
   });
 });
