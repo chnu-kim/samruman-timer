@@ -87,6 +87,9 @@ function ConnectionLostBadge({ lastSyncedAtMs, className }: { lastSyncedAtMs: nu
   );
 }
 
+/** 폴링 한 번의 응답 대기 한도. 넘으면 실패 1회로 센다 */
+const POLL_TIMEOUT_MS = 10_000;
+
 interface TimerConsoleProps {
   timerId: string;
   isOwner: boolean;
@@ -222,7 +225,15 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
   // 실패(네트워크 오류·5xx)는 잡지 않고 reject로 넘긴다. 화면은 마지막 값으로 로컬 카운트를 이어 가고,
   // 연속 실패 횟수는 usePolling이 세어 연결 상태로 돌려준다
   const pollTimer = useCallback(async () => {
-    const res = await fetch(`/api/timers/${timerId}`);
+    // 응답 없이 멈춘 요청(연결은 살아 있는데 패킷이 안 오는 경우)도 실패로 세도록 시간 제한을 둔다
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), POLL_TIMEOUT_MS);
+    let res: Response;
+    try {
+      res = await fetch(`/api/timers/${timerId}`, { signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
     if (res.status === 404) {
       onTimerRemovedRef.current?.();
       return;
