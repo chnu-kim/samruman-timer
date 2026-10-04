@@ -115,7 +115,7 @@ export function GoalForm({ projectId, onSuccess, onCancel }: GoalFormProps) {
     setError("");
 
     if (!title.trim()) {
-      setError("제목을 입력해주세요.");
+      setError("제목을 입력해 주세요.");
       return;
     }
 
@@ -155,7 +155,7 @@ export function GoalForm({ projectId, onSuccess, onCancel }: GoalFormProps) {
 
     // DEADLINE
     if (!deadlineDatetime) {
-      setError("목표 날짜/시간을 설정해주세요.");
+      setError("목표 날짜/시간을 설정해 주세요.");
       return;
     }
     if (new Date(deadlineDatetime).getTime() <= Date.now()) {
@@ -316,7 +316,7 @@ export function GoalForm({ projectId, onSuccess, onCancel }: GoalFormProps) {
           </Button>
         )}
         <Button type="submit" size="sm" disabled={loading || !title.trim()}>
-          {loading ? "생성 중..." : "목표 만들기"}
+          {loading ? "생성 중…" : "목표 만들기"}
         </Button>
       </div>
     </form>

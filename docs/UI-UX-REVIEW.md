@@ -40,7 +40,7 @@
 - **권한별 UI 분기가 정확하다.** 비소유자와 비로그인 시청자에게는 편집, 시간 조작, 통계, 삭제, OBS 설정이 모두 숨겨지고 키보드 단축키도 막힌다([10-project-detail-nonowner--d-light.png](ux-review/10-project-detail-nonowner--d-light.png), [18-timer-loggedout-viewer--d-light.png](ux-review/18-timer-loggedout-viewer--d-light.png), `src/app/timers/[id]/page.tsx:278`).
 - **예약 상태가 색, 문구, 조작 패널 세 경로로 전달된다.** '시작 대기 중 · 시각' 서브텍스트와 '예약된 타이머는 시작 전까지 시간을 변경할 수 없습니다.' 안내가 함께 나온다([15-timer-scheduled--d-light.png](ux-review/15-timer-scheduled--d-light.png), `CountdownDisplay.tsx:114-118`, `TimerControls.tsx:196-204`).
 - **시간 추가가 즉시 화면에 반영된다.** 낙관적 갱신이라 서버 응답 전에 카운트다운이 바뀌고, 확인 버튼이 '추가 확인 (2시간)'처럼 방향과 양을 되읽어 준다(`TimerControls.tsx:102-107, 404-406`).
-- **파괴적 작업은 모두 확인 다이얼로그를 거친다.** 네이티브 `<dialog>` 기반이라 첫 포커스가 '취소'에 놓이고, ESC 후 포커스가 원래 자리로 돌아온다. 프로젝트 삭제 문구는 '하위 타이머도 함께 삭제됩니다'처럼 결과를 설명한다([13-timer-delete-confirm--m-light.png](ux-review/13-timer-delete-confirm--m-light.png), `ConfirmDialog.tsx:33-55`).
+- **파괴적 작업은 모두 확인 다이얼로그를 거친다.** 네이티브 `<dialog>` 기반이라 첫 포커스가 빠져나가는 버튼('돌아가기')에 놓이고, ESC 후 포커스가 원래 자리로 돌아온다. 프로젝트 삭제 문구는 '타이머·목표·변경 기록이 함께 지워지고 되돌릴 수 없습니다.'처럼 잃는 것을 결과로 설명한다([13-timer-delete-confirm--m-light.png](ux-review/13-timer-delete-confirm--m-light.png), `ConfirmDialog.tsx:33-55`).
 - **오버레이가 방송용으로 잘 만들어졌다.** html과 body 배경이 실제로 투명하고(측정값 `rgba(0,0,0,0)`), 기본 그림자, 고정폭 숫자, 5초 재동기화를 갖췄다. 긴급과 만료 상태는 색만이 아니라 '만료됨', '시작 대기 중' 텍스트로도 전달된다([20-overlay--d-dark.png](ux-review/20-overlay--d-dark.png), [21-overlay-urgent--d-dark.png](ux-review/21-overlay-urgent--d-dark.png), `overlay/page.tsx:35, 104-125, 150, 262-288`).
 - **모바일 레이아웃이 버틴다.** 390px에서 측정한 9개 화면 모두 `scrollWidth`가 390이다. 변경 기록과 후원자 랭킹은 카드로 바뀌고, 하단 빠른 바 버튼은 약 110x48px이며, 닉네임이 없으면 이유를 보여 주며 비활성화된다([11-timer-running-owner--m-light.png](ux-review/11-timer-running-owner--m-light.png), [19-timer-stats--m-dark.png](ux-review/19-timer-stats--m-dark.png)).
 - **색을 토큰으로 관리하고 다크 모드를 체계적으로 재정의한다**(`globals.css:5-69`). 다크 모드 텍스트는 측정한 8개 화면에서 AA를 통과했다(차트 눈금 제외).
@@ -369,7 +369,7 @@
 - **근거**: `src/app/projects/page.tsx:185-192, 206-213`
 
 #### UX-40. 목표 취소 확인창에 '취소'와 '취소하기' 버튼이 나란히 있다
-- **상태**: 해결 — 목표 취소 확인창에만 `cancelLabel="돌아가기"`를 넘겼다. 확인 라벨 '취소하기'는 그대로다.
+- **상태**: 해결 — 확인 라벨을 '목표 취소'로 바꾸고, 빠져나가는 버튼은 모든 확인창의 기본값 '돌아가기'로 올렸다(W27).
 - **심각도**: minor · **영역**: 일관성 / 프로젝트 상세
 - **관찰**: `confirmLabel="취소하기"`만 넘기고 cancelLabel은 기본값 '취소'를 쓴다. 확인 창 문구는 '취소된 목표는 다시 활성화할 수 없습니다'라고 경고한다.
 - **이유**: 물러서려는 사람이 되돌릴 수 없는 버튼을 누를 수 있다. 버튼 색(danger)이 달라서 위험은 중간 정도다.

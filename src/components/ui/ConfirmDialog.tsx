@@ -19,7 +19,7 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel = "확인",
-  cancelLabel = "취소",
+  cancelLabel = "돌아가기",
   variant = "default",
   onConfirm,
   onCancel,

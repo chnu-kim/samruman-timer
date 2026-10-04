@@ -153,7 +153,7 @@ describe("OverlaySettings 접근성 (UX-25)", () => {
     render(<OverlaySettings timerId="abc" onClose={() => {}} />);
 
     expect(await screen.findByRole("textbox", { name: "텍스트 색상 코드" })).toHaveValue("#ffffff");
-    expect(screen.getByRole("textbox", { name: "배경색 코드" })).toHaveValue("transparent");
+    expect(screen.getByRole("textbox", { name: "배경색 코드" })).toHaveValue("투명");
   });
 
   it("위치 버튼이 선택 상태를 aria-pressed로 알린다", async () => {
@@ -206,6 +206,22 @@ describe("OverlaySettings 색 입력 검증 (UX-55)", () => {
     expect(overlayCode()).not.toContain("bg=");
   });
 
+  // C158: 화면에는 CSS 키워드 대신 '투명'을 보이고, '투명'을 입력해도 transparent로 저장된다
+  it("배경색 칸은 투명을 '투명'으로 보이고 '투명' 입력을 받는다", async () => {
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    const input = await screen.findByRole("textbox", { name: "배경색 코드" });
+    expect(input).toHaveValue("투명");
+    expect(input).toHaveAttribute("placeholder", "투명");
+
+    fireEvent.change(input, { target: { value: "#000000" } });
+    expect(overlayCode()).toContain("bg=%23000000");
+
+    fireEvent.change(input, { target: { value: "투명" } });
+    expect(input).toHaveAttribute("aria-invalid", "false");
+    expect(input).toHaveValue("투명");
+    expect(overlayCode()).not.toContain("bg=");
+  });
+
   it("프리셋을 고르면 미완성 입력이 프리셋 값으로 바뀐다", async () => {
     render(<OverlaySettings timerId="abc" onClose={() => {}} />);
     const input = await screen.findByRole("textbox", { name: "텍스트 색상 코드" });
@@ -247,7 +263,7 @@ describe("OverlaySettings 미리보기 (UX-57·C063)", () => {
   });
 });
 
-// 프로젝트 화면에 통합하면서 타이머 제목은 오버레이의 '타이틀 표시'에서만 쓰이므로 여기서 고친다
+// 프로젝트 화면에 통합하면서 타이머 제목은 오버레이의 '제목 표시'에서만 쓰이므로 여기서 고친다
 describe("OverlaySettings 표시할 제목", () => {
   type Call = { url: string; init?: RequestInit };
   let calls: Call[];
@@ -268,7 +284,7 @@ describe("OverlaySettings 표시할 제목", () => {
     }));
   });
 
-  it("타이틀 표시가 켜져 있으면 제목을 고칠 수 있고, 저장하면 제목과 설정을 함께 저장한다", async () => {
+  it("제목 표시가 켜져 있으면 제목을 고칠 수 있고, 저장하면 제목과 설정을 함께 저장한다", async () => {
     render(<OverlaySettings timerId="abc" onClose={() => {}} />);
     const input = await screen.findByLabelText("표시할 제목");
     expect(input).toHaveValue("본방 타이머");
@@ -307,7 +323,7 @@ describe("OverlaySettings 표시할 제목", () => {
     fireEvent.change(await screen.findByLabelText("표시할 제목"), { target: { value: "   " } });
     fireEvent.click(screen.getByRole("button", { name: "제목 저장" }));
 
-    expect(mockToast).toHaveBeenCalledWith("표시할 제목을 입력해주세요", "error");
+    expect(mockToast).toHaveBeenCalledWith("표시할 제목을 입력해 주세요", "error");
     expect(calls.some((c) => c.init?.method === "PATCH" || c.init?.method === "PUT")).toBe(false);
   });
 
@@ -347,19 +363,19 @@ describe("OverlaySettings 표시할 제목", () => {
     expect(screen.getByRole("button", { name: "제목 저장" })).toBeInTheDocument();
   });
 
-  it("타이틀 표시를 끄면 고친 제목을 되돌려 숨은 값을 저장하지 않는다", async () => {
+  it("제목 표시를 끄면 고친 제목을 되돌려 숨은 값을 저장하지 않는다", async () => {
     render(<OverlaySettings timerId="abc" onClose={() => {}} />);
     fireEvent.change(await screen.findByLabelText("표시할 제목"), { target: { value: "숨을 제목" } });
-    fireEvent.click(screen.getByRole("checkbox", { name: "타이틀 표시" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "타이틀 표시" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "제목 표시" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "제목 표시" }));
     expect(screen.getByLabelText("표시할 제목")).toHaveValue("본방 타이머");
     expect(screen.getByRole("status")).toHaveTextContent("");
   });
 
-  it("타이틀 표시를 끄면 제목 입력란을 숨긴다", async () => {
+  it("제목 표시를 끄면 제목 입력란을 숨긴다", async () => {
     render(<OverlaySettings timerId="abc" onClose={() => {}} />);
     await screen.findByLabelText("표시할 제목");
-    fireEvent.click(screen.getByRole("checkbox", { name: "타이틀 표시" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "제목 표시" }));
     expect(screen.queryByLabelText("표시할 제목")).not.toBeInTheDocument();
   });
 });
@@ -481,7 +497,7 @@ describe("OverlaySettings 현재 상태 표시 (C036·C038·C026·C070)", () => 
     fireEvent.change(screen.getByRole("textbox", { name: "배경색 코드" }), { target: { value: "#000000" } });
     expect(swatch.style.background).toBe("");
     fireEvent.click(screen.getByRole("button", { name: "투명으로 초기화" }));
-    expect(screen.getByRole("textbox", { name: "배경색 코드" })).toHaveValue("transparent");
+    expect(screen.getByRole("textbox", { name: "배경색 코드" })).toHaveValue("투명");
   });
 
   it("위치 칸은 윤곽으로 보이고 '현재: …' 문구는 없다", async () => {
