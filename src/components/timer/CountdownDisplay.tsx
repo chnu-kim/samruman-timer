@@ -103,14 +103,14 @@ export function CountdownDisplay({
       {size === "compact" && (
         <span className="text-xs text-purple-600 dark:text-purple-400 min-h-[1rem] mt-0.5">
           {isScheduled && scheduledStartAt
-            ? `시작 대기 중 · ${formatDateTime(scheduledStartAt)}`
+            ? `시작 대기 중 · ${formatDateTime(scheduledStartAt, { seconds: false })}`
             : "\u00A0"}
         </span>
       )}
       {/* large: 예약/실행/만료 시 서브텍스트 표시 */}
       {size === "large" && isScheduled && scheduledStartAt && (
         <span className="text-sm text-purple-600 dark:text-purple-400 mt-1">
-          시작 대기 중 · {formatDateTime(scheduledStartAt)}
+          시작 대기 중 · {formatDateTime(scheduledStartAt, { seconds: false })}
         </span>
       )}
       {size === "large" && endTimeText && (

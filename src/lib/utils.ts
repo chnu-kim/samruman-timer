@@ -1,7 +1,34 @@
+import { extendTailwindMerge } from "tailwind-merge";
 import type { ActionType } from "@/types";
 
+// globals.css @theme의 커스텀 키를 등록한다. 등록하지 않으면 tailwind-merge가 rounded-card·shadow-card를
+// 모르는 클래스로 보고 rounded-xl과 겹쳐도 지우지 않거나, text-muted-foreground를 글자 크기(text-sm)와 같은 그룹으로 오인해 지운다.
+// @theme에 모서리·그림자·색을 더하면 여기에도 더한다(utils.test.ts가 보존 여부를 확인한다)
+const twMerge = extendTailwindMerge({
+  extend: {
+    theme: {
+      radius: ["control", "card"],
+      shadow: ["card", "card-hover", "dialog"],
+      color: [
+        "background",
+        "foreground",
+        "accent",
+        "accent-hover",
+        "accent-light",
+        "accent-foreground",
+        "muted",
+        "muted-foreground",
+        "border",
+        "border-input",
+        "ring",
+      ],
+    },
+  },
+});
+
+/** 클래스를 이어 붙이고, 같은 속성이 겹치면 뒤에 온 것만 남긴다(tailwind-merge) */
 export function cn(...classes: (string | false | null | undefined)[]): string {
-  return classes.filter(Boolean).join(" ");
+  return twMerge(classes.filter(Boolean).join(" "));
 }
 
 export function formatHoursFromSeconds(seconds: number): string {
@@ -156,8 +183,8 @@ export function formatHourShort(iso: string): string {
   });
 }
 
-/** 전체 날짜시간 포맷 (YYYY. MM. DD. HH:mm:ss) */
-export function formatDateTime(iso: string): string {
+/** 전체 날짜시간 포맷 (YYYY. MM. DD. HH:mm:ss). seconds: false면 초를 뺀다(예약 시각처럼 분 단위로 정하는 값) */
+export function formatDateTime(iso: string, { seconds = true }: { seconds?: boolean } = {}): string {
   const d = new Date(iso);
   return d.toLocaleString("ko-KR", {
     year: "numeric",
@@ -165,7 +192,7 @@ export function formatDateTime(iso: string): string {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-    second: "2-digit",
+    ...(seconds ? { second: "2-digit" } : {}),
     hour12: false,
   });
 }

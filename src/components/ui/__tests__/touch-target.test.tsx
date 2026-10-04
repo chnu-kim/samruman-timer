@@ -32,10 +32,11 @@ describe("터치 타깃 44px (pointer-coarse)", () => {
     expect(cls).toContain("pointer-coarse:min-h-11");
   });
 
-  it("텍스트 액션 link 변형은 크기와 상관없이 누르는 높이가 44px이고 h-*를 갖지 않는다", () => {
+  it("텍스트 액션 link 변형은 크기와 상관없이 터치에서만 누르는 높이가 44px이고 h-*를 갖지 않는다", () => {
     render(<Button variant="link" size="sm">다시 시도</Button>);
     const cls = screen.getByRole("button", { name: "다시 시도" }).className;
-    expect(cls).toContain("min-h-11");
+    expect(cls).toContain("pointer-coarse:min-h-11");
+    expect(cls).not.toMatch(/(^|\s)min-h-11/); // 데스크톱은 글자 줄 높이
     expect(cls).toContain("text-accent");
     expect(cls).not.toMatch(/(^|\s)h-\d/);
   });

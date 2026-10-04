@@ -15,8 +15,8 @@ interface HeaderProps {
   initialUser?: MeResponse | null;
 }
 
-/** 헤더 오른쪽 액션(로그인·로그아웃) 크기. Button md(h-10 px-4)에 맞추고 테마 토글과 같은 높이다: 데스크톱 40, 터치 44 */
-const HEADER_ACTION = "text-sm pointer-coarse:min-h-11 pointer-coarse:min-w-11";
+/** 헤더 오른쪽 액션(로그인·로그아웃) 크기. Button md(h-10 px-4, 터치 min-h-11)에 맞추고 테마 토글과 같은 높이다: 데스크톱 40, 터치 44. 로그인 링크는 Button이 아니라 min-h-11을 직접 단다 */
+const HEADER_ACTION = "text-sm pointer-coarse:min-w-11";
 
 export function Header({ initialUser }: HeaderProps = {}) {
   const [user, setUser] = useState<MeResponse | null>(initialUser ?? null);
@@ -96,7 +96,7 @@ export function Header({ initialUser }: HeaderProps = {}) {
               href="/login"
               onClick={handleLoginClick}
               className={cn(
-                "inline-flex h-10 items-center justify-center rounded-lg border border-border bg-transparent px-4 font-medium hover:bg-foreground/5 transition-colors",
+                "inline-flex h-10 pointer-coarse:min-h-11 items-center justify-center rounded-lg border border-border bg-transparent px-4 font-medium hover:bg-foreground/5 transition-colors",
                 HEADER_ACTION,
               )}
             >

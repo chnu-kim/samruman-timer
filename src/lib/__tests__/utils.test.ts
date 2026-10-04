@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   buildTimeAxis,
+  cn,
+  formatDateTime,
   durationAxisTicks,
   formatDurationTick,
   formatHoursFromSeconds,
@@ -177,5 +179,45 @@ describe("formatEndTime", () => {
   it("다른 날이면 앞자리 0 없는 월·일을 붙이고, 다른 해면 연도까지 붙인다", () => {
     expect(formatEndTime(new Date(2026, 9, 6, 13, 33), now)).toBe("10. 6. 오후 1:33");
     expect(formatEndTime(new Date(2027, 0, 2, 9, 0), now)).toBe("2027. 1. 2. 오전 9:00");
+  });
+});
+
+describe("cn (tailwind-merge)", () => {
+  it("다른 그룹의 클래스는 모두 남긴다(text-sm은 크기, text-muted-foreground는 색)", () => {
+    expect(cn("text-sm", "text-muted-foreground").split(" ").sort()).toEqual(["text-muted-foreground", "text-sm"]);
+  });
+
+  it("커스텀 모서리 토큰이 표준 클래스와 겹치면 뒤의 것만 남는다", () => {
+    expect(cn("rounded-xl", "rounded-card")).toBe("rounded-card");
+    expect(cn("rounded-control", "rounded-card")).toBe("rounded-card");
+    expect(cn("rounded-card", "rounded-xl")).toBe("rounded-xl");
+  });
+
+  it("같은 속성(display)은 뒤의 것만 남는다", () => {
+    expect(cn("inline-flex", "hidden")).toBe("hidden");
+  });
+
+  it("커스텀 색·그림자 토큰 클래스를 지우지 않는다", () => {
+    const out = cn("bg-accent", "text-accent-foreground", "border-border", "shadow-card", "text-sm").split(" ");
+    expect(out.sort()).toEqual(["bg-accent", "border-border", "shadow-card", "text-accent-foreground", "text-sm"]);
+    expect(cn("bg-muted", "bg-accent")).toBe("bg-accent");
+    expect(cn("text-foreground", "text-muted-foreground")).toBe("text-muted-foreground");
+    expect(cn("shadow-card", "shadow-dialog")).toBe("shadow-dialog");
+  });
+
+  it("높이는 뒤에 온 값이 이기고, 변형(pointer-coarse:)이 다른 것은 같이 남는다", () => {
+    expect(cn("h-10 pointer-coarse:min-h-11", "h-8")).toBe("pointer-coarse:min-h-11 h-8");
+  });
+
+  it("falsy 인자는 무시한다", () => {
+    expect(cn("a", false, null, undefined, "b")).toBe("a b");
+  });
+});
+
+describe("formatDateTime", () => {
+  const iso = new Date(2026, 9, 5, 9, 0, 7).toISOString();
+  it("기본은 초까지, seconds: false면 초를 뺀다", () => {
+    expect(formatDateTime(iso)).toMatch(/09:00:07$/);
+    expect(formatDateTime(iso, { seconds: false })).toMatch(/2026\. 10\. 05\. 09:00$/);
   });
 });

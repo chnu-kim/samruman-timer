@@ -100,6 +100,18 @@ describe("TimerControls", () => {
     expect(screen.queryByLabelText("시청자 닉네임")).not.toBeInTheDocument();
   });
 
+  // 카드 바닥 여백이 위와 같도록 space-y(숨은 마지막 자식에 margin이 남음) 대신 gap을 쓴다
+  it("루트가 gap 레이아웃이라 숨은 마지막 자식이 바닥 여백을 만들지 않는다", () => {
+    const { container: scheduled } = render(<Harness timerId={timerId} status="SCHEDULED" />);
+    const sRoot = scheduled.firstElementChild as HTMLElement;
+    expect(sRoot.className).toMatch(/\bgap-3\b/);
+    expect(sRoot.className).not.toMatch(/space-y/);
+    const { container: running } = render(<Harness timerId={timerId} status="RUNNING" />);
+    const form = running.querySelector("form") as HTMLElement;
+    expect(form.className).toMatch(/\bgap-5\b/);
+    expect(form.className).not.toMatch(/space-y/);
+  });
+
   it("'지금 시작'은 activate API를 부르고 서버 응답으로 상위를 갱신한다", async () => {
     const data = {
       id: timerId,
@@ -159,6 +171,15 @@ describe("TimerControls", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("잠시 후 다시 시도해 주세요");
     expect(screen.getByRole("button", { name: "지금 시작" })).toBeEnabled();
     expect(onModified).not.toHaveBeenCalled();
+  });
+
+  it("시간 입력 묶음의 이름은 카드 제목·칸 이름과 겹치지 않는다", () => {
+    render(<Harness timerId={timerId} status="RUNNING" />);
+    const group = screen.getByRole("group", { name: "변경할 시간" });
+    expect(within(group).getByRole("spinbutton", { name: "시" })).toBeInTheDocument();
+    expect(within(group).getByRole("spinbutton", { name: "분" })).toBeInTheDocument();
+    expect(within(group).getByRole("spinbutton", { name: "초" })).toBeInTheDocument();
+    expect(screen.queryByRole("spinbutton", { name: "시간" })).not.toBeInTheDocument();
   });
 
   it("renders time presets", () => {
@@ -407,7 +428,7 @@ describe("TimerControls", () => {
   it("분 90은 1시간 30분, 초 75는 1분 15초로 올린다", () => {
     render(<Harness timerId={timerId} status="RUNNING" />);
     fireEvent.change(screen.getByRole("spinbutton", { name: "분" }), { target: { value: "90" } });
-    expect(screen.getByRole("spinbutton", { name: "시간" })).toHaveValue(1);
+    expect(screen.getByRole("spinbutton", { name: "시" })).toHaveValue(1);
     expect(screen.getByRole("spinbutton", { name: "분" })).toHaveValue(30);
     expect(cardButton("시간 추가 (1시간 30분)")).toBeEnabled();
 

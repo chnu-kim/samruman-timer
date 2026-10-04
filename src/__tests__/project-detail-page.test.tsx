@@ -767,6 +767,11 @@ describe("시간 카드 제목 (W25)", () => {
     expect(screen.queryByRole("heading", { name: "시간" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "시간" })).toBeInTheDocument();
     expect(screen.getByText("예약됨")).toBeInTheDocument();
+    // 제목 줄이 없으면 그 아래 간격(mt-3)도 없어 카드 위 여백이 안쪽 여백 하나뿐이다.
+    // pointer-fine:mt-3처럼 변형 접두사가 붙은 mt-*도 막는다
+    expect(screen.getByRole("region", { name: "시간" }).firstElementChild!.className).not.toMatch(/(^|\s)([a-z-]+:)*-?mt-/);
+    // 예약 시각은 분까지만(초 없음)
+    expect(screen.getByText(/시작 대기 중 · \d{4}\. \d\d\. \d\d\. \d\d:\d\d$/)).toBeInTheDocument();
   });
 
   it("만료 상태에는 재시작 안내와 입력 폼이 보이므로 '시간' 제목을 보이고 '만료' 배지도 남는다", async () => {
@@ -774,5 +779,50 @@ describe("시간 카드 제목 (W25)", () => {
     render(<ProjectDetailPage />);
     expect(await screen.findByRole("heading", { name: "시간" })).toBeInTheDocument();
     expect(screen.getAllByText("만료").length).toBeGreaterThan(0);
+  });
+});
+
+// G1: 목표 탭 상태·빈 상태
+describe("목표 탭", () => {
+  const cancelled = { ...goal, type: "DURATION", targetSeconds: 3600, targetDatetime: null, progress: { percentage: 10, currentSeconds: 360 } };
+  it("종료된 목표만 있으면 진행 중 탭의 빈 상태는 한 줄이다", async () => {
+    stubApi({ timers: [timer], goals: [cancelled], me: owner });
+    render(<ProjectDetailPage />);
+    expect(await screen.findByRole("tab", { name: /진행 중/ })).toHaveAttribute("aria-selected", "true");
+    const panel = screen.getByRole("tabpanel");
+    expect(within(panel).getByText("진행 중인 목표가 없습니다.")).toBeInTheDocument();
+    expect(panel.querySelectorAll("p")).toHaveLength(1);
+  });
+
+  it("마지막 목표를 지우면 탭이 없어지고, 다음에 목표가 생기면 종료 탭이 아니라 진행 중 탭이 열린다", async () => {
+    localStorage.setItem("defaultActorName", "기본냥");
+    try {
+      const goals: unknown[] = [cancelled];
+      stubApi({
+        timers: [{ ...timer, status: "RUNNING", remainingSeconds: 1 }],
+        goals,
+        me: owner,
+        detail: { ...timerDetail, status: "RUNNING", remainingSeconds: 1 },
+        modifyData: { id: "t1", remainingSeconds: 3600, status: "RUNNING", log: { id: "l2", actionType: "ADD", actorName: "기본냥", deltaSeconds: 3600, createdAt: "2026-10-04T00:00:00.000Z" } },
+      });
+      render(<ProjectDetailPage />);
+      fireEvent.click(await screen.findByRole("tab", { name: /종료/ }));
+      expect(screen.getByRole("tab", { name: /종료/ })).toHaveAttribute("aria-selected", "true");
+
+      goals.length = 0;
+      fireEvent.click(screen.getByRole("button", { name: "100시간 달성 더보기" }));
+      fireEvent.click(screen.getByRole("button", { name: "삭제" }));
+      fireEvent.click(within(screen.getByRole("dialog", { name: "목표 삭제" })).getByRole("button", { name: "목표 삭제" }));
+      expect(await screen.findByText("아직 목표가 없습니다.")).toBeInTheDocument();
+      expect(screen.queryAllByRole("tab")).toHaveLength(0);
+
+      // 시간을 바꾸면 목표를 다시 불러온다. 그 사이 종료 목표가 하나 생겼다고 하자
+      goals.push(cancelled);
+      await waitFor(() => expect(screen.getByLabelText("시청자 닉네임")).toHaveValue("기본냥"));
+      fireEvent.keyDown(window, { key: "1", code: "Digit1" });
+      expect(await screen.findByRole("tab", { name: /진행 중/ })).toHaveAttribute("aria-selected", "true");
+    } finally {
+      localStorage.removeItem("defaultActorName");
+    }
   });
 });

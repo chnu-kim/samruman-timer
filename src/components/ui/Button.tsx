@@ -14,7 +14,7 @@ const variantStyles: Record<ButtonVariant, string> = {
   secondary: "border-border bg-transparent",
   ghost: "border-transparent bg-transparent",
   danger: "border-transparent bg-red-600 text-white dark:bg-red-700",
-  // 텍스트 액션('다시 시도' 등). 크기와 상관없이 누르는 높이는 44px이다
+  // 텍스트 액션('전체 기록' 등). 크기와 상관없이 터치에서만 누르는 높이가 44px이다(데스크톱은 글자 줄 높이)
   link: "border-transparent bg-transparent text-accent underline-offset-4",
 };
 
@@ -36,11 +36,11 @@ const sizeStyles: Record<ButtonSize, string> = {
   lg: "h-12 px-5 text-lg",
 };
 
-const linkSizeStyle = "min-h-11 px-2 text-sm";
+const linkSizeStyle = "px-2 text-sm pointer-coarse:min-h-11";
 
 // 비활성은 opacity로 흐리지 않고 중립 토큰으로 칠해 라이트·다크에서 같은 모양으로 둔다.
 // 배경이 없는 ghost·link는 글자색만 바꾼다. 비활성일 때는 변형 스타일(hover 포함)을 붙이지 않는다
-// (cn은 이어 붙이기만 해서 bg가 겹치면 CSS 순서로 갈린다)
+// (cn이 겹친 bg를 뒤의 것으로 정리하지만, hover 같은 변형은 비활성에서도 눌려 보이므로 아예 붙이지 않는다)
 const disabledStyles: Record<ButtonVariant, string> = {
   primary: "bg-muted text-muted-foreground border-border",
   secondary: "bg-muted text-muted-foreground border-border",

@@ -82,6 +82,8 @@ function GoalSection({
 
   // 받은 결과가 0건일 때만 비운다. 로딩·오류 중에 탭을 숨겼다가 다시 보이면 레이아웃이 밀리기 때문이다
   const noGoals = goals !== null && !error && goals.length === 0;
+  // 마지막 목표를 지우면 탭이 사라지므로 선택도 처음으로 되돌린다(다음 목표를 만들면 '종료' 탭이 열려 있지 않게). 렌더 중 상태 조정 패턴
+  if (noGoals && goalTab !== "active") setGoalTab("active");
 
   const newGoalButton = isOwner && (
     <Button
@@ -97,11 +99,12 @@ function GoalSection({
   );
 
   return (
-    <section className={cn("space-y-4", className)} aria-label="목표">
-      {/* 헤더 — 제목 + 추가 버튼 */}
+    <section className={cn("space-y-3", className)} aria-label="목표">
+      {/* 헤더 — 제목 + 추가 버튼. 버튼(데스크톱 40px·터치 44px)이 줄을 키우지 않게 음수 여백으로 제목 높이(24px)에 맞춘다.
+          시간 카드·기록·그래프의 제목 줄과 같은 높이라 제목→내용 간격이 12px로 같다 */}
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-base font-semibold">목표</h2>
-        {newGoalButton}
+        {newGoalButton && <div className="-my-2 pointer-coarse:-my-2.5">{newGoalButton}</div>}
       </div>
 
       {/* 목표 생성 모달 */}
@@ -119,7 +122,8 @@ function GoalSection({
           {hasTimer ? "아직 목표가 없습니다." : "타이머를 먼저 생성하면 목표를 설정할 수 있습니다."}
         </p>
       ) : (
-      <>
+      // 탭과 목록은 한 덩어리다: 밑줄→첫 목표 간격이 목표 사이 간격(카드 안쪽 위 여백 16px)과 같다
+      <div>
       {/* 탭 — 진행 중 / 종료 */}
       <div className="flex gap-1 border-b border-border" role="tablist" aria-label="목표 상태 필터">
         <button
@@ -172,18 +176,12 @@ function GoalSection({
               />
             ))
           ) : (
-            <div className="py-8 text-center">
-              <p className="text-sm text-muted-foreground">
-                {!hasTimer
-                  ? "타이머를 먼저 생성하면 목표를 설정할 수 있습니다."
-                  : "진행 중인 목표가 없습니다."}
-              </p>
-              {hasTimer && isOwner && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  &ldquo;새 목표&rdquo; 버튼을 눌러 목표를 추가해 보세요.
-                </p>
-              )}
-            </div>
+            // 이 자리는 종료된 목표만 있을 때다(목표가 0건이면 탭 자체가 없다). 새 목표 버튼이 바로 위에 보이므로 안내는 한 줄
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              {!hasTimer
+                ? "타이머를 먼저 생성하면 목표를 설정할 수 있습니다."
+                : "진행 중인 목표가 없습니다."}
+            </p>
           )
         ) : inactiveGoals.length > 0 ? (
           inactiveGoals.map((goal) => (
@@ -202,7 +200,7 @@ function GoalSection({
           </p>
         )}
       </div>
-      </>
+      </div>
       )}
     </section>
   );

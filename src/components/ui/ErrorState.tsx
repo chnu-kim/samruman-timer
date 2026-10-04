@@ -67,7 +67,7 @@ export function ErrorState({
       {title && <h1 className="mt-4 text-lg font-semibold text-foreground">{title}</h1>}
       {message && <p className={cn(title ? "mt-1" : "mt-4", "text-muted-foreground")}>{message}</p>}
       {onRetry && (
-        <Button variant="link" className="mt-3" onClick={onRetry}>
+        <Button variant="secondary" className="mt-4" onClick={onRetry}>
           다시 시도
         </Button>
       )}
