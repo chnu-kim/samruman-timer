@@ -131,6 +131,40 @@ describe("프로젝트 상세 목표 섹션 (UX-50)", () => {
   });
 });
 
+// C109: 목록에서 프로젝트를 막 만들고 넘어오면(?new=timer) 타이머 만들기 창이 바로 열린다
+describe("프로젝트 생성 직후 타이머 만들기 자동 열기 (C109)", () => {
+  afterEach(() => {
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("소유자이고 타이머가 없으면 창을 열고 주소에서 플래그를 지운다", async () => {
+    window.history.replaceState(null, "", "/projects/p1?new=timer");
+    stubApi({ timers: [], goals: [], me: owner });
+    render(<ProjectDetailPage />);
+    const title = await screen.findByRole("heading", { name: "새 타이머 만들기" }, { timeout: 5000 });
+    await waitFor(() => expect(title.closest("dialog")).toHaveAttribute("open"));
+    expect(window.location.search).toBe("");
+  });
+
+  it("플래그가 없으면 열지 않는다", async () => {
+    window.history.replaceState(null, "", "/projects/p1");
+    stubApi({ timers: [], goals: [], me: owner });
+    render(<ProjectDetailPage />);
+    await screen.findByRole("button", { name: /타이머 만들기/ });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.getByRole("heading", { name: "새 타이머 만들기", hidden: true }).closest("dialog")).not.toHaveAttribute("open");
+  });
+
+  it("시청자에게는 플래그가 있어도 열지 않는다", async () => {
+    window.history.replaceState(null, "", "/projects/p1?new=timer");
+    stubApi({ timers: [], goals: [] });
+    render(<ProjectDetailPage />);
+    await screen.findByText("아직 타이머가 없습니다.");
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByRole("heading", { name: "새 타이머 만들기" })).not.toBeInTheDocument();
+  });
+});
+
 // 프로젝트와 타이머는 1:1이라 프로젝트 화면이 곧 조작 콘솔이다
 describe("프로젝트 콘솔", () => {
   it("소유자는 이 화면에서 바로 시간을 조작하고 목표를 함께 본다", async () => {
@@ -271,14 +305,24 @@ describe("프로젝트 콘솔", () => {
     });
   });
 
+  // C109: 1:1인 대상을 '타이머 삭제'·'프로젝트 삭제' 두 개념 대신 결과로 부른다
+  it("더보기 메뉴는 결과 기준으로 '타이머 초기화(목표 유지)'와 '프로젝트 삭제'를 보인다", async () => {
+    stubApi({ timers: [timer], goals: [], me: owner });
+    render(<ProjectDetailPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "더보기" }));
+    expect(screen.getByRole("button", { name: "타이머 초기화(목표 유지)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "프로젝트 삭제" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "타이머 삭제" })).not.toBeInTheDocument();
+  });
+
   it("타이머만 삭제하면 화면에 남아 '타이머 없음' 상태가 된다", async () => {
     const calls = stubApi({ timers: [timer], goals: [], me: owner });
     render(<ProjectDetailPage />);
     await screen.findByRole("heading", { name: "시간 조작" });
 
     fireEvent.click(screen.getByRole("button", { name: "더보기" }));
-    fireEvent.click(screen.getByRole("button", { name: "타이머 삭제" }));
-    const confirmTitle = await screen.findByRole("heading", { name: "타이머 삭제" });
+    fireEvent.click(screen.getByRole("button", { name: "타이머 초기화(목표 유지)" }));
+    const confirmTitle = await screen.findByRole("heading", { name: "타이머 초기화" });
     // 삭제 뒤 목록을 다시 부르면 타이머가 없다
     global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -287,7 +331,7 @@ describe("프로젝트 콘솔", () => {
       if (url === "/api/projects/p1/goals") return jsonResponse([]);
       return jsonResponse({ id: "t1" });
     }) as typeof fetch;
-    fireEvent.click(within(confirmTitle.closest("dialog")!).getByRole("button", { name: "삭제" }));
+    fireEvent.click(within(confirmTitle.closest("dialog")!).getByRole("button", { name: "타이머 초기화" }));
 
     expect(await screen.findByText("아직 타이머가 없습니다.")).toBeInTheDocument();
     expect(calls.some((c) => c.url === "/api/timers/t1" && c.method === "DELETE")).toBe(true);
