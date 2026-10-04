@@ -17,8 +17,8 @@ interface CountdownDisplayProps {
   size?: "compact" | "large";
   className?: string;
   /**
-   * 숫자 바로 옆에 붙일 요소(상태 배지 등). 보조 문구('종료 예정' 등)보다 앞 행에 두어,
-   * 좁은 폭에서 줄바꿈돼도 숫자 바로 아래에 붙고 보조 문구 뒤로 밀려나지 않는다
+   * 숫자에 딸린 상태 배지 등. large에서 sm 이상은 숫자 옆, 모바일은 숫자 아래 보조 문구('종료 예정' 등) 앞에 둔다.
+   * 위치는 이 컴포넌트가 정하므로 넘기는 쪽은 여백을 주지 않는다
    */
   aside?: ReactNode;
 }
@@ -98,58 +98,71 @@ export function CountdownDisplay({
     ? `종료 예정 ${formatEndTime(new Date(endAtMs))}`
     : null;
 
+  const timerEl = (
+    <span
+      role="timer"
+      className={cn(
+        size === "large"
+          // 모바일은 폭에 비례해 키우되 sm(60px)을 넘지 않게 3.75rem에서 멈춘다(353px부터 60px, 320px에서 약 54px). 가장 작은 폭에서도 한 줄에 들어가게 아래를 3rem으로 막는다
+          ? "basis-full text-[length:clamp(3rem,17vw,3.75rem)] leading-none sm:basis-auto sm:text-6xl font-mono font-bold tracking-tight"
+          : "text-lg font-mono font-semibold",
+        isExpired && "text-muted-foreground",
+        isScheduled && "text-purple-600 dark:text-purple-400",
+        isCritical && "text-red-800 dark:text-red-400 animate-pulse-urgent-fast",
+        isUrgent && !isCritical && "text-amber-700 dark:text-amber-400 animate-pulse-urgent-slow",
+        className,
+      )}
+      aria-label={
+        isCritical
+          ? `긴급: 남은 시간 ${formatTime(displayed)}, 1분 미만`
+          : isUrgent
+            ? `긴급: 남은 시간 ${formatTime(displayed)}, 5분 미만`
+            : isScheduled
+              ? `예약 시간 ${formatTime(displayed)}`
+              : `남은 시간 ${formatTime(displayed)}`
+      }
+    >
+      {formatTime(displayed)}
+    </span>
+  );
+
+  // large: 숫자가 첫 줄을 홀로 쓰고 배지(aside)는 보조 문구('종료 예정' 등) 앞, 같은 줄에 붙는다(모바일). sm 이상은 숫자 옆에 배지,
+  // 다음 줄에 보조 문구다. 모바일 폭(320~639px)에서 숫자(최대 276px)+배지가 한 줄에 들어가는지가 폭마다 갈려(353~376px은 줄바꿈)
+  // 배치와 높이가 바뀌던 것을 없앤다. 배지와 보조 문구는 둘 다 20px 줄이라 줄이 늘지 않는다
+  if (size === "large") {
+    return (
+      <div className="flex flex-wrap items-center gap-x-2 sm:items-start sm:gap-x-4">
+        {timerEl}
+        {aside && <span className="mt-1 flex sm:mt-2">{aside}</span>}
+        {isScheduled && scheduledStartAt && (
+          <span className="mt-1 text-sm text-purple-600 sm:basis-full dark:text-purple-400">
+            시작 대기 중 · {formatDateTime(scheduledStartAt, { seconds: false })}
+          </span>
+        )}
+        {endTimeText && (
+          <span className="mt-1 text-sm text-muted-foreground sm:basis-full">
+            {endTimeText}
+          </span>
+        )}
+        {isExpired && (
+          <span className="mt-1 text-sm text-muted-foreground sm:basis-full">만료됨</span>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col">
       <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
-        <span
-          role="timer"
-          className={cn(
-            size === "large"
-              // 모바일은 폭에 비례해 키우되 sm(60px)을 넘지 않게 3.75rem에서 멈춘다(353px부터 60px, 320px에서 약 54px). 가장 작은 폭에서도 한 줄에 들어가게 아래를 3rem으로 막는다
-              ? "text-[length:clamp(3rem,17vw,3.75rem)] leading-none sm:text-6xl font-mono font-bold tracking-tight"
-              : "text-lg font-mono font-semibold",
-            isExpired && "text-muted-foreground",
-            isScheduled && "text-purple-600 dark:text-purple-400",
-            isCritical && "text-red-800 dark:text-red-400 animate-pulse-urgent-fast",
-            isUrgent && !isCritical && "text-amber-700 dark:text-amber-400 animate-pulse-urgent-slow",
-            className,
-          )}
-          aria-label={
-            isCritical
-              ? `긴급: 남은 시간 ${formatTime(displayed)}, 1분 미만`
-              : isUrgent
-                ? `긴급: 남은 시간 ${formatTime(displayed)}, 5분 미만`
-                : isScheduled
-                  ? `예약 시간 ${formatTime(displayed)}`
-                  : `남은 시간 ${formatTime(displayed)}`
-          }
-        >
-          {formatTime(displayed)}
-        </span>
+        {timerEl}
         {aside}
       </div>
       {/* compact: 항상 서브텍스트 높이를 확보하여 카드 높이 일관성 유지 */}
-      {size === "compact" && (
-        <span className="text-xs text-purple-600 dark:text-purple-400 min-h-[1rem] mt-0.5">
-          {isScheduled && scheduledStartAt
-            ? `시작 대기 중 · ${formatDateTime(scheduledStartAt, { seconds: false })}`
-            : "\u00A0"}
-        </span>
-      )}
-      {/* large: 예약/실행/만료 시 서브텍스트 표시 */}
-      {size === "large" && isScheduled && scheduledStartAt && (
-        <span className="text-sm text-purple-600 dark:text-purple-400 mt-1">
-          시작 대기 중 · {formatDateTime(scheduledStartAt, { seconds: false })}
-        </span>
-      )}
-      {size === "large" && endTimeText && (
-        <span className="text-sm text-muted-foreground mt-1">
-          {endTimeText}
-        </span>
-      )}
-      {size === "large" && isExpired && (
-        <span className="text-sm text-muted-foreground mt-1">만료됨</span>
-      )}
+      <span className="text-xs text-purple-600 dark:text-purple-400 min-h-[1rem] mt-0.5">
+        {isScheduled && scheduledStartAt
+          ? `시작 대기 중 · ${formatDateTime(scheduledStartAt, { seconds: false })}`
+          : "\u00A0"}
+      </span>
     </div>
   );
 }

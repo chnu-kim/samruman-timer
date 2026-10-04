@@ -5,7 +5,7 @@ import { useToast } from "@/components/ui/Toast";
 import { onSessionExpired } from "@/lib/session-expired";
 import { sessionExpiredLoginUrl } from "@/lib/safe-redirect";
 
-/** 세션 만료 안내 문구. 시간 추가/차감 경로는 401에 따로 알리지 않아 이 안내 하나만 남는다(다른 호출부는 아직 자기 실패 토스트로 덮어쓴다, docs/AUTH.md) */
+/** 세션 만료 안내 문구. authFetch 호출부는 세션 만료(isSessionExpired)면 자기 실패 안내를 띄우지 않아 이 안내 하나만 남는다(docs/AUTH.md) */
 export const SESSION_EXPIRED_TOAST = "세션이 만료되어 로그인 화면으로 이동합니다.";
 
 export function SessionExpiredHandler() {

@@ -335,7 +335,8 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
         });
         restoreInputs();
         // 세션 만료는 그 안내(SessionExpiredHandler) 한 건만 띄운다. 여기서 또 알리면 그 안내를 덮는다.
-        // 그 밖의 401(로그아웃 상태 등)은 아래 4xx처럼 서버 문구로 알린다
+        // 쓰기 요청이라 401은 SESSION_EXPIRED든 UNAUTHORIZED(다른 탭에서 로그아웃 등)든 세션 만료로 판정된다(authFetch).
+        // 판정되지 않은 401(본문이 JSON이 아닌 응답)만 아래 4xx처럼 알린다
         if (isSessionExpired(res)) return;
         // 4xx는 서버가 이유를 알려 준다(만료된 타이머 차감 등, 다시 눌러도 안 된다). 5xx는 다시 시도하면 된다
         const json = (await res.json().catch(() => null)) as ApiErrorResponse | null;

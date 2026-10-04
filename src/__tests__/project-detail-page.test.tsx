@@ -4,6 +4,10 @@ import ProjectDetailPage from "@/app/projects/[id]/page";
 import { fetchMe, resetMeCache } from "@/lib/session-me";
 import { MODIFY_FAILED_QUICK_MESSAGE } from "@/components/timer/TimerControls";
 
+// 화면 전체를 jsdom에 그리는 무거운 파일이라 이 파일만 시간 제한을 늘린다(전역은 기본 5초). 전체 실행 하나면 가장 느린 테스트가
+// 1초 안팎(동시 2개 2.5초)이지만, 실행이 겹치면(에이전트 동시 실행. 전체 실행 4개 동시에 13초까지) CPU 경합으로 5초를 넘는다
+vi.setConfig({ testTimeout: 20_000 });
+
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "p1" }),
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -100,8 +104,8 @@ function stubApi({ timers, goals, me = null, modifyStatus, modifyCode = "X", mod
       return jsonResponse({ logs, pagination: { page: 1, limit: 5, total: 1, totalPages: 1 } });
     }
     if (url.startsWith("/api/timers/t1/graph")) return jsonResponse({ mode: "remaining", points: [] });
-    if (url === "/api/timers/t1" && method === "DELETE") return jsonResponse({ id: "t1" });
-    if (url === "/api/timers/t1") return jsonResponse(detail);
+    if (url.split("?")[0] === "/api/timers/t1" && method === "DELETE") return jsonResponse({ id: "t1" });
+    if (url.split("?")[0] === "/api/timers/t1") return jsonResponse(detail);
     return jsonResponse(project);
   }) as typeof fetch;
   return calls;
@@ -630,7 +634,7 @@ describe("프로젝트 콘솔", () => {
 
       global.fetch = vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
-        if (url === "/api/timers/t1") return new Response(null, { status: 404 });
+        if (url.split("?")[0] === "/api/timers/t1") return new Response(null, { status: 404 });
         if (url === "/api/projects/p1/timers") return jsonResponse([]);
         if (url === "/api/projects/p1/goals") return jsonResponse([]);
         return jsonResponse({});
@@ -653,13 +657,13 @@ describe("프로젝트 콘솔", () => {
       render(<ProjectDetailPage />);
       await screen.findByRole("region", { name: "시간" });
       // 카운트다운 옆 상태 배지(기록 행의 '만료' 배지와 구분)
-      const statusBadge = () => screen.getByRole("timer").parentElement!.lastElementChild!;
+      const statusBadge = () => screen.getByRole("timer").nextElementSibling!;
       expect(statusBadge()).toHaveTextContent(/^만료$/);
 
       const stubbed = global.fetch;
       let detailDown = true;
       global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        if (String(input) === "/api/timers/t1" && detailDown) return new Response(null, { status: 500 });
+        if (String(input).split("?")[0] === "/api/timers/t1" && detailDown) return new Response(null, { status: 500 });
         return stubbed(input, init);
       }) as typeof fetch;
 
@@ -686,11 +690,11 @@ describe("프로젝트 콘솔", () => {
       stubApi({ timers: [timer], goals: [], me: owner });
       render(<ProjectDetailPage />);
       await screen.findByRole("region", { name: "시간" });
-      const statusBadge = () => screen.getByRole("timer").parentElement!.lastElementChild!;
+      const statusBadge = () => screen.getByRole("timer").nextElementSibling!;
 
       const stubbed = global.fetch;
       global.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-        if (String(input) !== "/api/timers/t1") return stubbed(input, init);
+        if (String(input).split("?")[0] !== "/api/timers/t1") return stubbed(input, init);
         // 응답이 오지 않다가 abort되면 그때 실패한다
         return new Promise<Response>((_, reject) => {
           init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
@@ -716,7 +720,7 @@ describe("프로젝트 콘솔", () => {
       // 첫 목록 조회에는 타이머가 있고, 삭제를 알아챈 뒤 다시 부르면 없다
       if (url === "/api/projects/p1/timers") return jsonResponse(timersCalls++ === 0 ? [timer] : []);
       if (url === "/api/projects/p1/goals") return jsonResponse([]);
-      if (url === "/api/timers/t1") return new Response(null, { status: 404 });
+      if (url.split("?")[0] === "/api/timers/t1") return new Response(null, { status: 404 });
       if (url.startsWith("/api/timers/t1/")) return new Response(null, { status: 404 });
       return jsonResponse(project);
     }) as typeof fetch;
@@ -873,7 +877,7 @@ describe("목표 탭", () => {
   });
 });
 
-// G2: 프로젝트 이름 수정 실패는 한 줄 알리고, 세션 만료면 그 안내(로그인 화면으로 이동)만 남긴다
+// G2: 프로젝트 이름 수정 실패는 한 줄 알리고(4xx는 서버 사유, FIN), 세션 만료면 그 안내(로그인 화면으로 이동)만 남긴다
 describe("프로젝트 이름 수정 실패", () => {
   function stubPatch(response: () => Response) {
     stubApi({ timers: [], goals: [], me: owner });
@@ -901,6 +905,21 @@ describe("프로젝트 이름 수정 실패", () => {
     stubPatch(() => new Response(JSON.stringify({ error: { code: "INTERNAL_ERROR", message: "서버 오류" } }), { status: 500 }));
     await rename();
     expect(mockToast).toHaveBeenCalledTimes(1);
+    expect(mockToast).toHaveBeenCalledWith("프로젝트 이름을 수정하지 못했습니다", "error");
+  });
+
+  it("4xx면 서버가 알려 준 사유를 그대로 알린다", async () => {
+    mockToast.mockReset();
+    stubPatch(() => new Response(JSON.stringify({ error: { code: "FORBIDDEN", message: "프로젝트 소유자만 수정할 수 있습니다" } }), { status: 403 }));
+    await rename();
+    expect(mockToast).toHaveBeenCalledTimes(1);
+    expect(mockToast).toHaveBeenCalledWith("프로젝트 소유자만 수정할 수 있습니다", "error");
+  });
+
+  it("4xx인데 사유를 읽을 수 없으면 고정 문구로 알린다", async () => {
+    mockToast.mockReset();
+    stubPatch(() => new Response("bad", { status: 400 }));
+    await rename();
     expect(mockToast).toHaveBeenCalledWith("프로젝트 이름을 수정하지 못했습니다", "error");
   });
 

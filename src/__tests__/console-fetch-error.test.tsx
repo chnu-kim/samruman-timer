@@ -5,6 +5,10 @@ import { render, screen, waitFor, fireEvent, within } from "@testing-library/rea
 import ProjectDetailPage from "@/app/projects/[id]/page";
 import { resetMeCache } from "@/lib/session-me";
 
+// 화면 전체를 jsdom에 그리는 무거운 파일이라 이 파일만 시간 제한을 늘린다(전역은 기본 5초). 전체 실행 하나면 가장 느린 테스트가
+// 1초 안팎(동시 2개 2.5초)이지만, 실행이 겹치면(에이전트 동시 실행. 전체 실행 4개 동시에 13초까지) CPU 경합으로 5초를 넘는다
+vi.setConfig({ testTimeout: 20_000 });
+
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "p1" }),
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -101,7 +105,7 @@ beforeEach(() => {
     if (url === "/api/projects/p1/goals") return respond(api.goals, () => [activeGoal]);
     if (url.startsWith("/api/timers/t1/logs")) return respond(api.logs, () => ({ logs, pagination: { page: 1, limit: 5, total: 1, totalPages: 1 } }));
     if (url.startsWith("/api/timers/t1/graph")) return respond(api.graph, () => ({ mode: "remaining", points: [] }));
-    if (url === "/api/timers/t1") return respond(api.detail, () => timerDetail);
+    if (url.split("?")[0] === "/api/timers/t1") return respond(api.detail, () => timerDetail);
     return Promise.resolve(jsonResponse(project));
   }) as typeof fetch;
 });
@@ -181,7 +185,7 @@ describe("콘솔 조회 실패 표시 (W31)", () => {
       if (url === "/api/projects/p1/goals") return jsonResponse([]);
       if (url.startsWith("/api/timers/t1/logs")) return jsonResponse({ logs: [], pagination: { page: 1, limit: 5, total: 0, totalPages: 1 } });
       if (url.startsWith("/api/timers/t1/graph")) return jsonResponse({ mode: "remaining", points: [] });
-      if (url === "/api/timers/t1") return jsonResponse(timerDetail);
+      if (url.split("?")[0] === "/api/timers/t1") return jsonResponse(timerDetail);
       return jsonResponse(project);
     }) as typeof fetch;
     render(<ProjectDetailPage />);
@@ -206,7 +210,7 @@ describe("콘솔 조회 실패 표시 (W31)", () => {
       if (url === "/api/projects/p1/goals") return jsonResponse([]);
       if (url.startsWith("/api/timers/t1/logs")) return jsonResponse({ logs: [create], pagination: { page: 1, limit: 5, total: 1, totalPages: 1 } });
       if (url.startsWith("/api/timers/t1/graph")) return jsonResponse({ mode: "remaining", points: [] });
-      if (url === "/api/timers/t1") return jsonResponse(timerDetail);
+      if (url.split("?")[0] === "/api/timers/t1") return jsonResponse(timerDetail);
       return jsonResponse(project);
     }) as typeof fetch;
     render(<ProjectDetailPage />);
@@ -231,7 +235,7 @@ describe("콘솔 조회 실패 표시 (W31)", () => {
         return jsonResponse({ logs: [create], pagination: { page: 1, limit: 5, total: 1, totalPages: 1 } });
       }
       if (url.startsWith("/api/timers/t1/graph")) return jsonResponse({ mode: "remaining", points: [] });
-      if (url === "/api/timers/t1") return jsonResponse(timerDetail);
+      if (url.split("?")[0] === "/api/timers/t1") return jsonResponse(timerDetail);
       return jsonResponse(project);
     }) as typeof fetch;
     render(<ProjectDetailPage />);
@@ -258,7 +262,7 @@ describe("콘솔 조회 실패 표시 (W31)", () => {
         return jsonResponse({ logs: page2 ? [create] : logs, pagination: { page: page2 ? 2 : 1, limit: 20, total: 21, totalPages: 2 } });
       }
       if (url.startsWith("/api/timers/t1/graph")) return jsonResponse({ mode: "remaining", points: [] });
-      if (url === "/api/timers/t1") return jsonResponse(timerDetail);
+      if (url.split("?")[0] === "/api/timers/t1") return jsonResponse(timerDetail);
       return jsonResponse(project);
     }) as typeof fetch;
     render(<ProjectDetailPage />);
@@ -300,7 +304,7 @@ describe("콘솔 조회 실패 표시 (W31)", () => {
         return jsonResponse({ logs: filtered ? [] : logs, pagination: { page: 1, limit: 20, total: filtered ? 0 : 1, totalPages: 1 } });
       }
       if (url.startsWith("/api/timers/t1/graph")) return jsonResponse({ mode: "remaining", points: [] });
-      if (url === "/api/timers/t1") return jsonResponse(timerDetail);
+      if (url.split("?")[0] === "/api/timers/t1") return jsonResponse(timerDetail);
       return jsonResponse(project);
     }) as typeof fetch;
     render(<ProjectDetailPage />);
@@ -432,7 +436,7 @@ describe("콘솔 첫 화면 (W29)", () => {
     const gate = new Promise<void>((r) => { release = r; });
     const inner = global.fetch;
     global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) === "/api/timers/t1") await gate;
+      if (String(input).split("?")[0] === "/api/timers/t1") await gate;
       return inner(input, init);
     }) as typeof fetch;
     render(<ProjectDetailPage />);

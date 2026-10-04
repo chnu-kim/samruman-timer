@@ -26,6 +26,7 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { pageTitle } from "@/lib/site";
 import type {
   ApiSuccessResponse,
+  ApiErrorResponse,
   ProjectDetailResponse,
   TimerListItem,
   GoalResponse,
@@ -339,7 +340,8 @@ export default function ProjectDetailPage() {
     }
   }
 
-  // 이름·설명 수정. 실패하면 EditableText가 이전 값으로 되돌리고, 여기서 한 줄 알린다.
+  // 이름·설명 수정. 실패하면 EditableText가 이전 값으로 되돌리고, 여기서 한 줄 알린다. 4xx는 서버가 이유를 알려 주므로
+  // 그 문구를(다시 해도 같은 결과다), 5xx·네트워크 오류는 고정 문구를 쓴다.
   // 세션 만료(로그인이 풀린 경우 포함)는 그 안내가 로그인 화면으로 보내므로 따로 알리지 않는다(토스트 자리는 하나다)
   async function patchProject(patch: { name: string } | { description: string }, label: "이름" | "설명") {
     const failed = `프로젝트 ${label}을 수정하지 못했습니다`;
@@ -355,7 +357,10 @@ export default function ProjectDetailPage() {
       throw err;
     }
     if (!res.ok) {
-      if (!isSessionExpired(res)) toast(failed, "error");
+      if (!isSessionExpired(res)) {
+        const json = res.status < 500 ? ((await res.json().catch(() => null)) as ApiErrorResponse | null) : null;
+        toast(json?.error?.message || failed, "error");
+      }
       throw new Error(failed);
     }
     const json = (await res.json()) as ApiSuccessResponse<ProjectDetailResponse>;

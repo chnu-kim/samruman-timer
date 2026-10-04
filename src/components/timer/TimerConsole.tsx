@@ -65,7 +65,7 @@ const FULL_LOG_LIMIT = 20;
 
 /**
  * 연결 끊김 배지. 경과 시간 문구만 1초마다 바뀌도록 따로 둔다(끊겼을 때만 마운트).
- * 좁은 화면에서는 경과 문구를 빼서 '실행 중' 배지처럼 카운트다운 옆 한 줄에 남게 한다(아래 내용이 밀리지 않게)
+ * 좁은 화면에서는 경과 문구를 빼서 '실행 중' 배지처럼 보조 문구('종료 예정')와 한 줄에 남게 한다(아래 내용이 밀리지 않게)
  */
 function ConnectionLostBadge({ lastSyncedAtMs, className }: { lastSyncedAtMs: number | null; className?: string }) {
   const [now, setNow] = useState(() => Date.now());
@@ -106,13 +106,14 @@ export interface ConsoleSnapshot {
 
 /**
  * 타이머 상세 조회. 본문까지 DETAIL_TIMEOUT_MS 안에 받지 못하면 중단하고 예외를 던진다(네트워크 오류와 같은 실패).
- * data는 2xx일 때만 채운다
+ * data는 2xx일 때만 채운다. since(화면이 반영한 updatedAt)를 주면 그 뒤의 시간 추가·차감 합계(deltaSinceSeconds)가 함께 온다
  */
-async function fetchTimerDetail(timerId: string): Promise<{ status: number; data: TimerDetailResponse | null }> {
+async function fetchTimerDetail(timerId: string, since?: string): Promise<{ status: number; data: TimerDetailResponse | null }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DETAIL_TIMEOUT_MS);
   try {
-    const res = await fetch(`/api/timers/${timerId}`, { signal: controller.signal });
+    const query = since ? `?${new URLSearchParams({ since })}` : "";
+    const res = await fetch(`/api/timers/${timerId}${query}`, { signal: controller.signal });
     if (!res.ok) return { status: res.status, data: null };
     return { status: res.status, data: ((await res.json()) as ApiSuccessResponse<TimerDetailResponse>).data };
   } finally {
@@ -341,18 +342,23 @@ export function TimerConsole({ timerId, initialSnapshot, initialFailed = false, 
   // 화면에 마지막으로 반영한 값과 그 시각, 그 값의 updatedAt. 폴링 값이 다른 기기의 변경인지 판단하는 기준이다.
   // 이 화면의 조작은 응답의 updatedAt까지 반영하므로(handleModified) 다음 폴링이 같은 변경을 외부 변경으로 보지 않는다
   const syncedRef = useRef<(SyncedTimerSnapshot & { updatedAt: string }) | null>(null);
+  // 화면이 마지막으로 받아들인 서버 updatedAt. syncedRef는 렌더 뒤에 바뀌므로, 조작 응답이 렌더 전에 연달아 도착해도
+  // 옛 응답을 가려낼 수 있게 handleModified가 받아들이는 즉시 여기에도 적는다
+  const appliedUpdatedAtRef = useRef<string | null>(timer?.updatedAt ?? null);
   useEffect(() => {
     syncedRef.current = timer
       ? { status: timer.status, remainingSeconds: timer.remainingSeconds, syncedAtMs: Date.now(), updatedAt: timer.updatedAt }
       : null;
+    if (timer) appliedUpdatedAtRef.current = timer.updatedAt;
   }, [timer]);
 
   // 실패(네트워크 오류·5xx)는 잡지 않고 reject로 넘긴다. 화면은 마지막 값으로 로컬 카운트를 이어 가고,
   // 연속 실패 횟수는 usePolling이 세어 연결 상태로 돌려준다
   const errorRetryAtRef = useRef(0);
   const pollTimer = useCallback(async () => {
-    // 응답 없이 멈춘 요청도 시간 제한(fetchTimerDetail)에 걸려 실패로 센다
-    const { status, data: serverData } = await fetchTimerDetail(timerId);
+    // 응답 없이 멈춘 요청도 시간 제한(fetchTimerDetail)에 걸려 실패로 센다.
+    // 화면의 updatedAt을 since로 실어, 그사이 바뀐 것이 시간(추가·차감)인지 제목 같은 메타 정보뿐인지 서버가 알려 주게 한다
+    const { status, data: serverData } = await fetchTimerDetail(timerId, syncedRef.current?.updatedAt);
     if (status === 404) {
       onTimerRemovedRef.current?.();
       return;
@@ -364,9 +370,11 @@ export function TimerConsole({ timerId, initialSnapshot, initialFailed = false, 
     // 시각으로 바꿔 비교한다(밀리초 유무 등 표기가 달라도 글자 순서가 아니라 시간 순서로). 읽을 수 없는 값이면 버리지 않는다
     if (synced && Date.parse(serverData.updatedAt) < Date.parse(synced.updatedAt)) return;
     // updatedAt이 다르면 1~2초짜리 변경이어도 다른 기기의 조작으로 본다. 3초 임계(hasExternalChange)는 상태 전이와
-    // updatedAt이 같은 채로 값만 어긋난 경우를 잡는다. 타이머 제목 수정(오버레이 설정)도 updatedAt을 올려 같은 길을 타는데,
-    // 그때는 기록·그래프·목표를 한 번 조용히 다시 받을 뿐이라(깜빡임 없음) 따로 막지 않는다
-    const externalChange = !!synced && (synced.updatedAt !== serverData.updatedAt || hasExternalChange(synced, serverData, Date.now()));
+    // updatedAt이 같은 채로 값만 어긋난 경우를 잡는다. 다만 서버가 그사이 추가·차감이 없었다고 하면(deltaSinceSeconds === null:
+    // 오버레이 설정의 제목 수정 등) 기록·그래프·목표가 바뀌지 않았으므로 다시 받지 않는다. 필드가 없으면(되돌리기가 끼어 합계를
+    // 낼 수 없을 때 등) 바뀐 것으로 본다. 상태 전이(예약 활성화·만료)는 hasExternalChange가 따로 잡는다
+    const metaOnly = serverData.deltaSinceSeconds === null;
+    const externalChange = !!synced && ((synced.updatedAt !== serverData.updatedAt && !metaOnly) || hasExternalChange(synced, serverData, Date.now()));
 
     setTimer((prev) => {
       if (!prev) return prev;
@@ -423,6 +431,12 @@ export function TimerConsole({ timerId, initialSnapshot, initialFailed = false, 
   }, [connection.disconnected]);
 
   function handleModified(data: TimerModifyResponse) {
+    // 빠른 연속 조작에서 앞 요청의 응답이 뒤 요청의 응답보다 늦게 오면, 그 값(잔여·상태·updatedAt)은 이미 반영한 것보다 옛 상태다.
+    // 폴링과 같은 규칙(시각 비교, 같거나 읽을 수 없으면 반영)으로 버려 화면과 저장한 updatedAt을 되돌리지 않는다.
+    // updatedAt이 없는 값(낙관적 반영·롤백)은 지연 없이 그대로 반영한다
+    const applied = appliedUpdatedAtRef.current;
+    if (data.updatedAt && applied && Date.parse(data.updatedAt) < Date.parse(applied)) return;
+    if (data.updatedAt) appliedUpdatedAtRef.current = data.updatedAt;
     setModifySeq((n) => n + 1);
     // 서버 응답이면 updatedAt도 저장해, 다음 폴링이 이 조작을 다른 기기의 변경으로 보고 기록·그래프·목표를 또 부르지 않게 한다
     setTimer((prev) =>
@@ -538,8 +552,9 @@ export function TimerConsole({ timerId, initialSnapshot, initialFailed = false, 
     setActiveFilters(new Set());
   }
 
-  // 보통은 상위 화면이 상세를 넘겨 이 단계가 없다(골격은 상위의 ProjectDetailSkeleton 하나).
-  // 상위가 받지 못했을 때(5xx·시간 초과)만 여기서 다시 불러오며, 그동안 상위 골격의 콘솔 부분을 그대로 두어 자리 높이를 지킨다
+  // 보통은 상위 화면이 첫 데이터를 넘겨 이 단계가 없다(골격은 상위의 ProjectDetailSkeleton 하나). 상위가 상세를 받지 못했으면
+  // (initialFailed) 다시 부르지 않고 곧바로 오류 화면이다. 여기서 부르는 것은 오류 화면의 '다시 시도'와, 넘겨받은 데이터가 없을 때
+  // (상위 없이 쓰거나 스냅샷이 다른 타이머 것일 때)뿐이고, 그동안 상위 골격의 콘솔 부분을 그대로 두어 자리 높이를 지킨다
   if (loading) {
     return <ConsoleSkeleton busy shape={isOwner ? "owner" : "viewer"} />;
   }
@@ -573,7 +588,7 @@ export function TimerConsole({ timerId, initialSnapshot, initialFailed = false, 
     <>
     <div className="space-y-8">
       {/* 카운트다운 */}
-      {/* 배지는 숫자와 같은 행에 둔다. 좁은 폭에서 줄바꿈돼도 숫자 바로 아래, 보조 문구('종료 예정')보다 위에 붙는다 */}
+      {/* 배지는 sm 이상에서 숫자 옆, 모바일에서는 숫자 아래 보조 문구('종료 예정') 앞에 붙는다(CountdownDisplay의 aside) */}
       <CountdownDisplay
         remainingSeconds={timer.remainingSeconds}
         status={timer.status}
@@ -583,9 +598,9 @@ export function TimerConsole({ timerId, initialSnapshot, initialFailed = false, 
         aside={
           // 연결이 끊기면 서버 상태를 알 수 없으므로 상태 배지 자리를 연결 끊김으로 바꾼다. 숫자는 로컬 추정값으로 계속 흐른다
           connection.disconnected ? (
-            <ConnectionLostBadge lastSyncedAtMs={connection.lastSuccessAtMs} className="mt-2" />
+            <ConnectionLostBadge lastSyncedAtMs={connection.lastSuccessAtMs} />
           ) : (
-            <Badge variant={statusBadgeVariant} className="mt-2">
+            <Badge variant={statusBadgeVariant}>
               {statusLabel}
             </Badge>
           )

@@ -11,6 +11,10 @@ import {
   reloadPage,
 } from "@/lib/overlay-recovery";
 
+// 화면 전체를 jsdom에 그리는 무거운 파일이라 이 파일만 시간 제한을 늘린다(전역은 기본 5초). 전체 실행 하나면 가장 느린 테스트가
+// 1초 안팎(동시 2개 2.5초)이지만, 실행이 겹치면(에이전트 동시 실행. 전체 실행 4개 동시에 13초까지) CPU 경합으로 5초를 넘는다
+vi.setConfig({ testTimeout: 20_000 });
+
 vi.mock("@/lib/overlay-animation", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/overlay-animation")>();
   return { ...actual, isStaleResponse: vi.fn(actual.isStaleResponse) };

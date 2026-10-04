@@ -3,6 +3,10 @@ import { render, screen, fireEvent, waitFor, act } from "@testing-library/react"
 import { useState } from "react";
 import { OverlaySettings } from "../OverlaySettings";
 
+// 화면 전체를 jsdom에 그리는 무거운 파일이라 이 파일만 시간 제한을 늘린다(전역은 기본 5초). 전체 실행 하나면 가장 느린 테스트가
+// 1초 안팎(동시 2개 2.5초)이지만, 실행이 겹치면(에이전트 동시 실행. 전체 실행 4개 동시에 13초까지) CPU 경합으로 5초를 넘는다
+vi.setConfig({ testTimeout: 20_000 });
+
 const mockToast = vi.fn();
 vi.mock("@/components/ui/Toast", () => ({
   useToast: () => ({ toast: mockToast }),
