@@ -10,6 +10,7 @@ import { getDB } from "@/lib/db";
 import { POST as createTimer } from "@/app/api/projects/[id]/timers/route";
 import { GET as getTimer } from "@/app/api/timers/[id]/route";
 import { POST as modifyTimer } from "@/app/api/timers/[id]/modify/route";
+import { POST as activateTimer } from "@/app/api/timers/[id]/activate/route";
 import { GET as getLogs } from "@/app/api/timers/[id]/logs/route";
 import { GET as getGraph } from "@/app/api/timers/[id]/graph/route";
 
@@ -261,5 +262,51 @@ describe("타이머 전체 생명주기", () => {
     expect(res.status).toBe(200);
     expect(body.data.status).toBe("RUNNING");
     expect(body.data.remainingSeconds).toBe(1800);
+  });
+
+  it("9. 예약 대기 중 '지금 시작' → RUNNING + ACTIVATE 로그, 이후 시간 변경 가능 (C031)", async () => {
+    const id = "c".repeat(32);
+    const scheduledRow = {
+      id,
+      project_id: "proj-1",
+      title: "예약",
+      description: null,
+      base_remaining_seconds: 3600,
+      last_calculated_at: new Date().toISOString(),
+      status: "SCHEDULED",
+      scheduled_start_at: new Date(Date.now() + 60 * 60_000).toISOString(),
+      created_by: "user-1",
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+      owner_user_id: "user-1",
+    };
+    const params = { params: Promise.resolve({ id }) } as never;
+
+    // 예약 중에는 시간 변경이 막혀 있다
+    db._stmt.first.mockResolvedValueOnce(scheduledRow);
+    const blocked = await modifyTimer(
+      createPostRequest(`/api/timers/${id}/modify`, { action: "ADD", deltaSeconds: 60, actorName: "시청자" }, AUTH_HEADERS) as never,
+      params,
+    );
+    expect(blocked.status).toBe(400);
+
+    db._stmt.first.mockResolvedValueOnce(scheduledRow);
+    const res = await activateTimer(createPostRequest(`/api/timers/${id}/activate`, undefined, AUTH_HEADERS) as never, params);
+    const body = await parseJson(res);
+    expect(res.status).toBe(200);
+    expect(body.data.status).toBe("RUNNING");
+    expect(body.data.remainingSeconds).toBe(3600);
+    expect(body.data.log).toMatchObject({ actionType: "ACTIVATE", actorName: "테스터", beforeSeconds: 3600, afterSeconds: 3600 });
+
+    // 시작한 뒤에는 시간 변경이 된다
+    const startedAt = body.data.log.createdAt;
+    db._stmt.first.mockResolvedValueOnce({ ...scheduledRow, status: "RUNNING", last_calculated_at: startedAt, scheduled_start_at: startedAt });
+    const added = await modifyTimer(
+      createPostRequest(`/api/timers/${id}/modify`, { action: "ADD", deltaSeconds: 600, actorName: "시청자" }, AUTH_HEADERS) as never,
+      params,
+    );
+    const addedBody = await parseJson(added);
+    expect(added.status).toBe(200);
+    expect(addedBody.data.remainingSeconds).toBeGreaterThanOrEqual(4199);
   });
 });

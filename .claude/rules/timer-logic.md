@@ -17,6 +17,7 @@ paths:
 - 상태: `SCHEDULED`(예약, 카운트다운 미시작) / `RUNNING` / `EXPIRED` / `DELETED`(soft delete).
 - 상태 전이는 조회 시점에 lazy하게 감지·기록한다. 크론이 없으므로 "조회될 때까지 DB 상태가 갱신되지 않는다"는 전제로 코드를 읽는다.
   - `SCHEDULED → RUNNING`: now ≥ `scheduled_start_at` → `ACTIVATE` 로그
+  - 소유자 '지금 시작'(`POST /api/timers/[id]/activate`): 예약 시각 전 `SCHEDULED → RUNNING`, `last_calculated_at`·`scheduled_start_at` = now, 소유자 이름의 `ACTIVATE` 로그
   - `RUNNING → EXPIRED`: remaining ≤ 0 → `EXPIRE` 로그 (만료 시각 기준으로 기록)
   - `EXPIRED → RUNNING`: ADD로 remaining > 0 → `REOPEN` + `ADD`
   - SUBTRACT로 remaining ≤ 0 → `SUBTRACT` + `EXPIRE`

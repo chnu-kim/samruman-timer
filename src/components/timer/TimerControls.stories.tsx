@@ -42,3 +42,8 @@ export const Subtract: Story = {
 export const Expired: Story = {
   args: { status: "EXPIRED", remainingSeconds: 0 },
 };
+
+// 예약 대기: 시간 조작 대신 '지금 시작' 하나
+export const Scheduled: Story = {
+  args: { status: "SCHEDULED", remainingSeconds: 7200 },
+};

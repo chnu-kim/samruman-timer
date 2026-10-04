@@ -19,7 +19,7 @@ remaining = max(0, baseRemainingSeconds - floor((now - lastCalculatedAt) / 1000)
 ## 상태 전이
 
 ```
-                    예약 시각 도래
+          예약 시각 도래 / 소유자 '지금 시작'
 SCHEDULED ─────────────────────→ RUNNING
                                     │
           시간 추가                 │ remaining ≤ 0
@@ -46,6 +46,7 @@ DELETED: 어느 상태에서든 삭제 시 (soft delete, 복구 API 없음)
 | From | To | 조건 | 로그 |
 |------|----|------|------|
 | `SCHEDULED` | `RUNNING` | 조회 시 현재 시각 ≥ scheduledStartAt 감지 | `ACTIVATE` |
+| `SCHEDULED` | `RUNNING` | 소유자가 예약 시각 전에 '지금 시작' (`POST /api/timers/[id]/activate`) | `ACTIVATE` |
 | `RUNNING` | `EXPIRED` | 조회 시 remaining ≤ 0 감지 | `EXPIRE` |
 | `RUNNING` | `EXPIRED` | 시간 차감으로 remaining ≤ 0 | `SUBTRACT` + `EXPIRE` |
 | `EXPIRED` | `RUNNING` | 시간 추가로 remaining > 0 | `REOPEN` + `ADD` |
@@ -65,7 +66,7 @@ scheduled_start_at = scheduledStartAt (nullable)
 - 로그: `CREATE` (delta_seconds = after_seconds = 입력값, before_seconds = 0, actor_name = 소유자 닉네임)
 - `scheduledStartAt`이 지정되면 `SCHEDULED` 상태로 생성, 미지정 시 기존대로 `RUNNING`
 - 입력 제한: `initialSeconds`는 1~31,536,000(1년) 정수, `scheduledStartAt`은 현재보다 미래인 유효한 날짜(아니면 400). 프로젝트당 비삭제 타이머가 이미 있으면 400
-- 예약 시각을 바꾸는 API는 없다 (`PATCH /api/timers/[id]`는 title·description만 변경). 삭제 후 재생성해야 한다
+- 예약 시각을 바꾸는 API는 없다 (`PATCH /api/timers/[id]`는 title·description만 변경). 예약 시각 전에 시작하려면 '지금 시작'(아래)을 쓰고, 더 늦추려면 삭제 후 재생성해야 한다
 
 ### 예약 활성화 (ACTIVATE)
 조회 시 `SCHEDULED` 상태의 타이머에 대해 lazy 감지:
@@ -77,6 +78,19 @@ if status === SCHEDULED && now >= scheduledStartAt:
 - 로그: `ACTIVATE` (delta_seconds = 0, before_seconds = after_seconds = baseRemainingSeconds, created_at = scheduledStartAt)
 - 핵심: `lastCalculatedAt`을 `scheduledStartAt`으로 설정하여 예약 시각부터 경과 시간 정확히 계산
 - `SCHEDULED` 상태에서는 시간 변경(MODIFY) 불가
+
+### 지금 시작 (수동 ACTIVATE)
+소유자가 예약 시각 전에 시작한다 (`POST /api/timers/[id]/activate`, 구현 `activateTimerNow()`):
+```
+먼저 위의 lazy 감지를 실행 (예약 시각이 지났으면 그 시각 기준 자동 활성화가 이긴다. 지금으로 다시 시작하지 않는다)
+if status === SCHEDULED:
+  status = RUNNING
+  lastCalculatedAt = now
+  scheduledStartAt = now   // 실제 시작 시각. 오버레이 '경과' 등 시작 시각을 읽는 곳이 어긋나지 않게
+```
+- 로그: `ACTIVATE` (delta_seconds = 0, before_seconds = after_seconds = baseRemainingSeconds, created_at = now, actor_name = 소유자 닉네임, actor_user_id = 소유자)
+- 원래 예약 시각은 덮어쓴다. 상태 쓰기는 `STATE_GUARD` 조건이라 동시에 자동 활성화·삭제가 먼저 커밋되면 쓰지 않는다. 이미 시작된 타이머는 현재 상태를 그대로 돌려주고(200), 삭제됐으면 404
+- 오버레이 주소(타이머 ID)는 그대로이므로 OBS 설정을 바꿀 필요가 없다
 
 ### 시간 추가 (ADD)
 ```
@@ -170,14 +184,14 @@ status = DELETED
 
 ### 로깅하지 않는 이벤트
 - 자동 감소 (카운트다운 틱): 로깅 없음
-- 단순 조회: 로깅 없음 (예약 활성화·만료 감지 시만 ACTIVATE·EXPIRE 로그)
+- 단순 조회: 로깅 없음 (예약 활성화·만료 감지 시만 ACTIVATE·EXPIRE 로그. 수동 시작은 별도 요청으로 ACTIVATE)
 
 ### 로그 필드
 ```
 {
   timer_id:       타이머 ID
   action_type:    CREATE | ADD | SUBTRACT | EXPIRE | REOPEN | ACTIVATE | DELETE
-  actor_name:     변경자 이름 (ADD/SUBTRACT/REOPEN: 시간 변경을 요청한 시청자 닉네임, CREATE/DELETE: 소유자 닉네임, 자동 전이 ACTIVATE/EXPIRE와 되돌리기가 남긴 EXPIRE/REOPEN: 'system')
+  actor_name:     변경자 이름 (ADD/SUBTRACT/REOPEN: 시간 변경을 요청한 시청자 닉네임, CREATE/DELETE/수동 ACTIVATE: 소유자 닉네임, 자동 전이 ACTIVATE/EXPIRE와 되돌리기가 남긴 EXPIRE/REOPEN: 'system')
   actor_user_id:  조작한 소유자 유저 ID (자동 전이는 NULL)
   delta_seconds:  변경량 (초)
   before_seconds: 변경 전 잔여 시간

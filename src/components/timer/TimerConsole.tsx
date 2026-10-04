@@ -407,6 +407,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                 selectedAction={selectedAction}
                 onActionChange={setSelectedAction}
                 onModified={handleModified}
+                onTimerRemoved={() => onTimerRemovedRef.current?.()}
                 quickActorRef={quickActorRef}
                 className="mt-3"
               />
