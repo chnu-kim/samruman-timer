@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { useState, type ComponentProps } from "react";
 import { render, screen, fireEvent, waitFor, act, within } from "@testing-library/react";
-import { TimerControls, MODIFY_FAILED_FORM_MESSAGE, MODIFY_FAILED_QUICK_MESSAGE, NICKNAME_REQUIRED_MESSAGE } from "../TimerControls";
+import { TimerControls, MODIFY_FAILED_FORM_MESSAGE, MODIFY_FAILED_QUICK_MESSAGE, NICKNAME_REQUIRED_MESSAGE, NICKNAME_PROMPT_MESSAGE, DISCONNECTED_HINT_MESSAGE } from "../TimerControls";
 import type { ModifyAction } from "@/types";
 
 type HarnessProps = Omit<ComponentProps<typeof TimerControls>, "selectedAction" | "onActionChange"> & {
@@ -36,8 +36,10 @@ const localStorageMock = (() => {
 })();
 vi.stubGlobal("localStorage", localStorageMock);
 
-// jsdom에는 native <dialog>의 showModal/close가 없다('지금 시작' 확인창)
+// jsdom에는 native <dialog>의 showModal/close가 없다('지금 시작' 확인창). scrollIntoView도 없다(닉네임 안내)
+const scrollIntoViewMock = vi.fn();
 beforeAll(() => {
+  Element.prototype.scrollIntoView = scrollIntoViewMock;
   HTMLDialogElement.prototype.showModal = function () {
     this.setAttribute("open", "");
   };
@@ -69,6 +71,7 @@ describe("TimerControls", () => {
   beforeEach(() => {
     mockFetch.mockReset();
     mockToast.mockReset();
+    scrollIntoViewMock.mockReset();
     localStorageMock.clear();
   });
 
@@ -199,16 +202,73 @@ describe("TimerControls", () => {
     expect(submit).toBeDisabled();
   });
 
-  // UX-13: 만료 상태에서 추가가 곧 재시작임을 미리 알린다
+  // UX-13·R25: 만료 상태에서 추가가 곧 재시작임을 결과 한 줄로 미리 알린다
   it("shows restart notice for EXPIRED timers", () => {
     render(<Harness timerId={timerId} status="EXPIRED" remainingSeconds={0} />);
-    expect(screen.getByText("만료된 타이머입니다. 시간을 추가하면 타이머가 다시 시작됩니다.")).toBeInTheDocument();
+    expect(screen.getByText("시간을 추가하면 다시 시작됩니다")).toBeInTheDocument();
     expect(screen.getByLabelText("시청자 닉네임")).toBeInTheDocument();
   });
 
   it("does not show restart notice for RUNNING timers", () => {
     render(<Harness timerId={timerId} status="RUNNING" />);
-    expect(screen.queryByText(/만료된 타이머입니다/)).not.toBeInTheDocument();
+    expect(screen.queryByText("시간을 추가하면 다시 시작됩니다")).not.toBeInTheDocument();
+  });
+
+  // R25: 만료(잔여 0)에서는 차감할 시간이 없으므로 세그먼트를 숨기고 모든 경로를 '추가'로 고정한다
+  describe("만료 상태는 추가로 고정", () => {
+    function okResponse(action: ModifyAction, delta: number) {
+      return {
+        ok: true,
+        json: async () => ({ data: { id: timerId, remainingSeconds: delta, status: "RUNNING", log: { id: "l1", actionType: action, actorName: "시청자A", deltaSeconds: delta } } }),
+      };
+    }
+
+    it("만료면 추가/차감 radio가 없고 닉네임 칸이 한 줄을 다 쓴다", () => {
+      render(<Harness timerId={timerId} status="EXPIRED" remainingSeconds={0} initialAction="SUBTRACT" />);
+      expect(screen.queryAllByRole("radio")).toHaveLength(0);
+      expect(screen.queryByText("변경 유형")).not.toBeInTheDocument();
+      expect(screen.getByLabelText("시청자 닉네임").closest(".flex-col.gap-5")!.className).not.toContain("md:grid-cols");
+    });
+
+    it("차감을 고른 뒤 만료되면 바 프리셋은 '+'로 보이고 ADD로 보낸다", async () => {
+      mockFetch.mockResolvedValueOnce(okResponse("ADD", 3600));
+      const { rerender } = render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={60} initialAction="SUBTRACT" />);
+      fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "시청자A" } });
+      expect(quickBar().getAllByRole("button").map((b) => b.textContent)).toEqual(["-1시간", "-5시간", "-10시간"]);
+
+      // 카운트다운이 0에 닿음(상위가 expired로 알린다. status는 폴링 전이라 아직 RUNNING)
+      rerender(<Harness timerId={timerId} status="RUNNING" remainingSeconds={60} initialAction="SUBTRACT" expired />);
+      expect(screen.queryAllByRole("radio")).toHaveLength(0);
+      expect(quickBar().getAllByRole("button").map((b) => b.textContent)).toEqual(["+1시간", "+5시간", "+10시간"]);
+
+      fireEvent.click(quickBar().getByRole("button", { name: "+1시간" }));
+      expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ action: "ADD", deltaSeconds: 3600, actorName: "시청자A" });
+    });
+
+    it("차감을 고른 뒤 만료되면 카드 확인 버튼도 '시간 추가'로 ADD를 보낸다", async () => {
+      mockFetch.mockResolvedValueOnce(okResponse("ADD", 600));
+      render(<Harness timerId={timerId} status="EXPIRED" remainingSeconds={0} initialAction="SUBTRACT" />);
+      fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "시청자A" } });
+      fireEvent.change(screen.getAllByLabelText("분")[0], { target: { value: "10" } });
+      const submit = cardButton("시간 추가 (10분)");
+      expect(submit.className).not.toMatch(/bg-red/);
+      fireEvent.click(submit);
+      await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+      expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toMatchObject({ action: "ADD", deltaSeconds: 600 });
+    });
+  });
+
+  // R27: 연결이 끊겨도 버튼은 막지 않고 안내 줄 문구만 바꾼다
+  it("연결이 끊기면 안내 줄만 바뀌고 버튼은 그대로 활성이다", () => {
+    render(<Harness timerId={timerId} status="RUNNING" disconnected />);
+    fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "시청자A" } });
+    expect(screen.getByText(DISCONNECTED_HINT_MESSAGE)).toBeInTheDocument();
+    for (const b of quickBar().getAllByRole("button")) expect(b).toBeEnabled();
+    // 바 캡션(모드의 색 외 단서)은 그대로 둔다
+    expect(screen.getByText("즉시 적용 → 시청자A")).toBeInTheDocument();
+    fireEvent.change(screen.getAllByLabelText("분")[0], { target: { value: "10" } });
+    expect(cardButton("시간 추가 (10분)")).toBeEnabled();
+    expect(screen.getByText(DISCONNECTED_HINT_MESSAGE)).toBeInTheDocument();
   });
 
   it("switches to SUBTRACT action", () => {
@@ -849,16 +909,38 @@ describe("TimerControls", () => {
 
   // UX-15·UX-16: 모바일 하단 바는 즉시 적용되므로 그 사실과 기록될 닉네임을 항상 보여 준다
   describe("mobile quick bar caption", () => {
-    it("asks for a nickname and disables the bar when no actor is available", () => {
+    // R02: 닉네임이 없어도 바를 막지 않는다. 누르면 입력란으로 안내하고, 누른 프리셋은 기억했다 나중에 적용하지 않는다
+    it("닉네임이 없으면 바 버튼은 활성이고, 누르면 입력란으로 포커스·스크롤하고 한 줄 안내만 띄운다", async () => {
       render(<Harness timerId={timerId} status="RUNNING" />);
-      expect(screen.getByText("닉네임을 먼저 입력하세요")).toBeInTheDocument();
-      expect(quickBar().getByRole("button", { name: "+1시간" })).toBeDisabled();
+      expect(screen.queryByText("닉네임을 먼저 입력하세요")).not.toBeInTheDocument();
+      expect(screen.getByText("즉시 적용 → 닉네임 칸의 이름")).toBeInTheDocument();
+      const barButtons = quickBar().getAllByRole("button");
+      expect(barButtons.filter((b) => (b as HTMLButtonElement).disabled)).toHaveLength(0);
+      // 첫 화면에서 포커스가 입력란에 있지 않다(바가 숨지 않는다)
+      expect(document.activeElement).not.toBe(screen.getByLabelText("시청자 닉네임"));
+
+      fireEvent.click(quickBar().getByRole("button", { name: "+1시간" }));
+      const input = screen.getByLabelText("시청자 닉네임");
+      expect(document.activeElement).toBe(input);
+      expect(scrollIntoViewMock).toHaveBeenCalledWith({ block: "center" });
+      expect(screen.getByRole("alert")).toHaveTextContent(NICKNAME_PROMPT_MESSAGE);
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockToast).not.toHaveBeenCalled();
+
+      // 닉네임을 입력하면 안내가 사라지고, 앞서 누른 +1시간은 적용되지 않는다
+      fireEvent.change(input, { target: { value: "치즈냥" } });
+      expect(screen.queryByText(NICKNAME_PROMPT_MESSAGE)).not.toBeInTheDocument();
+      await act(async () => {});
+      expect(mockFetch).not.toHaveBeenCalled();
     });
 
     it("shows the typed nickname as the target", () => {
       render(<Harness timerId={timerId} status="RUNNING" />);
       fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: " 치즈냥 " } });
       expect(screen.getByText("즉시 적용 → 치즈냥")).toBeInTheDocument();
+      // 기본 닉네임 안내는 '기본 닉네임으로 설정' 버튼이 보이는 자리에서만 한 줄
+      expect(screen.getByRole("button", { name: "기본 닉네임으로 설정" })).toBeInTheDocument();
+      expect(screen.getByText("다음부터 입력 없이 바로 적용됩니다")).toBeInTheDocument();
       expect(quickBar().getByRole("button", { name: "+1시간" })).toBeEnabled();
     });
 
@@ -958,7 +1040,7 @@ describe("TimerControls", () => {
       }
     });
 
-    it("값이 있을 때 입력란 닉네임이 비면 기본 닉네임이 있어도 바 제출은 비활성이다(폼 제출은 입력란 닉네임이 필요)", () => {
+    it("값이 있을 때 입력란 닉네임이 비면 기본 닉네임이 있어도 바 제출은 입력란으로 안내한다(폼 제출은 입력란 닉네임이 필요)", () => {
       localStorageMock.setItem("defaultActorName", "기본냥");
       render(<Harness timerId={timerId} status="RUNNING" />);
       fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "" } });
@@ -966,8 +1048,44 @@ describe("TimerControls", () => {
       expect(screen.getByText("즉시 적용 → 기본냥")).toBeInTheDocument();
 
       fireEvent.change(screen.getAllByLabelText("분")[0], { target: { value: "10" } });
-      expect(quickBar().getByRole("button", { name: "시간 추가 (10분)" })).toBeDisabled();
-      expect(screen.getByText("닉네임을 먼저 입력하세요")).toBeInTheDocument();
+      const submit = quickBar().getByRole("button", { name: "시간 추가 (10분)" });
+      expect(submit).toBeEnabled();
+      fireEvent.click(submit);
+      expect(document.activeElement).toBe(screen.getByLabelText("시청자 닉네임"));
+      expect(scrollIntoViewMock).toHaveBeenCalledWith({ block: "center" });
+      expect(screen.getByRole("alert")).toHaveTextContent(NICKNAME_PROMPT_MESSAGE);
+      expect(mockFetch).not.toHaveBeenCalled();
+      // 입력값은 그대로 남는다
+      expect(screen.getAllByLabelText("분")[0]).toHaveValue(10);
+    });
+
+    // R14: 글자 입력 칸에 포커스가 있는 동안만 바를 숨긴다. 버튼·토글·바 버튼 포커스로는 숨지 않는다
+    it("닉네임·시간 칸에 포커스가 있는 동안만 바를 숨긴다", () => {
+      render(<Harness timerId={timerId} status="RUNNING" />);
+      const bar = document.querySelector("[data-quick-bar]") as HTMLElement;
+      expect(bar).not.toHaveClass("hidden");
+
+      const nickname = screen.getByLabelText("시청자 닉네임");
+      act(() => nickname.focus());
+      expect(bar).toHaveClass("hidden");
+      // 닉네임 → 분 칸으로 옮겨도 숨긴 채
+      act(() => (screen.getAllByLabelText("분")[0] as HTMLElement).focus());
+      expect(bar).toHaveClass("hidden");
+
+      // 추가/차감 토글(role=radio)로 옮기면 다시 보인다
+      act(() => screen.getByRole("radio", { name: "추가" }).focus());
+      expect(bar).not.toHaveClass("hidden");
+      // 바 버튼·카드 프리셋 포커스로도 숨지 않는다
+      act(() => quickBar().getByRole("button", { name: "+1시간" }).focus());
+      expect(bar).not.toHaveClass("hidden");
+      act(() => cardButton("+5시간").focus());
+      expect(bar).not.toHaveClass("hidden");
+
+      // 폼 밖으로 나가면 보인다
+      act(() => nickname.focus());
+      expect(bar).toHaveClass("hidden");
+      act(() => nickname.blur());
+      expect(bar).not.toHaveClass("hidden");
     });
   });
 

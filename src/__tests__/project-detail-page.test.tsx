@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within, act } from "@testing-library/react";
 import ProjectDetailPage from "@/app/projects/[id]/page";
 import { MODIFY_FAILED_QUICK_MESSAGE } from "@/components/timer/TimerControls";
 
@@ -323,8 +323,8 @@ describe("프로젝트 콘솔", () => {
       const title = await screen.findByRole("heading", { name: "키보드 단축키" });
       const dialog = title.closest("dialog")!;
       expect(dialog).toHaveAttribute("open");
-      // 기본 닉네임 설정 버튼은 닉네임을 입력해야 나타나므로 도움말이 그 순서를 알려 준다
-      expect(within(dialog).getByText(/닉네임 입력 후 ‘기본 닉네임으로 설정’을 누르면/)).toBeInTheDocument();
+      // R22: 각주는 숫자키가 기록할 이름 한 문장. 기본 닉네임 설정 안내는 그 버튼 옆 한 줄이 맡는다
+      expect(within(dialog).getByText("숫자키는 닉네임 칸의 이름(없으면 기본 닉네임)으로 바로 적용됩니다.")).toBeInTheDocument();
     });
 
     it("단축키가 꺼진 예약 타이머와 시청자 화면에는 진입점이 없다", async () => {
@@ -390,11 +390,19 @@ describe("프로젝트 콘솔", () => {
       render(<ProjectDetailPage />);
       await screen.findByRole("heading", { name: "시간 조작" });
 
+      mockToast.mockReset();
       fireEvent.keyDown(window, { key: "1", code: "Digit1" });
       await new Promise((r) => setTimeout(r, 50));
       expect(calls.some((c) => c.url === "/api/timers/t1/modify")).toBe(false);
+      // R02: 닉네임 입력란으로 포커스를 옮기고 한 문장만 알린다(입력란 옆 alert는 토스트와 겹치므로 띄우지 않는다)
+      const input = screen.getByLabelText("시청자 닉네임");
+      expect(document.activeElement).toBe(input);
+      expect(mockToast).toHaveBeenCalledTimes(1);
+      expect(mockToast).toHaveBeenCalledWith("닉네임을 먼저 입력하세요", "info");
+      expect(screen.queryByText("닉네임을 입력하면 바로 적용됩니다")).not.toBeInTheDocument();
 
-      fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "치즈냥" } });
+      fireEvent.change(input, { target: { value: "치즈냥" } });
+      act(() => input.blur());
       fireEvent.keyDown(window, { key: "1", code: "Digit1" });
       await waitFor(() => {
         const modify = calls.find((c) => c.url === "/api/timers/t1/modify" && c.method === "POST");
@@ -425,6 +433,24 @@ describe("프로젝트 콘솔", () => {
       await waitFor(() => expect(calls.some((c) => c.url === "/api/timers/t1/modify")).toBe(true));
       await new Promise((r) => setTimeout(r, 50));
       expect(mockToast).not.toHaveBeenCalled();
+    });
+
+    // R25: 차감을 고른 뒤 카운트다운이 0에 닿으면(폴링 전) 숫자키도 '추가'로 적용한다
+    it("차감 선택 후 만료되면 '1'은 ADD로 적용한다", async () => {
+      const running = { ...timerDetail, status: "RUNNING", remainingSeconds: 1 };
+      const calls = stubApi({ timers: [{ ...timer, status: "RUNNING", remainingSeconds: 1 }], goals: [], me: owner, detail: running });
+      render(<ProjectDetailPage />);
+      await waitFor(() => expect(screen.getByLabelText("시청자 닉네임")).toHaveValue("기본냥"));
+      fireEvent.keyDown(window, { key: "x", code: "KeyX" });
+      expect(screen.getByRole("radio", { name: "차감" })).toHaveAttribute("aria-checked", "true");
+
+      // 잔여 1초가 지나 만료로 보이면 세그먼트가 사라진다
+      await waitFor(() => expect(screen.queryAllByRole("radio")).toHaveLength(0), { timeout: 3000 });
+      fireEvent.keyDown(window, { key: "1", code: "Digit1" });
+      await waitFor(() => {
+        const modify = calls.find((c) => c.url === "/api/timers/t1/modify" && c.method === "POST");
+        expect(JSON.parse(modify!.body!)).toMatchObject({ action: "ADD", deltaSeconds: 3600 });
+      });
     });
 
     it("목표 폼이 열려 있으면 '1'이 뒤쪽 타이머를 바꾸지 않는다", async () => {

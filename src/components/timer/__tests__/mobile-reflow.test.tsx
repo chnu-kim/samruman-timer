@@ -75,4 +75,21 @@ describe("모바일 리플로우·숫자 키보드", () => {
     expect(block).toMatch(/html:has\(\[data-quick-bar\]\)\s*\{[^}]*scroll-padding-bottom:\s*var\(--quick-bar-h\)/);
     expect(block).toMatch(/body:has\(\[data-quick-bar\]\)\s*\{[^}]*padding-bottom:\s*var\(--quick-bar-h\)/);
   });
+
+  // R14: 낮은 화면(400% 확대 320×200, 가로 모드)에서는 고정 바가 화면 절반을 덮으므로 문서 흐름에 두고 높이 변수를 0으로
+  it("max-height 480px에서는 바가 static이고 --quick-bar-h가 0px이라 하단 여백·토스트 위치가 함께 따라온다", () => {
+    const css = readFileSync(resolve(process.cwd(), "src/app/globals.css"), "utf8");
+    const block = css.match(/@media \(width < 48rem\) and \(max-height: 480px\) \{[\s\S]*?\n\}/)?.[0];
+    expect(block).toBeDefined();
+    // calc()에 더해지는 값이라 단위 없는 0은 쓰지 않는다
+    expect(block).toMatch(/html:has\(\[data-quick-bar\]\)\s*\{[^}]*--quick-bar-h:\s*0px;/);
+    expect(block).toMatch(/\[data-quick-bar\]\s*\{[^}]*position:\s*static;/);
+    // 기본 블록 뒤에 와야 덮어쓴다
+    expect(css.indexOf(block!)).toBeGreaterThan(css.indexOf("@media (width < 48rem) {"));
+
+    // --quick-bar-h를 쓰는 곳은 모두 이 변수만 읽는다(값을 따로 들고 있지 않다): body 여백, scroll-padding, 토스트
+    const toast = readFileSync(resolve(process.cwd(), "src/components/ui/Toast.tsx"), "utf8");
+    expect(toast).toMatch(/bottom-\[calc\(max\(var\(--quick-bar-h,0px\)/);
+    expect(css.match(/var\(--quick-bar-h\)/g)).toHaveLength(2);
+  });
 });

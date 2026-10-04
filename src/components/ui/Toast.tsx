@@ -108,8 +108,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={{ toast }}>
       {children}
       {/* 컨테이너는 탭을 아래(모바일 하단 빠른 액션 바 등)로 통과시킨다. 버튼이 있는 토스트만 포인터를 받는다.
-          모바일 하단 바가 있으면 그 바로 위(--quick-bar-h, globals.css)에, 없으면 홈 인디케이터(safe-area) 위에 띄운다 */}
-      <div className="fixed left-4 right-4 bottom-[calc(var(--quick-bar-h,env(safe-area-inset-bottom,0px))+0.5rem)] md:bottom-4 z-50 flex flex-col items-stretch gap-2 pointer-events-none md:left-auto md:items-end">
+          모바일 하단 바가 있으면 그 바로 위(--quick-bar-h, globals.css)에, 없거나 낮은 화면에서 바가 문서 흐름에 놓이면(0px)
+          홈 인디케이터(safe-area) 위에 띄운다. 넓은 화면에서는 한 줄 폭이 화면을 가로지르지 않게 폭을 제한한다 */}
+      <div className="fixed left-4 right-4 bottom-[calc(max(var(--quick-bar-h,0px),env(safe-area-inset-bottom,0px))+0.5rem)] md:bottom-4 z-50 flex flex-col items-stretch gap-2 pointer-events-none md:left-auto md:max-w-sm md:items-end">
         {current && (
           // 바깥은 불투명 배경(다크의 반투명 틴트 아래로 콘텐츠가 비치지 않게), 안쪽이 변형 색
           <div
