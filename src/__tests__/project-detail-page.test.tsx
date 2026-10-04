@@ -767,8 +767,9 @@ describe("시간 카드 제목 (W25)", () => {
     expect(screen.queryByRole("heading", { name: "시간" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "시간" })).toBeInTheDocument();
     expect(screen.getByText("예약됨")).toBeInTheDocument();
-    // 제목 줄이 없으면 그 아래 간격(mt-3)도 없어 카드 위 여백이 안쪽 여백 하나뿐이다
-    expect(screen.getByRole("region", { name: "시간" }).firstElementChild).not.toHaveClass("mt-3");
+    // 제목 줄이 없으면 그 아래 간격(mt-3)도 없어 카드 위 여백이 안쪽 여백 하나뿐이다.
+    // pointer-fine:mt-3처럼 변형 접두사가 붙은 mt-*도 막는다
+    expect(screen.getByRole("region", { name: "시간" }).firstElementChild!.className).not.toMatch(/(^|\s)([a-z-]+:)*-?mt-/);
     // 예약 시각은 분까지만(초 없음)
     expect(screen.getByText(/시작 대기 중 · \d{4}\. \d\d\. \d\d\. \d\d:\d\d$/)).toBeInTheDocument();
   });
