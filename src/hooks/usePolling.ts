@@ -21,36 +21,52 @@ export function usePolling({ fn, interval, enabled }: UsePollingOptions): Pollin
 
   const [connection, setConnection] = useState<PollingConnection>({ disconnected: false, lastSuccessAtMs: null });
 
+  // 연결 상태는 enabled가 켜져 있는 동안 이어진다. interval은 타이머 상태(낙관적 갱신과 롤백 포함)에 따라 바뀌므로,
+  // interval이 바뀔 때 실패 횟수·마지막 성공 시각을 초기화하면 장애 중에 배지가 정상으로 돌아가 버린다
+  const stateRef = useRef({ failures: 0, lastSuccessAtMs: 0, generation: 0 });
+
+  useEffect(() => {
+    if (!enabled) return;
+    const state = stateRef.current;
+    // enabled가 켜지는 시점은 첫 조회가 막 성공한 뒤다
+    state.failures = 0;
+    state.lastSuccessAtMs = Date.now();
+    return () => {
+      // 꺼진 뒤 도착한 응답은 세지 않는다
+      state.generation += 1;
+      setConnection({ disconnected: false, lastSuccessAtMs: null });
+    };
+  }, [enabled]);
+
   useEffect(() => {
     if (!enabled) return;
 
+    const state = stateRef.current;
     let timer: ReturnType<typeof setInterval> | null = null;
-    let cancelled = false;
-    let failures = 0;
-    // enabled가 켜지는 시점은 첫 조회가 막 성공한 뒤다
-    let lastSuccessAtMs = Date.now();
 
     function update() {
-      const disconnected = isDisconnected(failures);
+      const disconnected = isDisconnected(state.failures);
       setConnection((prev) => {
-        const next = { disconnected, lastSuccessAtMs: disconnected ? lastSuccessAtMs : null };
+        const next = { disconnected, lastSuccessAtMs: disconnected ? state.lastSuccessAtMs : null };
         return prev.disconnected === next.disconnected && prev.lastSuccessAtMs === next.lastSuccessAtMs ? prev : next;
       });
     }
 
+    // interval이 바뀌기 전에 보낸 조회의 결과도 센다. enabled가 꺼진 뒤의 결과만 버린다
     function run() {
+      const generation = state.generation;
       Promise.resolve()
         .then(() => fnRef.current())
         .then(
           () => {
-            if (cancelled) return;
-            failures = 0;
-            lastSuccessAtMs = Date.now();
+            if (state.generation !== generation) return;
+            state.failures = 0;
+            state.lastSuccessAtMs = Date.now();
             update();
           },
           () => {
-            if (cancelled) return;
-            failures += 1;
+            if (state.generation !== generation) return;
+            state.failures += 1;
             update();
           },
         );
@@ -79,7 +95,7 @@ export function usePolling({ fn, interval, enabled }: UsePollingOptions): Pollin
 
     // 오프라인이면 실패를 기다리지 않고 바로 끊김으로 본다. 다시 온라인이 되면 곧바로 조회하고, 그 응답이 성공해야 풀린다
     function handleOffline() {
-      failures = Math.max(failures, DISCONNECT_FAILURE_THRESHOLD);
+      state.failures = Math.max(state.failures, DISCONNECT_FAILURE_THRESHOLD);
       update();
     }
 
@@ -94,12 +110,10 @@ export function usePolling({ fn, interval, enabled }: UsePollingOptions): Pollin
     window.addEventListener("online", handleOnline);
 
     return () => {
-      cancelled = true;
       stop();
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("offline", handleOffline);
       window.removeEventListener("online", handleOnline);
-      setConnection({ disconnected: false, lastSuccessAtMs: null });
     };
   }, [interval, enabled]);
 

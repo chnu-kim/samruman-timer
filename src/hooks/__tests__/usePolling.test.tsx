@@ -96,4 +96,48 @@ describe("usePolling 연결 상태 (C027)", () => {
     await tick(10000);
     expect(fn).toHaveBeenCalledTimes(2);
   });
+
+  it("끊긴 상태에서 interval이 바뀌어도 끊김과 마지막 성공 시각을 유지한다", async () => {
+    const fn = vi.fn().mockRejectedValue(new Error("down"));
+    const start = Date.now();
+    const { result, rerender } = renderHook(
+      ({ interval }) => usePolling({ fn, interval, enabled: true }),
+      { initialProps: { interval: 15000 } },
+    );
+    await tick(30000);
+    expect(result.current.disconnected).toBe(true);
+    expect(result.current.lastSuccessAtMs).toBe(start);
+
+    // 낙관적 상태 변경(EXPIRED→RUNNING)과 롤백으로 interval이 오간다
+    rerender({ interval: 5000 });
+    expect(result.current.disconnected).toBe(true);
+    expect(result.current.lastSuccessAtMs).toBe(start);
+    rerender({ interval: 15000 });
+    expect(result.current.disconnected).toBe(true);
+    expect(result.current.lastSuccessAtMs).toBe(start);
+
+    // 다음 실패에서도 그대로다
+    await tick(15000);
+    expect(result.current.disconnected).toBe(true);
+    expect(result.current.lastSuccessAtMs).toBe(start);
+  });
+
+  it("interval이 바뀌기 전에 보낸 조회의 결과도 센다", async () => {
+    let reject: (e: Error) => void = () => {};
+    const fn = vi.fn()
+      .mockRejectedValueOnce(new Error("down"))
+      .mockImplementationOnce(() => new Promise<void>((_, r) => { reject = r; }))
+      .mockRejectedValue(new Error("down"));
+    const { result, rerender } = renderHook(
+      ({ interval }) => usePolling({ fn, interval, enabled: true }),
+      { initialProps: { interval: 5000 } },
+    );
+    await tick(10000);
+    expect(fn).toHaveBeenCalledTimes(2);
+    expect(result.current.disconnected).toBe(false);
+
+    rerender({ interval: 15000 });
+    await act(async () => { reject(new Error("timeout")); });
+    expect(result.current.disconnected).toBe(true);
+  });
 });
