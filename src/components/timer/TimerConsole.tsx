@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef, type ReactNode } from "react"
 import { CountdownDisplay } from "@/components/timer/CountdownDisplay";
 import { TimerControls, MODIFY_FAILED_QUICK_MESSAGE } from "@/components/timer/TimerControls";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Pagination } from "@/components/ui/Pagination";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -89,7 +90,7 @@ const POLL_TIMEOUT_MS = 10_000;
 interface TimerConsoleProps {
   timerId: string;
   isOwner: boolean;
-  /** 시간 조작 옆(소유자가 아니면 카운트다운 아래)에 둘 영역. 프로젝트 화면은 목표를 넣는다 */
+  /** 시간 카드 옆(소유자가 아니면 카운트다운 아래)에 둘 영역. 프로젝트 화면은 목표를 넣는다 */
   aside?: ReactNode;
   /** 시간이 바뀌었을 때(여기서 조작했거나 다른 기기에서 바뀌었을 때). 목표 진행률처럼 시간에 딸린 데이터를 다시 불러오는 데 쓴다 */
   onTimeChanged?: () => void;
@@ -113,6 +114,9 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
   const [logTotalPages, setLogTotalPages] = useState(1);
   const [activeFilters, setActiveFilters] = useState<Set<ActionType>>(new Set());
   const [logsLoading, setLogsLoading] = useState(false);
+  // 타이머 전체에 CREATE 외 기록이 없는지. 필터 없는 첫 페이지(최신순이라 CREATE뿐이면 그게 전부다)를 받을 때만 갱신해,
+  // 펼친 기록의 페이지 이동·필터 결과에 따라 바뀌지 않게 한다. null은 아직 모른다
+  const [logsBaseEmpty, setLogsBaseEmpty] = useState<boolean | null>(null);
 
   // 그래프(잔여 시간 추이. 누적 변경량은 통계 페이지에 있다)
   const [graphData, setGraphData] = useState<GraphResponse | null>(null);
@@ -180,6 +184,9 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
         const json = (await res.json()) as ApiSuccessResponse<TimerLogsResponse>;
         if (seq !== logsSeqRef.current) return;
         setLogs(json.data.logs);
+        if (!(expanded && filters.size > 0) && (!expanded || page === 1)) {
+          setLogsBaseEmpty(json.data.logs.every((log) => log.actionType === "CREATE"));
+        }
         setLogTotalPages(json.data.pagination.totalPages);
         setLogsError(false);
       } else if (res.status !== 401) {
@@ -328,6 +335,10 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
     );
     // optimistic 호출(log.id 없음)에서는 기록·그래프·목표 갱신 생략
     if (data.log?.id) {
+      // 서버가 새 ADD/SUBTRACT 기록을 만들었으므로 '생성 기록뿐'이라는 판정을 먼저 푼다. 아래 silent 갱신이 실패하거나
+      // 건너뛰어져도 '전체 기록'이 계속 숨지 않게 한다(폴링은 같은 서버 상태라 복구해 주지 않는다).
+      // 되돌리기로 다시 CREATE뿐이 되면 이어지는 성공한 조회가 다시 판정한다
+      setLogsBaseEmpty(false);
       // silent: 갱신이 실패해도 방금까지 보이던 목록을 오류 줄로 바꾸지 않는다(오류 상태였다면 성공 시 풀린다)
       fetchLogs(1, activeFilters, logsExpanded, { silent: true });
       setLogPage(1);
@@ -339,7 +350,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
   // 단축키 성공 토스트('+10분 · 닉네임' + 되돌리기). 되돌린 결과도 handleModified로 반영해 기록·그래프·목표를 다시 불러온다
   const showModifiedToast = useUndoableModifyToast(timerId, handleModified);
 
-  // 숫자 단축키가 기록할 닉네임. 시간 조작 카드(TimerControls)가 모바일 하단 바와 같은 규칙으로 렌더마다 채운다
+  // 숫자 단축키가 기록할 닉네임. 시간 카드(TimerControls)가 모바일 하단 바와 같은 규칙으로 렌더마다 채운다
   // (입력란의 이름 우선, 비면 기본 닉네임). 단축키 핸들러가 다시 만들어지지 않도록 ref로 들고 있는다
   const quickActorRef = useRef("");
   // 닉네임 없이 숫자키를 눌렀을 때 입력란으로 포커스를 옮기는 함수. TimerControls가 렌더마다 채운다
@@ -448,6 +459,13 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
     );
   }
 
+  // 예약 상태의 시간 카드는 안내와 버튼 하나뿐이라 제목을 숨긴다. 만료 상태는 재시작 안내와 입력 폼이 모두 보이므로 제목을 둔다
+  const hideControlsHeading = timer.status === "SCHEDULED" && !expired;
+  // 기록이 아직 하나도 없다: 타이머 전체에 0건이거나 생성(CREATE) 행뿐이다(logsBaseEmpty).
+  // 타이머는 만들 때 CREATE 기록이 항상 생기므로 0건만 보면 이 분기에 닿지 못한다. 시간을 한 번도 바꾸지 않았으면 '없음'으로 본다.
+  // 로딩 중·오류에는 해당하지 않고, 이미 펼친 뒤에는 숨기지 않는다(누른 '접기'가 사라지면 포커스를 잃고, 필터 결과 0건에도 칩이 있어야 풀 수 있다)
+  const noLogsYet = logsBaseEmpty === true && !logsError && !logsExpanded;
+
   const displayStatus = countdownEnded ? "EXPIRED" : timer.status;
   const statusBadgeVariant = displayStatus === "SCHEDULED" ? "scheduled" : displayStatus === "RUNNING" ? "running" : "expired";
   const statusLabel = displayStatus === "SCHEDULED" ? "예약됨" : displayStatus === "RUNNING" ? "실행 중" : "만료";
@@ -473,26 +491,45 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
         }
       />
 
-      {/* 시간 조작 + 곁 영역(목표). 방송 중 가장 자주 쓰는 두 가지를 첫 화면에 나란히 둔다 */}
+      {/* 시간 + 곁 영역(목표). 아래 기록·그래프 행과 같은 3:2 트랙·gap-5라 열 경계가 위아래로 맞는다. 방송 중 가장 자주 쓰는 두 가지를 첫 화면에 나란히 둔다 */}
       {(isOwner || aside) && (
         <div className={cn("grid gap-5", isOwner && !!aside && "lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start")}>
           {isOwner && (
-            <section aria-labelledby="timer-controls-heading" className="rounded-xl border border-accent/30 bg-accent-light/20 p-5">
+            <section
+              aria-labelledby={hideControlsHeading ? undefined : "timer-controls-heading"}
+              aria-label={hideControlsHeading ? "시간" : undefined}
+              className="rounded-xl border border-border bg-background p-5"
+            >
               {/* 단축키가 있다는 사실을 '?'를 몰라도 알 수 있게, 도움말로 가는 진입점을 제목 줄에 하나만 둔다.
-                  키보드가 있는 포인터 기기에서만 보인다(터치 기기에서는 단축키를 쓸 수 없다) */}
-              <div className="flex items-center justify-between gap-3">
-                <h2 id="timer-controls-heading" className="text-sm font-bold text-foreground">시간 조작</h2>
-                {shortcutsEnabled && (
-                  <button
-                    type="button"
-                    onClick={() => setShowHelp(true)}
-                    aria-haspopup="dialog"
-                    className="hidden pointer-fine:inline-flex -my-1 -mr-2 rounded-control px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    단축키
-                  </button>
-                )}
-              </div>
+                  키보드가 있는 포인터 기기에서만 보인다(터치 기기에서는 단축키를 쓸 수 없다).
+                  예약·만료 상태의 내용은 안내와 버튼 하나뿐이라 제목은 숨긴다(상태는 배지·보조 문구가 알린다) */}
+              {(!hideControlsHeading || shortcutsEnabled) && (
+                <div
+                  className={cn(
+                    "items-center gap-3",
+                    // 터치 기기에서는 버튼만 있는 줄 전체를 접어 빈 줄 높이가 생기지 않게 한다
+                    hideControlsHeading ? "hidden justify-end pointer-fine:flex" : "flex min-h-10 justify-between",
+                  )}
+                >
+                  {!hideControlsHeading && (
+                    <h2 id="timer-controls-heading" className="text-base font-semibold text-foreground">시간</h2>
+                  )}
+                  {shortcutsEnabled && (
+                    // Button 기본 클래스에 inline-flex가 있어 같은 요소에 hidden을 두면 진다. 표시 여부는 래퍼가 정한다
+                    <span className="hidden pointer-fine:inline-flex">
+                      <Button
+                        type="button"
+                        variant="link"
+                        onClick={() => setShowHelp(true)}
+                        aria-haspopup="dialog"
+                        className="-my-0.5 -mr-2"
+                      >
+                        단축키
+                      </Button>
+                    </span>
+                  )}
+                </div>
+              )}
               <TimerControls
                 timerId={timerId}
                 status={timer.status}
@@ -505,7 +542,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                 nicknamePromptRef={nicknamePromptRef}
                 expired={expired}
                 disconnected={connection.disconnected}
-                className="mt-3"
+                className={hideControlsHeading ? "pointer-fine:mt-3" : "mt-3"}
               />
             </section>
           )}
@@ -514,24 +551,27 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
       )}
 
       {/* 기록 + 그래프 */}
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
         <section aria-labelledby="timer-logs-heading">
           <div className="flex items-center justify-between gap-4">
-            <h2 id="timer-logs-heading" className="border-l-2 border-accent pl-3 text-lg font-bold">
-              {logsExpanded ? "변경 기록" : "최근 변경"}
+            <h2 id="timer-logs-heading" className="text-base font-semibold">
+              {logsExpanded ? "기록" : "최근 기록"}
             </h2>
-            <button
-              type="button"
-              onClick={toggleLogsExpanded}
-              aria-expanded={logsExpanded}
-              className="min-h-11 rounded-control px-2 text-sm font-medium text-accent hover:bg-accent-light transition-colors"
-            >
-              {logsExpanded ? "접기" : "전체 기록"}
-            </button>
+            {!noLogsYet && (
+              <Button
+                type="button"
+                variant="link"
+                className="-my-2.5 -mr-2"
+                onClick={toggleLogsExpanded}
+                aria-expanded={logsExpanded}
+              >
+                {logsExpanded ? "접기" : "전체 기록"}
+              </Button>
+            )}
           </div>
 
           {/* 필터 */}
-          {logsExpanded && (
+          {logsExpanded && !noLogsYet && (
             <div className="mt-3 flex flex-wrap gap-1.5">
               {FILTER_GROUPS.map(({ label, actions }) => (
                 <button
@@ -634,7 +674,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
         </section>
 
         <section aria-labelledby="timer-graph-heading">
-          <h2 id="timer-graph-heading" className="border-l-2 border-accent pl-3 text-lg font-bold">잔여 시간 추이</h2>
+          <h2 id="timer-graph-heading" className="text-base font-semibold">잔여 시간 추이</h2>
           <div className="mt-3 rounded-xl border border-border bg-muted p-4">
             {graphLoading ? (
               <div className="flex h-64 items-center justify-center">

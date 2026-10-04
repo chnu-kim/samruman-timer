@@ -27,7 +27,7 @@ export const ChangeType: Story = {
     ],
     value: "ADD",
     onChange: fn(),
-    ariaLabel: "변경 유형",
+    ariaLabel: "추가/차감",
   },
 };
 

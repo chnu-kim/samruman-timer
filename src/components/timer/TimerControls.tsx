@@ -133,9 +133,9 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   const [error, setError] = useState("");
   const [recentActors, setRecentActors] = useState<string[]>([]);
   const [defaultActor, setDefaultActor] = useState("");
-  // 예약 타이머 '지금 시작'. 시간 조작 폼과 오류 문구가 섞이지 않도록 따로 둔다
+  // 예약 타이머 '지금 시작'. 시간 추가/차감 폼과 오류 문구가 섞이지 않도록 따로 둔다
   const [activating, setActivating] = useState(false);
-  // 지금 시작은 되돌릴 수 없고(예약 시각이 사라짐) 드물게 쓰므로, 자주 쓰는 시간 조작과 달리 확인을 한 번 거친다
+  // 지금 시작은 되돌릴 수 없고(예약 시각이 사라짐) 드물게 쓰므로, 자주 쓰는 시간 추가/차감과 달리 확인을 한 번 거친다
   const [confirmActivate, setConfirmActivate] = useState(false);
   const [activateError, setActivateError] = useState("");
   // 실패 시 입력을 되돌릴 때, 요청 중에 새로 입력한 값을 덮어쓰지 않도록 최신 입력을 들고 있는다
@@ -570,8 +570,10 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
             ref={actionWrapperRef}
             onFocus={() => { actionFocusedRef.current = true; }}
             onBlur={handleActionBlur}
+            // 라벨은 스크린리더용이다. 옆 닉네임 입력란의 라벨 줄(20px + gap 6px)만큼 내리되, 세그먼트(50px)가 입력란(40px)보다 10px 높아 가운데가 같도록 5px 올린다
+            className="md:mt-[1.3125rem]"
           >
-            <span id={actionGroupLabelId} className="mb-1.5 block text-sm font-medium text-foreground">변경 유형</span>
+            <span id={actionGroupLabelId} className="sr-only">변경 유형</span>
             <SegmentedControl
               options={ACTION_OPTIONS}
               value={selectedAction}

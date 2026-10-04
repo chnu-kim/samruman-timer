@@ -109,9 +109,9 @@ afterEach(() => {
 });
 
 const goalSection = () => screen.getByRole("region", { name: "목표" });
-const logSection = () => screen.getByRole("heading", { name: "최근 변경" }).closest("section")!;
+const logSection = () => screen.getByRole("heading", { name: "최근 기록" }).closest("section")!;
 const graphSection = () => screen.getByRole("heading", { name: "잔여 시간 추이" }).closest("section")!;
-const EMPTY_TEXT = /기록이 없습니다|진행 중인 목표가 없습니다|종료된 목표가 없습니다/;
+const EMPTY_TEXT = /기록이 없습니다|아직 목표가 없습니다|진행 중인 목표가 없습니다|종료된 목표가 없습니다/;
 
 describe("콘솔 조회 실패 표시 (W31)", () => {
   it("목표·기록이 500이면 빈 상태 대신 섹션마다 오류 한 줄을 보이고 탭 개수를 숨긴다", async () => {
@@ -149,7 +149,7 @@ describe("콘솔 조회 실패 표시 (W31)", () => {
     api.goals = "pending";
     api.logs = "pending";
     render(<ProjectDetailPage />);
-    await screen.findByRole("heading", { name: "최근 변경" });
+    await screen.findByRole("heading", { name: "최근 기록" });
 
     expect(screen.queryByText(EMPTY_TEXT)).not.toBeInTheDocument();
     expect(screen.queryByText(/불러오지 못했습니다/)).not.toBeInTheDocument();
@@ -170,8 +170,132 @@ describe("콘솔 조회 실패 표시 (W31)", () => {
     render(<ProjectDetailPage />);
 
     expect(await screen.findByText("기록이 없습니다.")).toBeInTheDocument();
-    expect(await screen.findByText("진행 중인 목표가 없습니다.")).toBeInTheDocument();
-    expect(within(goalSection()).getByRole("tab", { name: "진행 중 (0)" })).toBeInTheDocument();
+    // W25: 목표가 하나도 없으면 탭·안내문 없이 '새 목표' 버튼과 한 줄만 남는다
+    expect(await within(goalSection()).findByText("아직 목표가 없습니다.")).toBeInTheDocument();
+    expect(within(goalSection()).queryAllByRole("tab")).toHaveLength(0);
+    expect(within(goalSection()).queryByText(/버튼을 눌러 목표를 추가/)).not.toBeInTheDocument();
+    expect(within(goalSection()).getByRole("button", { name: "새 목표" })).toBeInTheDocument();
+    // 기록이 하나도 없고 필터도 꺼져 있으면 '전체 기록'과 필터 칩을 두지 않는다
+    expect(within(logSection()).queryByRole("button", { name: "전체 기록" })).not.toBeInTheDocument();
+    expect(within(logSection()).queryAllByRole("button", { pressed: false })).toHaveLength(0);
+  });
+
+  it("생성(CREATE) 기록뿐이어도 시간을 바꾼 적이 없으면 '전체 기록'과 필터를 숨긴다", async () => {
+    const create = { id: "l0", actionType: "CREATE", actorName: "tester", actorUserId: "u1", deltaSeconds: 0, beforeSeconds: 0, afterSeconds: 3600, createdAt: "2026-01-01T00:00:00.000Z" };
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/api/auth/me")) return jsonResponse(owner);
+      if (url === "/api/projects/p1/timers") return jsonResponse([timer]);
+      if (url === "/api/projects/p1/goals") return jsonResponse([]);
+      if (url.startsWith("/api/timers/t1/logs")) return jsonResponse({ logs: [create], pagination: { page: 1, limit: 5, total: 1, totalPages: 1 } });
+      if (url.startsWith("/api/timers/t1/graph")) return jsonResponse({ mode: "remaining", points: [] });
+      if (url === "/api/timers/t1") return jsonResponse(timerDetail);
+      return jsonResponse(project);
+    }) as typeof fetch;
+    render(<ProjectDetailPage />);
+    await screen.findByRole("heading", { name: "최근 기록" });
+    await waitFor(() => expect(screen.getAllByText(/tester/).length).toBeGreaterThan(0));
+    expect(within(logSection()).queryByRole("button", { name: "전체 기록" })).not.toBeInTheDocument();
+  });
+
+  it("생성 기록뿐인 상태에서 시간 변경에 성공하면 이어지는 기록 갱신이 실패해도 '전체 기록'을 보인다", async () => {
+    const create = { id: "l0", actionType: "CREATE", actorName: "tester", actorUserId: "u1", deltaSeconds: 0, beforeSeconds: 0, afterSeconds: 3600, createdAt: "2026-01-01T00:00:00.000Z" };
+    const added = { id: "l9", actionType: "ADD", actorName: "시청자", actorUserId: null, deltaSeconds: 3600, beforeSeconds: 0, afterSeconds: 3600, createdAt: "2026-01-02T00:00:00.000Z" };
+    let logsCalls = 0;
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/api/auth/me")) return jsonResponse(owner);
+      if (url === "/api/projects/p1/timers") return jsonResponse([timer]);
+      if (url === "/api/projects/p1/goals") return jsonResponse([]);
+      if (url === "/api/timers/t1/modify") return jsonResponse({ id: "t1", remainingSeconds: 3600, status: "RUNNING", log: added });
+      if (url.startsWith("/api/timers/t1/logs")) {
+        // 첫 조회만 CREATE뿐으로 성공하고, modify 뒤의 silent 갱신부터는 실패한다
+        if (++logsCalls > 1) return new Response(JSON.stringify({ error: { code: "INTERNAL_ERROR", message: "서버 오류" } }), { status: 500 });
+        return jsonResponse({ logs: [create], pagination: { page: 1, limit: 5, total: 1, totalPages: 1 } });
+      }
+      if (url.startsWith("/api/timers/t1/graph")) return jsonResponse({ mode: "remaining", points: [] });
+      if (url === "/api/timers/t1") return jsonResponse(timerDetail);
+      return jsonResponse(project);
+    }) as typeof fetch;
+    render(<ProjectDetailPage />);
+    await screen.findByRole("heading", { name: "최근 기록" });
+    await waitFor(() => expect(screen.getAllByText(/tester/).length).toBeGreaterThan(0));
+    expect(within(logSection()).queryByRole("button", { name: "전체 기록" })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "시청자" } });
+    fireEvent.keyDown(window, { key: "1", code: "Digit1" });
+
+    await waitFor(() => expect(logsCalls).toBeGreaterThan(1));
+    expect(await within(logSection()).findByRole("button", { name: "전체 기록" })).toBeInTheDocument();
+  });
+
+  it("펼친 기록의 마지막 페이지가 CREATE 한 건뿐이어도 '접기'와 필터 칩을 그대로 둔다", async () => {
+    const create = { id: "l0", actionType: "CREATE", actorName: "tester", actorUserId: "u1", deltaSeconds: 0, beforeSeconds: 0, afterSeconds: 3600, createdAt: "2026-01-01T00:00:00.000Z" };
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/api/auth/me")) return jsonResponse(owner);
+      if (url === "/api/projects/p1/timers") return jsonResponse([timer]);
+      if (url === "/api/projects/p1/goals") return jsonResponse([]);
+      if (url.startsWith("/api/timers/t1/logs")) {
+        const page2 = new URL(url, "http://x").searchParams.get("page") === "2";
+        return jsonResponse({ logs: page2 ? [create] : logs, pagination: { page: page2 ? 2 : 1, limit: 20, total: 21, totalPages: 2 } });
+      }
+      if (url.startsWith("/api/timers/t1/graph")) return jsonResponse({ mode: "remaining", points: [] });
+      if (url === "/api/timers/t1") return jsonResponse(timerDetail);
+      return jsonResponse(project);
+    }) as typeof fetch;
+    render(<ProjectDetailPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "전체 기록" }));
+    const expandedLogs = () => screen.getByRole("region", { name: "기록" });
+    await within(expandedLogs()).findByRole("button", { name: "추가" });
+    fireEvent.click(within(expandedLogs()).getByRole("button", { name: /다음/ }));
+    await waitFor(() => expect(within(expandedLogs()).getAllByText(/tester/).length).toBeGreaterThan(0));
+    expect(within(expandedLogs()).getByRole("button", { name: "접기" })).toBeInTheDocument();
+    expect(within(expandedLogs()).getByRole("button", { name: "추가" })).toBeInTheDocument();
+  });
+
+  it("목표·기록을 받기 전과 실패했을 때는 탭과 '전체 기록'을 숨기지 않는다", async () => {
+    api.goals = "pending";
+    api.logs = "pending";
+    const { unmount } = render(<ProjectDetailPage />);
+    await screen.findByRole("heading", { name: "최근 기록" });
+    expect(within(goalSection()).getAllByRole("tab")).toHaveLength(2);
+    expect(within(logSection()).getByRole("button", { name: "전체 기록" })).toBeInTheDocument();
+    unmount();
+
+    api.goals = 500;
+    api.logs = 500;
+    render(<ProjectDetailPage />);
+    await within(await screen.findByRole("region", { name: "목표" })).findByText("목표를 불러오지 못했습니다.");
+    await within(logSection()).findByText("기록을 불러오지 못했습니다.");
+    expect(within(goalSection()).getAllByRole("tab")).toHaveLength(2);
+    expect(within(logSection()).getByRole("button", { name: "전체 기록" })).toBeInTheDocument();
+  });
+
+  it("필터를 켠 결과가 0건이면 칩과 토글을 그대로 두어 필터를 풀 수 있다", async () => {
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/api/auth/me")) return jsonResponse(owner);
+      if (url === "/api/projects/p1/timers") return jsonResponse([timer]);
+      if (url === "/api/projects/p1/goals") return jsonResponse([activeGoal]);
+      if (url.startsWith("/api/timers/t1/logs")) {
+        const filtered = url.includes("actionType=");
+        return jsonResponse({ logs: filtered ? [] : logs, pagination: { page: 1, limit: 20, total: filtered ? 0 : 1, totalPages: 1 } });
+      }
+      if (url.startsWith("/api/timers/t1/graph")) return jsonResponse({ mode: "remaining", points: [] });
+      if (url === "/api/timers/t1") return jsonResponse(timerDetail);
+      return jsonResponse(project);
+    }) as typeof fetch;
+    render(<ProjectDetailPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "전체 기록" }));
+    const expandedLogs = () => screen.getByRole("region", { name: "기록" });
+    await screen.findByRole("heading", { name: "기록" });
+    fireEvent.click(await within(expandedLogs()).findByRole("button", { name: "추가" }));
+    expect(await within(expandedLogs()).findByText("기록이 없습니다.")).toBeInTheDocument();
+    expect(within(expandedLogs()).getByRole("button", { name: "추가" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(expandedLogs()).getByRole("button", { name: "접기" })).toBeInTheDocument();
   });
 
   it("'다시 시도'를 누르면 그 섹션만 다시 불러와 실제 데이터로 바뀐다", async () => {
@@ -266,7 +390,7 @@ describe("콘솔 조회 실패 표시 (W31)", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       render(<ProjectDetailPage />);
-      expect(await within(await screen.findByRole("heading", { name: "최근 변경" }).then((h) => h.closest("section")!)).findByText("자동")).toBeInTheDocument();
+      expect(await within(await screen.findByRole("heading", { name: "최근 기록" }).then((h) => h.closest("section")!)).findByText("자동")).toBeInTheDocument();
       await screen.findByText("12시간 달성");
 
       Object.assign(api, { goals: 500, logs: 500, graph: 500, detail: 500 });

@@ -3,7 +3,7 @@
  *
  * 한 줄에 JSON 하나를 console로 내보낸다. Workers Logs가 JSON 필드를 인덱싱하므로
  * 대시보드에서 `event`, `requestId`, `kind` 등으로 바로 필터할 수 있다.
- * 도메인의 시간 변경 기록(timer_logs)과는 다르다.
+ * 도메인의 시간 기록(timer_logs)과는 다르다.
  *
  * 이벤트 이름은 영어 dot 표기(`auth.refresh.rejected`)로 쓴다. 목록은 docs/OBSERVABILITY.md "이벤트 카탈로그".
  *

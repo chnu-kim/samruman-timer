@@ -353,7 +353,7 @@ export function revertAmount(log: Pick<RevertTarget, "actionType" | "beforeSecon
 }
 
 /**
- * 시간 변경 기록 하나를 되돌린다(로그 취소 처리).
+ * 시간 기록 하나를 되돌린다(로그 취소 처리).
  *
  * - 현재 잔여 시간에 그 기록이 실제로 바꾼 양만 반대로 적용한다. 사이에 다른 기기의 변경이 있어도 그 변경은 남는다.
  * - 기록 행은 지우지 않고 `reverted_at`만 채운다. 반대 방향 보정 행을 남기지 않는다.

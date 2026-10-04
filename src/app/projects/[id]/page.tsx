@@ -80,23 +80,28 @@ function GoalSection({
     document.getElementById(`goal-tab-${next}`)?.focus();
   }
 
+  // 받은 결과가 0건일 때만 비운다. 로딩·오류 중에 탭을 숨겼다가 다시 보이면 레이아웃이 밀리기 때문이다
+  const noGoals = goals !== null && !error && goals.length === 0;
+
+  const newGoalButton = isOwner && (
+    <Button
+      variant="primary"
+      size="md"
+      onClick={() => { setGoalFormKey((k) => k + 1); onShowGoalForm(); }}
+      disabled={!hasTimer}
+      title={!hasTimer ? "타이머를 먼저 생성하세요" : undefined}
+    >
+      <PlusIcon className="w-4 h-4 mr-1" />
+      새 목표
+    </Button>
+  );
+
   return (
     <section className={cn("space-y-4", className)} aria-label="목표">
       {/* 헤더 — 제목 + 추가 버튼 */}
       <div className="flex items-center justify-between gap-4">
-        <h2 className="border-l-2 border-accent pl-3 text-lg font-bold">목표</h2>
-        {isOwner && (
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => { setGoalFormKey((k) => k + 1); onShowGoalForm(); }}
-            disabled={!hasTimer}
-            title={!hasTimer ? "타이머를 먼저 생성하세요" : undefined}
-          >
-            <PlusIcon className="w-4 h-4 mr-1" />
-            새 목표
-          </Button>
-        )}
+        <h2 className="text-base font-semibold">목표</h2>
+        {newGoalButton}
       </div>
 
       {/* 목표 생성 모달 */}
@@ -108,6 +113,13 @@ function GoalSection({
         />
       </FormDialog>
 
+      {noGoals ? (
+        // 목표가 하나도 없으면 탭·안내문 없이 한 줄만 둔다
+        <p className="text-sm text-muted-foreground">
+          {hasTimer ? "아직 목표가 없습니다." : "타이머를 먼저 생성하면 목표를 설정할 수 있습니다."}
+        </p>
+      ) : (
+      <>
       {/* 탭 — 진행 중 / 종료 */}
       <div className="flex gap-1 border-b border-border" role="tablist" aria-label="목표 상태 필터">
         <button
@@ -138,7 +150,7 @@ function GoalSection({
 
       {/* 탭 콘텐츠 */}
       <div
-        className="flex flex-col gap-3"
+        className="flex flex-col"
         role="tabpanel"
         id="goal-tabpanel"
         aria-labelledby={goalTab === "active" ? "goal-tab-active" : "goal-tab-completed"}
@@ -190,12 +202,14 @@ function GoalSection({
           </p>
         )}
       </div>
+      </>
+      )}
     </section>
   );
 }
 
 // 프로젝트와 타이머는 1:1이라 이 화면 하나가 방송 중 조작 콘솔이다.
-// 프로젝트 정보·목표는 여기서, 카운트다운·시간 조작·기록·그래프는 TimerConsole이 맡는다.
+// 프로젝트 정보·목표는 여기서, 카운트다운·시간·기록·그래프는 TimerConsole이 맡는다.
 // (/timers/[id]는 이 화면으로 보내고, OBS 오버레이와 통계만 타이머 주소에 남는다)
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
@@ -493,7 +507,7 @@ export default function ProjectDetailPage() {
               label="더보기"
               items={[
                 { label: "링크 복사", onSelect: handleCopyLink },
-                ...(timer ? [{ label: "타이머 초기화(목표 기록 유지)", onSelect: () => setShowTimerDeleteDialog(true), danger: true, disabled: deleting }] : []),
+                ...(timer ? [{ label: "타이머 초기화(목표 유지)", onSelect: () => setShowTimerDeleteDialog(true), danger: true, disabled: deleting }] : []),
                 { label: "프로젝트 삭제", onSelect: () => setShowDeleteDialog(true), danger: true, disabled: deleting },
               ]}
             />
@@ -524,7 +538,7 @@ export default function ProjectDetailPage() {
               // 시청자에게 빈 목표 영역은 의미가 없으므로 목표가 있을 때만 보여 준다.
               // 받지 못했으면 있는지 모르므로 오류 줄을 보인다(실패를 '목표 없음'으로 가리지 않는다)
               isOwner || goalsError || (goals?.length ?? 0) > 0
-                ? goalSection("rounded-xl border border-border p-5")
+                ? goalSection(isOwner ? "lg:pt-[1.3125rem]" : undefined) // 왼쪽 시간 카드의 테두리 1px + 안쪽 여백 20px에 제목 줄을 맞춘다
                 : undefined
             }
           />
@@ -575,8 +589,8 @@ export default function ProjectDetailPage() {
       <ConfirmDialog
         open={showTimerDeleteDialog}
         title="타이머 초기화"
-        // 목표 진행률은 지금 타이머의 변경 기록으로 계산한다(src/lib/goal.ts). 목표 행은 남아도 진행 중인 목표는 0부터 다시 쌓이므로 그 사실을 알린다
-        description={`지금 타이머와 변경 기록이 지워지고 방송 화면의 오버레이가 사라집니다. 되돌릴 수 없으며 목표 기록은 남습니다.${
+        // 목표 진행률은 지금 타이머의 기록으로 계산한다(src/lib/goal.ts). 목표 행은 남아도 진행 중인 목표는 0부터 다시 쌓이므로 그 사실을 알린다
+        description={`지금 타이머와 기록이 지워지고 방송 화면의 오버레이가 사라집니다. 되돌릴 수 없으며 목표 기록은 남습니다.${
           hasActiveGoal ? " 진행 중인 목표의 진행률은 새 타이머 기준으로 처음부터 다시 쌓입니다." : ""
         } 새 타이머는 오버레이 주소가 달라서 OBS 브라우저 소스에 새 주소를 다시 넣어야 합니다.`}
         confirmLabel="타이머 초기화"
@@ -588,7 +602,7 @@ export default function ProjectDetailPage() {
       <ConfirmDialog
         open={showDeleteDialog}
         title="프로젝트 삭제"
-        description="타이머·목표·변경 기록이 함께 지워지고 되돌릴 수 없습니다."
+        description="타이머·목표·기록이 함께 지워지고 되돌릴 수 없습니다."
         confirmLabel="프로젝트 삭제"
         variant="danger"
         onConfirm={handleDelete}

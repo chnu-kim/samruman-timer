@@ -185,7 +185,7 @@ export function formatEndTime(date: Date, now: Date = new Date()): string {
 }
 
 /**
- * 변경 기록 행의 시각. 오늘이면 'HH:mm'만, 오늘이 아니면 'MM. DD. HH:mm', 다른 해면 연도까지 붙인다.
+ * 기록 행의 시각. 오늘이면 'HH:mm'만, 오늘이 아니면 'MM. DD. HH:mm', 다른 해면 연도까지 붙인다.
  * 방송 중에는 대부분 오늘 기록이라 날짜·초를 매 행 반복하지 않는다(초까지의 전체 시각은 title로).
  * toLocaleString은 엔진에 따라 '오전'이나 '24:05'를 내므로 직접 맞춘다
  */
@@ -213,7 +213,7 @@ export function formatRelativeDate(iso: string): string {
 }
 
 /**
- * 변경 기록의 행위자 표시명. 만료·예약 활성화(와 되돌리기로 생긴 만료·재시작)는 서버가 actor_name 'system'으로 남기는데,
+ * 기록의 행위자 표시명. 만료·예약 활성화(와 되돌리기로 생긴 만료·재시작)는 서버가 actor_name 'system'으로 남기는데,
  * 시청자 닉네임처럼 읽히지 않도록 화면에서만 '자동'으로 바꾼다(DB 값은 유지).
  */
 export function displayActorName(log: {

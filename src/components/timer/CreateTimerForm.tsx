@@ -103,7 +103,7 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess }: Cre
   const [time, setTime] = useState<TimeFields>(EMPTY_TIME_FIELDS);
   const initialSeconds = timeFieldsToSeconds(time);
 
-  // 시간 조작 폼과 같은 규칙: 60 이상의 분·초는 윗자리로 올린다(90분 → 1시간 30분)
+  // 시간 추가/차감 폼과 같은 규칙: 60 이상의 분·초는 윗자리로 올린다(90분 → 1시간 30분)
   function changeTime(field: keyof TimeParts, raw: string) {
     setTime((t) => changeTimeField(t, field, raw));
   }

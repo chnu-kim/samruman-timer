@@ -88,7 +88,7 @@ describe("GoalForm", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  // 타이머 생성·시간 조작과 같은 올림 규칙
+  // 타이머 생성·시간 추가/차감과 같은 올림 규칙
   it("분 90은 1시간 30분으로 올린다", () => {
     render(
       <ToastProvider>

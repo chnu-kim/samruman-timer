@@ -44,7 +44,7 @@ export const Expired: Story = {
   args: { status: "EXPIRED", remainingSeconds: 0, selectedAction: "SUBTRACT" },
 };
 
-// 예약 대기: 시간 조작 대신 '지금 시작' 하나
+// 예약 대기: 시간 추가/차감 대신 '지금 시작' 하나
 export const Scheduled: Story = {
   args: { status: "SCHEDULED", remainingSeconds: 7200 },
 };
