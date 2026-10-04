@@ -14,7 +14,7 @@ const GOAL_TYPE_OPTIONS = [
 ] as const;
 
 const selectClass =
-  "appearance-none border border-border rounded-lg px-3 py-2 bg-background text-foreground text-center outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors cursor-pointer";
+  "appearance-none border border-border-input rounded-lg px-3 py-2 bg-background text-foreground text-center outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors cursor-pointer";
 
 function range(start: number, end: number): number[] {
   const arr: number[] = [];
@@ -121,7 +121,7 @@ export function GoalForm({ projectId, onSuccess }: GoalFormProps) {
     setError("");
 
     if (!title.trim()) {
-      setError("제목을 입력해주세요.");
+      setError("제목을 입력해 주세요.");
       return;
     }
 
@@ -161,7 +161,7 @@ export function GoalForm({ projectId, onSuccess }: GoalFormProps) {
 
     // DEADLINE
     if (!deadlineDatetime) {
-      setError("목표 날짜/시간을 설정해주세요.");
+      setError("목표 날짜/시간을 설정해 주세요.");
       return;
     }
     if (new Date(deadlineDatetime).getTime() <= Date.now()) {
@@ -302,7 +302,7 @@ export function GoalForm({ projectId, onSuccess }: GoalFormProps) {
       {/* 다이얼로그 푸터: 주 동작 하나를 오른쪽에. 닫기(X)가 있어 취소 버튼은 두지 않는다 */}
       <div className="flex justify-end pt-2">
         <Button type="submit" size="sm" disabled={loading || !title.trim()}>
-          {loading ? "생성 중..." : "목표 만들기"}
+          {loading ? "생성 중…" : "목표 만들기"}
         </Button>
       </div>
     </form>

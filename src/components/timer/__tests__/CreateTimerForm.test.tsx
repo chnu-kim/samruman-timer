@@ -10,16 +10,16 @@ describe("CreateTimerForm", () => {
   // UX-51: 제목이 비면 제출이 비활성인데, 그 이유를 라벨로 미리 알린다
   it("제목 라벨에 필수 표시가 있고 제목이 비면 제출할 수 없다", () => {
     render(<CreateTimerForm projectId="p1" />);
-    expect(screen.getByLabelText("오버레이 제목 (필수)")).toBeRequired();
+    expect(screen.getByLabelText("제목 (필수)")).toBeRequired();
     expect(screen.getByRole("button", { name: "타이머 만들기" })).toBeDisabled();
   });
 
   // 화면에서는 프로젝트 이름을 쓰므로 제목은 오버레이용이고, 프로젝트 이름으로 미리 채운다
   it("제목을 기본값으로 채우고 어디에 보이는지 알린다", () => {
     render(<CreateTimerForm projectId="p1" defaultTitle="주말 서브어톤" />);
-    const input = screen.getByLabelText("오버레이 제목 (필수)");
+    const input = screen.getByLabelText("제목 (필수)");
     expect(input).toHaveValue("주말 서브어톤");
-    expect(input).toHaveAccessibleDescription(/타이틀 표시/);
+    expect(input).toHaveAccessibleDescription(/제목 표시/);
     expect(screen.queryByLabelText("설명")).not.toBeInTheDocument();
   });
 

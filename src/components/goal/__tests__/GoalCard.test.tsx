@@ -49,7 +49,8 @@ describe("GoalCard", () => {
 
     const dialog = screen.getByRole("dialog", { name: "목표 취소" });
     expect(within(dialog).getByRole("button", { name: "돌아가기" })).toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: "취소하기" })).toBeInTheDocument();
+    // C093: 확인 버튼은 대상을 담은 동작명
+    expect(within(dialog).getByRole("button", { name: "목표 취소" })).toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: "취소" })).not.toBeInTheDocument();
   });
 
@@ -79,8 +80,9 @@ describe("GoalCard", () => {
 
     const dialog = screen.getByRole("dialog", { name: "목표 삭제" });
     expect(dialog).toHaveTextContent("기록에서 사라집니다");
-    // UX-70: 삭제 확인 라벨을 다른 화면과 같은 '삭제'로 통일한다
-    expect(within(dialog).getByRole("button", { name: "삭제" })).toBeInTheDocument();
+    // C093: 확인 버튼에 대상을 넣고(UX-70의 '삭제' 통일을 대체), 빠져나가는 버튼은 '돌아가기'
+    expect(within(dialog).getByRole("button", { name: "목표 삭제" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "돌아가기" })).toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: "삭제하기" })).not.toBeInTheDocument();
   });
 
