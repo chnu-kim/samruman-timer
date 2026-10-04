@@ -73,7 +73,7 @@ refresh까지 실패해 `authFetch()`가 세션 만료를 알리면 `SessionExpi
 
 ### 2단계: 콜백 처리 (`/api/auth/callback`)
 
-1. `state` 검증 (state 쿠키와 비교). `state`가 없거나 다르면 `/login?error=auth_failed`로 리다이렉트. `code`가 없으면(동의 화면 취소 등) 실패가 아니므로 `error` 없이 `/login`으로 보낸다. 두 경우 모두 `oauth_next`의 경로를 다시 검증해 `&next=`로 URL에 싣는다(그 경로로 이동하지는 않고, 로그인 버튼이 다시 들고 간다)
+1. `state` 검증 (state 쿠키와 비교). `state`가 없거나 다르면 `/login?error=auth_failed`로 리다이렉트. `code`만 없고 `state`가 state 쿠키와 맞으면(동의 화면 취소) 실패가 아니므로 `error` 없이 `/login`으로 보낸다(직접 연 주소처럼 state까지 없으면 실패로 안내). 두 경우 모두 `oauth_next`의 경로를 다시 검증해 `&next=`로 URL에 싣는다(그 경로로 이동하지는 않고, 로그인 버튼이 다시 들고 간다)
 2. Authorization code로 access token 교환
 3. Access token으로 CHZZK 사용자 정보 조회
 4. DB에서 사용자 조회 또는 생성 (upsert)

@@ -91,6 +91,19 @@ describe("GET /api/auth/callback", () => {
     expect(res.headers.get("Location")).toBe("http://localhost:3000/login");
   });
 
+  it.each([
+    ["쿼리 없이 직접 연 경우", {}, {}],
+    ["state도 없는 경우", {}, { "__Host-oauth_state": "state-1" }],
+    ["state가 저장값과 다른 경우", { state: "other" }, { "__Host-oauth_state": "state-1" }],
+    ["state 쿠키가 없는 경우", { state: "state-1" }, {}],
+  ] as [string, Record<string, string>, Record<string, string>][])(
+    "code 없음이라도 %s는 취소가 아니라 실패로 안내한다",
+    async (_label, params, cookies) => {
+      const res = await GET(createCallbackReq(params, cookies) as never);
+      expect(res.headers.get("Location")).toBe("http://localhost:3000/login?error=auth_failed");
+    }
+  );
+
   it("정상 콜백 (신규 사용자) → DB insert + JWT 쿠키 + 리다이렉트", async () => {
     vi.mocked(exchangeCode).mockResolvedValue({
       accessToken: "access-token",

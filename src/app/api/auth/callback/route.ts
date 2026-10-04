@@ -69,7 +69,9 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
     // warn 필터를 state 위조 의심(mismatch·missing_state·missing_cookie)에만 남기려고 info로 낮춘다
     const level = stateFailure === "missing_code" ? "info" : "warn";
     logger[level]("auth.oauth_state_invalid", { requestId, reason: stateFailure });
-    return failureRedirect(baseUrl, request, stateFailure === "missing_code");
+    // 취소로 보는 것은 code만 없고 state가 저장한 값과 맞을 때다(직접 연 주소·state 누락은 실패로 안내)
+    const cancelled = stateFailure === "missing_code" && !!state && state === savedState;
+    return failureRedirect(baseUrl, request, cancelled);
   }
 
   const startedAt = Date.now();
