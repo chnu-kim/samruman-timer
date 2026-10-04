@@ -80,6 +80,25 @@ function saveDefaultActor(name: string) {
   localStorage.setItem(DEFAULT_ACTOR_KEY, name);
 }
 
+/** 닉네임이 없을 때의 안내. 폼 제출과 하단 바가 같은 문구를 쓴다 */
+export const NICKNAME_REQUIRED_MESSAGE = "시청자 닉네임을 입력해 주세요.";
+/** 서버 오류·네트워크 실패(폼). 실패하면 입력을 되살리므로 다시 누르면 된다 */
+export const MODIFY_FAILED_FORM_MESSAGE = "적용하지 못했습니다. 입력은 그대로 있으니 다시 확인을 누르세요.";
+/** 서버 오류·네트워크 실패(하단 바처럼 입력 없이 바로 적용하는 경로) */
+export const MODIFY_FAILED_QUICK_MESSAGE = "적용하지 못했습니다. 다시 눌러 주세요.";
+
+/**
+ * 인라인 오류가 보이는 자리인지. 오류 문구는 확인 버튼 바로 위에 뜨므로 그 버튼이 뷰포트 안(모바일은 하단 바 위)에 있는지 본다
+ */
+function isInlineErrorVisible(anchor: HTMLElement | null): boolean {
+  if (!anchor) return false;
+  const rect = anchor.getBoundingClientRect();
+  // 하단 바가 떠 있으면(모바일) 그 위까지만 보이는 영역이다. md 이상에서는 display:none이라 높이가 0이다
+  const bar = document.querySelector<HTMLElement>("[data-quick-bar]")?.getBoundingClientRect();
+  const visibleBottom = bar && bar.height > 0 ? bar.top : window.innerHeight;
+  return rect.top >= 0 && rect.bottom <= visibleBottom;
+}
+
 export function TimerControls({ timerId, status, remainingSeconds, selectedAction, onActionChange, onModified, onTimerRemoved, quickActorRef, className }: TimerControlsProps) {
   const { toast } = useToast();
   const showModifiedToast = useUndoableModifyToast(timerId, onModified);
@@ -105,6 +124,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   useEffect(() => () => clearTimeout(barCooldownTimerRef.current), []);
   const actionGroupLabelId = useId();
   const submitHintId = useId();
+  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     setRecentActors(getRecentActors());
@@ -141,7 +161,19 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
     setTime(normalizeTimeParts(hours, minutes, seconds + presetSeconds));
   }
 
-  async function submitModify(action: ModifyAction, delta: number, actor: string) {
+  /**
+   * 실패는 한 곳에만 알린다. 폼에서 제출했고 오류 자리가 화면에 보이면 인라인(role=alert), 아니면 토스트.
+   * 하단 바는 입력부와 떨어져 있어 늘 토스트다
+   */
+  function reportFailure(message: string, fromForm: boolean) {
+    if (fromForm && isInlineErrorVisible(formRef.current?.querySelector<HTMLElement>("button[type=submit]") ?? null)) {
+      setError(message);
+    } else {
+      toast(message, "error");
+    }
+  }
+
+  async function submitModify(action: ModifyAction, delta: number, actor: string, fromForm: boolean) {
     setError("");
 
     const prevRemaining = remainingSeconds ?? 0;
@@ -182,7 +214,6 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
       });
 
       if (!res.ok) {
-        const json = (await res.json()) as ApiErrorResponse;
         // 롤백
         onModified?.({
           id: timerId,
@@ -191,8 +222,14 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
           log: {} as TimerLogResponse,
         });
         restoreInputs();
-        setError(json.error.message);
-        toast(json.error.message, "error");
+        // 401은 세션 만료 안내(SessionExpiredHandler) 한 건만 띄운다. 여기서 또 알리면 그 안내를 덮는다
+        if (res.status === 401) return;
+        // 4xx는 서버가 이유를 알려 준다(만료된 타이머 차감 등, 다시 눌러도 안 된다). 5xx는 다시 시도하면 된다
+        const json = (await res.json().catch(() => null)) as ApiErrorResponse | null;
+        const message = res.status < 500 && json?.error?.message
+          ? json.error.message
+          : fromForm ? MODIFY_FAILED_FORM_MESSAGE : MODIFY_FAILED_QUICK_MESSAGE;
+        reportFailure(message, fromForm);
         return;
       }
 
@@ -209,25 +246,23 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
         log: {} as TimerLogResponse,
       });
       restoreInputs();
-      setError("시간 변경에 실패했습니다.");
-      toast("시간 변경에 실패했습니다.", "error");
+      reportFailure(fromForm ? MODIFY_FAILED_FORM_MESSAGE : MODIFY_FAILED_QUICK_MESSAGE, fromForm);
     }
   }
 
   // 모바일 하단 바: 프리셋 탭 한 번으로 즉시 적용
   async function handleQuickApply(presetSeconds: number) {
     if (!quickActor) {
-      setError("닉네임을 먼저 입력해 주세요.");
-      toast("닉네임을 먼저 입력해 주세요.", "error");
+      toast(NICKNAME_REQUIRED_MESSAGE, "error");
       return;
     }
-    await submitModify(selectedAction, presetSeconds, quickActor);
+    await submitModify(selectedAction, presetSeconds, quickActor, false);
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!actorName.trim()) {
-      setError("시청자 닉네임을 입력해 주세요.");
+      setError(NICKNAME_REQUIRED_MESSAGE);
       return;
     }
     if (totalSeconds <= 0) {
@@ -237,7 +272,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
     setBarCooldown(true);
     clearTimeout(barCooldownTimerRef.current);
     barCooldownTimerRef.current = setTimeout(() => setBarCooldown(false), BAR_SUBMIT_COOLDOWN_MS);
-    await submitModify(selectedAction, totalSeconds, actorName.trim());
+    await submitModify(selectedAction, totalSeconds, actorName.trim(), true);
   }
 
   function handleSetDefault() {
@@ -267,6 +302,8 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
         onTimerRemoved();
         return;
       }
+      // 401은 세션 만료 안내가 따로 뜬다
+      if (res.status === 401) return;
       if (!res.ok) {
         const json = (await res.json().catch(() => null)) as ApiErrorResponse | null;
         setActivateError(json?.error?.message || "타이머를 시작하지 못했습니다.");
@@ -313,7 +350,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
 
   return (
     // Enter로 제출한다. 오류 안내는 아래 role=alert 문구가 맡으므로 브라우저 기본 검증 말풍선은 끈다
-    <form noValidate onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className={cn("space-y-5", className)}>
+    <form ref={formRef} noValidate onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className={cn("space-y-5", className)}>
       {/* 만료 상태에서 추가는 곧 재시작이므로 미리 알린다 */}
       {status === "EXPIRED" && (
         <p className="text-sm text-muted-foreground">

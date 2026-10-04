@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { sanitizeNextPath } from "@/lib/safe-redirect";
+import { SESSION_EXPIRED_PARAM, sanitizeNextPath } from "@/lib/safe-redirect";
 import { SITE_SUMMARY, SITE_TAGLINE } from "@/lib/site";
 
 function LoginContent() {
@@ -10,6 +10,8 @@ function LoginContent() {
   const error = searchParams.get("error");
   // 세션 만료로 온 경우 로그인 후 돌아갈 경로. 서버(로그인·콜백)에서도 다시 검증한다
   const next = sanitizeNextPath(searchParams.get("next"));
+  // 세션 만료로 보내졌을 때만 이유를 한 줄 알린다(헤더 '로그인'도 next를 실으므로 next로는 구분하지 않는다)
+  const expired = !error && searchParams.get(SESSION_EXPIRED_PARAM) === "1";
   const loginHref = next ? `/api/auth/login?next=${encodeURIComponent(next)}` : "/api/auth/login";
   const router = useRouter();
 
@@ -40,6 +42,10 @@ function LoginContent() {
         </p>
       </div>
 
+      {expired && (
+        <p className="text-center text-sm text-muted-foreground">세션이 만료되어 다시 로그인합니다.</p>
+      )}
+
       {error && (
         <div className="rounded-lg bg-red-50 p-3 text-center text-sm text-red-700 dark:bg-red-900/30 dark:text-red-400" role="alert">
           로그인에 실패했습니다. 다시 시도해 주세요.
@@ -49,7 +55,7 @@ function LoginContent() {
       {/* API 라우트로 전체 이동해야 하므로 <a>를 두고, 공용 Button primary와 같은 색·포커스 스타일을 쓴다 */}
       <a
         href={loginHref}
-        className="flex w-full items-center justify-center text-center rounded-lg bg-accent px-4 h-12 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        className="flex w-full items-center justify-center text-center rounded-lg bg-accent px-4 h-12 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover"
       >
         CHZZK로 로그인
       </a>

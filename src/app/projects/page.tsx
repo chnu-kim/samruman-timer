@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { ProjectCard } from "@/components/project/ProjectCard";
 import { CreateProjectForm } from "@/components/project/CreateProjectForm";
 import { Button } from "@/components/ui/Button";
@@ -19,7 +18,6 @@ type SortBy = "latest" | "name";
 type Tab = "mine" | "others";
 
 export default function ProjectsPage() {
-  const router = useRouter();
   const [user, setUser] = useState<MeResponse | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
 
@@ -146,9 +144,10 @@ export default function ProjectsPage() {
   const hideSearchControls =
     !!user && activeTab === "mine" && mineUnfilteredTotal === 0 && !searchQuery;
 
-  function handleCreateSuccess(id: string) {
-    router.push(`/projects/${id}`);
-  }
+  // 빈 목록에서는 본문의 '첫 프로젝트 만들기' 하나만 남긴다. 폼을 열면 헤더 버튼이 '취소'로 돌아와 닫을 수 있다.
+  // 본문 버튼이 실제로 그려질 때만 숨긴다. 목록 요청이 로딩 중이거나 실패하면 본문 버튼이 없어 만들 길이 사라진다
+  const hideHeaderCreate =
+    hideSearchControls && !showForm && !loading && !error && projects.length === 0;
 
   if (!authChecked) {
     return (
@@ -168,7 +167,7 @@ export default function ProjectsPage() {
           {/* 처음 온 사람이 이 서비스가 무엇인지 알 수 있게 로그아웃 상태에만 한 줄 소개를 둔다 */}
           {!user && <p className="mt-1 text-sm text-muted-foreground">{SITE_DESCRIPTION}</p>}
         </div>
-        {user && (
+        {user && !hideHeaderCreate && (
           <Button
             variant={showForm ? "secondary" : "primary"}
             size="sm"
@@ -191,7 +190,7 @@ export default function ProjectsPage() {
           className="rounded-xl border border-accent/30 bg-accent-light/20 p-5 animate-fade-in"
         >
           <h2 className="text-sm font-bold text-foreground mb-4">새 프로젝트 만들기</h2>
-          <CreateProjectForm onSuccess={handleCreateSuccess} />
+          <CreateProjectForm />
         </div>
       )}
 
@@ -244,14 +243,14 @@ export default function ProjectsPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="프로젝트 검색…"
               aria-label="프로젝트 검색"
-              className="w-full rounded-lg border border-border-input bg-background pl-9 pr-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+              className="w-full rounded-lg border border-border-input bg-background pl-9 pr-3 py-2 text-sm transition-colors"
             />
           </div>
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortBy)}
             aria-label="정렬 기준"
-            className="shrink-0 rounded-lg border border-border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="shrink-0 rounded-lg border border-border-input bg-background px-3 py-2 text-sm"
           >
             <option value="latest">최신순</option>
             <option value="name">이름순</option>

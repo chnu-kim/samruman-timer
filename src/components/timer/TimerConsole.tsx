@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import { CountdownDisplay } from "@/components/timer/CountdownDisplay";
-import { TimerControls } from "@/components/timer/TimerControls";
+import { TimerControls, MODIFY_FAILED_QUICK_MESSAGE } from "@/components/timer/TimerControls";
 import { Badge } from "@/components/ui/Badge";
 import { Pagination } from "@/components/ui/Pagination";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -304,12 +304,13 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
           const json = (await res.json()) as ApiSuccessResponse<TimerModifyResponse>;
           handleModified(json.data);
           showModifiedToast(json.data.log);
-        } else {
+        } else if (res.status !== 401) {
+          // 401은 세션 만료 안내가 따로 뜬다. 4xx는 서버가 이유를 알려 주고, 5xx는 다시 누르면 된다
           const json = (await res.json().catch(() => null)) as ApiErrorResponse | null;
-          toast(json?.error?.message || "시간 변경에 실패했습니다.", "error");
+          toast(res.status < 500 && json?.error?.message ? json.error.message : MODIFY_FAILED_QUICK_MESSAGE, "error");
         }
       } catch {
-        toast("시간 변경에 실패했습니다.", "error");
+        toast(MODIFY_FAILED_QUICK_MESSAGE, "error");
       }
     } else {
       toast("시청자 닉네임을 입력하면 숫자키로 즉시 적용됩니다. 닉네임 입력 후 ‘기본 닉네임으로 설정’을 누르면 다음부터 입력 없이 적용됩니다", "info");
@@ -450,7 +451,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
               type="button"
               onClick={toggleLogsExpanded}
               aria-expanded={logsExpanded}
-              className="min-h-11 rounded-md px-2 text-sm font-medium text-accent hover:bg-accent-light transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="min-h-11 rounded-md px-2 text-sm font-medium text-accent hover:bg-accent-light transition-colors"
             >
               {logsExpanded ? "접기" : "전체 기록"}
             </button>
@@ -466,7 +467,6 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                   aria-pressed={isFilterOn(actions)}
                   className={cn(
                     "rounded-full px-3 py-2 min-h-11 text-xs font-medium transition-colors",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     isFilterOn(actions)
                       ? "bg-accent text-accent-foreground"
                       : "border border-border text-muted-foreground hover:bg-foreground/5",
@@ -563,7 +563,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                 <p className="text-sm">그래프를 불러오지 못했습니다.</p>
                 <button
                   onClick={() => fetchGraph()}
-                  className="rounded-md px-3 py-1.5 pointer-coarse:min-h-11 text-xs font-medium text-accent hover:bg-accent-light transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="rounded-md px-3 py-1.5 pointer-coarse:min-h-11 text-xs font-medium text-accent hover:bg-accent-light transition-colors"
                 >
                   다시 시도
                 </button>

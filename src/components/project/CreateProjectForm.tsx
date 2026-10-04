@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
+import { NEW_TIMER_PARAM } from "@/lib/project-flow";
 import type { ApiSuccessResponse, ApiErrorResponse, ProjectCreateResponse } from "@/types";
 
 interface CreateProjectFormProps {
@@ -42,7 +43,8 @@ export function CreateProjectForm({ onSuccess }: CreateProjectFormProps) {
       if (onSuccess) {
         onSuccess(json.data.id);
       } else {
-        router.push(`/projects/${json.data.id}`);
+        // 프로젝트와 타이머는 1:1이라 상세 화면에서 타이머 만들기 창을 바로 연다
+        router.push(`/projects/${json.data.id}?${NEW_TIMER_PARAM}`);
       }
     } catch {
       setError("프로젝트 생성에 실패했습니다.");
