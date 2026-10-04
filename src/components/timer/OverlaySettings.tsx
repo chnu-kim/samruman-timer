@@ -309,11 +309,12 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
       onClick={(e) => {
         if (e.target === dialogRef.current) handleClose();
       }}
-      className="m-auto w-full max-w-[min(42rem,calc(100%-2rem))] max-h-[90dvh] overflow-hidden rounded-xl border border-border bg-background p-0 text-foreground shadow-dialog backdrop:bg-black/50 animate-[fade-in_0.15s_ease-out]"
+      // md 미만에서는 화면 아래에 붙은 시트: 좌우 꽉 채우고 위쪽 모서리만 둥글게, 아래 여백 없이 붙인다
+      className="m-auto w-full max-w-[min(42rem,calc(100%-2rem))] max-h-[90dvh] overflow-hidden rounded-xl border border-border bg-background p-0 text-foreground shadow-dialog backdrop:bg-black/50 animate-[fade-in_0.15s_ease-out] max-md:mb-0 max-md:max-w-none max-md:rounded-b-none max-md:border-b-0"
     >
       <div className="flex max-h-[90dvh] flex-col">
         {/* 헤더 */}
-        <div className="flex items-center justify-between p-6 pb-0">
+        <div className="flex items-center justify-between p-6 pb-0 max-md:pt-4">
           <h2 id={titleId} className="text-lg font-bold">OBS 오버레이 설정</h2>
           <button
             onClick={handleClose}
@@ -606,7 +607,8 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
         </div>
 
         {/* 하단 고정 영역 — 주 버튼은 저장을 포함한 URL 복사 */}
-        <div className="flex items-center justify-between flex-wrap gap-2 border-t border-border px-6 py-4">
+        {/* 시트(md 미만)에서는 한 줄 높이로 줄이고 홈 인디케이터(safe-area)만큼 띄운다 */}
+        <div className="flex items-center justify-between flex-wrap gap-2 border-t border-border px-6 py-4 max-md:py-3 max-md:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <span
             role="status"
             aria-live="polite"

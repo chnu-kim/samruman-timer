@@ -29,17 +29,16 @@ interface TimerControlsProps {
   className?: string;
 }
 
+// 카드(md 이상)와 모바일 하단 바가 같은 값·같은 표기('+1시간')를 쓴다. 화면에는 둘 중 한 벌만 보인다
 const PRESETS = [
   { label: "1시간", seconds: 3600 },
   { label: "5시간", seconds: 18000 },
   { label: "10시간", seconds: 36000 },
 ];
 
-const QUICK_PRESETS = [
-  { label: "+1h", seconds: 3600 },
-  { label: "+5h", seconds: 18000 },
-  { label: "+10h", seconds: 36000 },
-];
+// 바 제출 버튼은 제출 직후 같은 자리가 즉시 적용 프리셋(+5시간)으로 바뀐다.
+// 확인하려고 한 번 더 누른 탭이 프리셋으로 새지 않게 그동안 프리셋을 잠근다
+const BAR_SUBMIT_COOLDOWN_MS = 800;
 
 const RECENT_ACTORS_KEY = "recentActors";
 const DEFAULT_ACTOR_KEY = "defaultActorName";
@@ -98,6 +97,9 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   // 추가/차감 radio: 표준 radio 패턴처럼 선택된 항목만 탭 정지이고 화살표 키로 선택과 포커스를 옮긴다
   const addRadioRef = useRef<HTMLSpanElement>(null);
   const subtractRadioRef = useRef<HTMLSpanElement>(null);
+  const [barCooldown, setBarCooldown] = useState(false);
+  const barCooldownTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(barCooldownTimerRef.current), []);
   const actionGroupLabelId = useId();
   const submitHintId = useId();
 
@@ -115,6 +117,10 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   const actionLabel = selectedAction === "ADD" ? "추가" : "차감";
   const quickActor = resolveQuickActor(actorName, defaultActor);
   if (quickActorRef) quickActorRef.current = quickActor;
+  // 모바일 하단 바: 입력값이 있으면 프리셋 대신 그 값을 적용하는 제출 버튼 하나가 된다.
+  // 제출은 폼(handleSubmit)이라 입력란의 닉네임이 있어야 하므로, 바의 캡션·활성도 그 이름을 따른다
+  const barSubmits = totalSeconds > 0;
+  const barActor = barSubmits ? actorName.trim() : quickActor;
 
   function setTime({ hours, minutes, seconds }: TimeParts) {
     setHours(hours);
@@ -225,6 +231,9 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
       setError("시간은 1초 이상이어야 합니다.");
       return;
     }
+    setBarCooldown(true);
+    clearTimeout(barCooldownTimerRef.current);
+    barCooldownTimerRef.current = setTimeout(() => setBarCooldown(false), BAR_SUBMIT_COOLDOWN_MS);
     await submitModify(selectedAction, totalSeconds, actorName.trim());
   }
 
@@ -439,9 +448,10 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
       <div>
         <span className="text-sm font-medium text-foreground">시간</span>
 
-        {/* 프리셋은 입력값에 더하기만 하고, 적용은 아래 확인 버튼으로 한다(즉시 적용은 모바일 하단 바와 숫자 단축키) */}
+        {/* 프리셋은 입력값에 더하기만 하고, 적용은 아래 확인 버튼으로 한다(즉시 적용은 모바일 하단 바와 숫자 단축키).
+            md 미만에서는 같은 프리셋이 하단 바에 있으므로 카드 쪽은 숨겨 한 벌만 남긴다 */}
         <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-2.5">
-          <div className="flex flex-wrap gap-1.5">
+          <div className="hidden md:flex flex-wrap gap-1.5">
             {PRESETS.map((preset) => (
               <button
                 key={preset.label}
@@ -491,7 +501,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
         </div>
         {/* 확인 버튼이 비활성인 이유. 값을 넣으면 사라지고 버튼 라벨이 적용될 양을 보여 준다 */}
         {totalSeconds <= 0 && (
-          <p id={submitHintId} className="mt-1 text-xs text-muted-foreground">
+          <p id={submitHintId} className="mt-1 text-xs text-muted-foreground max-md:hidden">
             시간을 입력하면 {actionLabel}할 수 있습니다.
           </p>
         )}
@@ -500,14 +510,15 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
       {/* 에러 메시지 */}
       {error && <p className="text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>}
 
-      {/* 라벨은 늘 동작(동사)이고, 값이 있으면 적용될 양을 덧붙인다 */}
+      {/* 라벨은 늘 동작(동사)이고, 값이 있으면 적용될 양을 덧붙인다.
+          md 미만에서는 하단 바가 같은 제출 버튼으로 바뀌므로 숨긴다(바 뒤에 가려지던 버튼). 폼의 Enter 제출은 그대로 된다 */}
       <Button
         type="submit"
         size="lg"
         variant={selectedAction === "SUBTRACT" ? "danger" : "primary"}
         disabled={totalSeconds <= 0}
         aria-describedby={totalSeconds <= 0 ? submitHintId : undefined}
-        className="w-full"
+        className="w-full max-md:hidden"
       >
         {totalSeconds > 0 ? `시간 ${actionLabel} (${formatDelta(totalSeconds)})` : `시간 ${actionLabel}`}
       </Button>
@@ -515,28 +526,33 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
       {/* 모바일 하단 고정 빠른 액션 바 */}
       {/* data-quick-bar: 바가 있을 때 body 하단 여백을 잡는다(globals.css) */}
       <div data-quick-bar className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background/95 backdrop-blur-sm px-4 py-3 safe-area-bottom">
-        {/* grid-cols-3 = repeat(3, minmax(0, 1fr)): 좁은 폭에서도 버튼이 바 밖으로 밀리지 않는다 */}
+        {/* grid-cols-3 = repeat(3, minmax(0, 1fr)): 좁은 폭에서도 버튼이 바 밖으로 밀리지 않는다.
+            값이 0이면 프리셋 세 개(탭 한 번에 바로 적용), 값이 있으면 그 값을 적용하는 제출 버튼 하나(같은 높이) */}
         <div className="grid grid-cols-3 gap-2">
-          {QUICK_PRESETS.map((preset) => (
+          {(barSubmits
+            ? [{ key: "submit", label: `시간 ${actionLabel} (${formatDelta(totalSeconds)})`, seconds: totalSeconds }]
+            : PRESETS.map((preset) => ({ key: preset.label, label: `${selectedAction === "SUBTRACT" ? "-" : "+"}${preset.label}`, seconds: preset.seconds }))
+          ).map((item) => (
             <button
-              key={preset.label}
-              type="button"
-              disabled={!quickActor}
-              onClick={() => handleQuickApply(preset.seconds)}
+              key={item.key}
+              type={barSubmits ? "submit" : "button"}
+              disabled={!barActor || (!barSubmits && barCooldown)}
+              onClick={barSubmits ? undefined : () => handleQuickApply(item.seconds)}
               className={cn(
                 "rounded-lg py-3 min-h-[48px] text-sm font-bold transition-colors disabled:opacity-50",
+                barSubmits && "col-span-3",
                 selectedAction === "ADD"
                   ? "bg-green-700 text-white hover:bg-green-800 active:bg-green-900"
                   : "bg-red-600 text-white hover:bg-red-700 active:bg-red-800",
               )}
             >
-              {selectedAction === "SUBTRACT" ? "-" : "+"}{preset.label.slice(1)}
+              {item.label}
             </button>
           ))}
         </div>
-        {/* 카드 프리셋(누적)과 달리 확인 없이 바로 적용되고, 누구 이름으로 기록되는지 항상 보여 준다 */}
+        {/* 확인 없이 바로 적용되고, 누구 이름으로 기록되는지 항상 보여 준다 */}
         <p className="mt-1.5 truncate text-center text-xs text-muted-foreground">
-          {quickActor ? `즉시 적용 → ${quickActor}` : "닉네임을 먼저 입력하세요"}
+          {barActor ? `즉시 적용 → ${barActor}` : "닉네임을 먼저 입력하세요"}
         </p>
       </div>
     </form>

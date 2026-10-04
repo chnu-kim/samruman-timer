@@ -47,3 +47,9 @@ export const Expired: Story = {
 export const Scheduled: Story = {
   args: { status: "SCHEDULED", remainingSeconds: 7200 },
 };
+
+// 모바일(md 미만): 카드 프리셋·확인 버튼은 숨고 하단 바 한 자리가 주 행동이다.
+// 시/분/초에 값을 넣으면 바가 '시간 추가 (…)' 제출 버튼 하나로 바뀐다
+export const Mobile: Story = {
+  parameters: { viewport: { defaultViewport: "mobile1" } },
+};

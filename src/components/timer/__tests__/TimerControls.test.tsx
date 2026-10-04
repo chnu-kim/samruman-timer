@@ -53,6 +53,16 @@ async function confirmActivate() {
   fireEvent.click(within(title.closest("dialog")!).getByRole("button", { name: "지금 시작" }));
 }
 
+// jsdom은 CSS를 적용하지 않아 카드(md 이상)와 모바일 하단 바의 같은 이름 버튼이 함께 렌더된다. 둘을 나눠 찾는다
+function quickBar() {
+  return within(document.querySelector("[data-quick-bar]") as HTMLElement);
+}
+function cardButton(name: string | RegExp) {
+  const found = screen.getAllByRole("button", { name }).filter((b) => !b.closest("[data-quick-bar]"));
+  if (found.length !== 1) throw new Error(`card button ${String(name)}: ${found.length}`);
+  return found[0];
+}
+
 describe("TimerControls", () => {
   const timerId = "abc123";
 
@@ -142,28 +152,28 @@ describe("TimerControls", () => {
 
   it("renders time presets", () => {
     render(<Harness timerId={timerId} status="RUNNING" />);
-    expect(screen.getByRole("button", { name: "+1시간" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "+5시간" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "+10시간" })).toBeInTheDocument();
+    expect(cardButton("+1시간")).toBeInTheDocument();
+    expect(cardButton("+5시간")).toBeInTheDocument();
+    expect(cardButton("+10시간")).toBeInTheDocument();
   });
 
   it("accumulates preset clicks in standard mode", () => {
     render(<Harness timerId={timerId} status="RUNNING" />);
-    const btn1h = screen.getByRole("button", { name: "+1시간" });
+    const btn1h = cardButton("+1시간");
 
     fireEvent.click(btn1h);
     fireEvent.click(btn1h);
 
-    const submit = screen.getByRole("button", { name: /시간 추가/ });
+    const submit = cardButton(/시간 추가/);
     expect(submit).toHaveTextContent("2시간");
   });
 
   it("validates empty nickname on submit", async () => {
     render(<Harness timerId={timerId} status="RUNNING" />);
 
-    fireEvent.click(screen.getByRole("button", { name: "+1시간" }));
+    fireEvent.click(cardButton("+1시간"));
 
-    const submit = screen.getByRole("button", { name: /시간 추가/ });
+    const submit = cardButton(/시간 추가/);
     fireEvent.click(submit);
 
     expect(screen.getByRole("alert")).toHaveTextContent("시청자 닉네임을 입력해 주세요");
@@ -177,7 +187,7 @@ describe("TimerControls", () => {
       target: { value: "테스터" },
     });
 
-    const submit = screen.getByRole("button", { name: "시간 추가" });
+    const submit = cardButton("시간 추가");
     expect(submit).toBeDisabled();
   });
 
@@ -229,7 +239,7 @@ describe("TimerControls", () => {
     fireEvent.change(screen.getByRole("spinbutton", { name: "분" }), { target: { value: "90" } });
     expect(screen.getByRole("spinbutton", { name: "시간" })).toHaveValue(1);
     expect(screen.getByRole("spinbutton", { name: "분" })).toHaveValue(30);
-    expect(screen.getByRole("button", { name: "시간 추가 (1시간 30분)" })).toBeEnabled();
+    expect(cardButton("시간 추가 (1시간 30분)")).toBeEnabled();
 
     fireEvent.change(screen.getByRole("spinbutton", { name: "초" }), { target: { value: "75" } });
     expect(screen.getByRole("spinbutton", { name: "분" })).toHaveValue(31);
@@ -241,21 +251,21 @@ describe("TimerControls", () => {
     render(<Harness timerId={timerId} status="RUNNING" />);
     fireEvent.change(screen.getByRole("spinbutton", { name: "분" }), { target: { value: "59" } });
     fireEvent.change(screen.getByRole("spinbutton", { name: "초" }), { target: { value: "75" } });
-    expect(screen.getByRole("button", { name: "시간 추가 (1시간 15초)" })).toBeInTheDocument();
+    expect(cardButton("시간 추가 (1시간 15초)")).toBeInTheDocument();
   });
 
   // C087: 버튼 라벨은 늘 동작이고, 비활성 이유는 입력칸 아래 한 줄로 알린다
   it("값이 0이면 확인 버튼은 '시간 추가'로 비활성이고 이유가 연결되어 있다", () => {
     render(<Harness timerId={timerId} status="RUNNING" />);
-    const submit = screen.getByRole("button", { name: "시간 추가" });
+    const submit = cardButton("시간 추가");
     expect(submit).toBeDisabled();
     expect(submit).toHaveAccessibleDescription("시간을 입력하면 추가할 수 있습니다.");
 
     fireEvent.click(screen.getByRole("radio", { name: "차감" }));
-    expect(screen.getByRole("button", { name: "시간 차감" })).toHaveAccessibleDescription("시간을 입력하면 차감할 수 있습니다.");
+    expect(cardButton("시간 차감")).toHaveAccessibleDescription("시간을 입력하면 차감할 수 있습니다.");
 
-    fireEvent.click(screen.getByRole("button", { name: "+1시간" }));
-    expect(screen.getByRole("button", { name: "시간 차감 (1시간)" })).not.toHaveAccessibleDescription();
+    fireEvent.click(cardButton("+1시간"));
+    expect(cardButton("시간 차감 (1시간)")).not.toHaveAccessibleDescription();
     expect(screen.queryByText(/시간을 입력하면/)).not.toBeInTheDocument();
   });
 
@@ -326,10 +336,10 @@ describe("TimerControls", () => {
     render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={7200} initialAction="SUBTRACT" />);
 
     // 카드 프리셋은 입력값에 더하는 누적 입력이므로 방향과 무관하게 '+'다
-    expect(screen.getByRole("button", { name: "+1시간" })).toBeInTheDocument();
+    expect(cardButton("+1시간")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "테스터" } });
-    fireEvent.click(screen.getByRole("button", { name: "-1h" }));
+    fireEvent.click(quickBar().getByRole("button", { name: "-1시간" }));
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
@@ -340,19 +350,19 @@ describe("TimerControls", () => {
     render(<Harness timerId={timerId} status="RUNNING" />);
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "테스터" } });
-    fireEvent.click(screen.getByRole("button", { name: "+1시간" }));
+    fireEvent.click(cardButton("+1시간"));
     expect(mockFetch).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "시간 추가 (1시간)" })).toBeEnabled();
+    expect(cardButton("시간 추가 (1시간)")).toBeEnabled();
   });
 
   it("uses danger style for the confirm button when subtracting", () => {
     render(<Harness timerId={timerId} status="RUNNING" />);
-    fireEvent.click(screen.getByRole("button", { name: "+1시간" }));
-    const addConfirm = screen.getByRole("button", { name: /시간 추가/ });
+    fireEvent.click(cardButton("+1시간"));
+    const addConfirm = cardButton(/시간 추가/);
     const addClass = addConfirm.className;
 
     fireEvent.click(screen.getByRole("radio", { name: "차감" }));
-    const subtractConfirm = screen.getByRole("button", { name: /시간 차감/ });
+    const subtractConfirm = cardButton(/시간 차감/);
     expect(subtractConfirm.className).not.toBe(addClass);
     expect(subtractConfirm.className).toMatch(/red/);
   });
@@ -377,8 +387,8 @@ describe("TimerControls", () => {
       fireEvent.change(screen.getByLabelText("시청자 닉네임"), {
         target: { value: "테스터" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "+1시간" }));
-      fireEvent.click(screen.getByRole("button", { name: /시간 추가/ }));
+      fireEvent.click(cardButton("+1시간"));
+      fireEvent.click(cardButton(/시간 추가/));
 
       // onModified는 fetch 완료 전에 optimistic 값으로 즉시 호출됨
       expect(onModified).toHaveBeenCalledTimes(1);
@@ -438,15 +448,15 @@ describe("TimerControls", () => {
       fireEvent.change(screen.getByLabelText("시청자 닉네임"), {
         target: { value: "테스터" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "+1시간" }));
+      fireEvent.click(cardButton("+1시간"));
 
       // 제출 전 확인 버튼에 시간이 표시됨
-      expect(screen.getByRole("button", { name: /시간 추가/ })).toHaveTextContent("1시간");
+      expect(cardButton(/시간 추가/)).toHaveTextContent("1시간");
 
-      fireEvent.click(screen.getByRole("button", { name: /시간 추가/ }));
+      fireEvent.click(cardButton(/시간 추가/));
 
       // 입력 필드가 즉시 초기화됨 (API 응답 전)
-      expect(screen.getByRole("button", { name: "시간 추가" })).toBeInTheDocument();
+      expect(cardButton("시간 추가")).toBeInTheDocument();
     });
 
     it("calculates optimistic SUBTRACT correctly (clamped to 0)", async () => {
@@ -467,8 +477,8 @@ describe("TimerControls", () => {
       fireEvent.change(screen.getByLabelText("시청자 닉네임"), {
         target: { value: "테스터" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "+1시간" }));
-      fireEvent.click(screen.getByRole("button", { name: /시간 차감/ }));
+      fireEvent.click(cardButton("+1시간"));
+      fireEvent.click(cardButton(/시간 차감/));
 
       // 1800 - 3600 = -1800 → clamped to 0
       expect(onModified).toHaveBeenCalledWith(
@@ -499,8 +509,8 @@ describe("TimerControls", () => {
       fireEvent.change(screen.getByLabelText("시청자 닉네임"), {
         target: { value: "테스터" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "+1시간" }));
-      fireEvent.click(screen.getByRole("button", { name: /시간 추가/ }));
+      fireEvent.click(cardButton("+1시간"));
+      fireEvent.click(cardButton(/시간 추가/));
 
       // 1차: optimistic
       expect(onModified).toHaveBeenCalledWith(
@@ -519,7 +529,7 @@ describe("TimerControls", () => {
       expect(mockToast).toHaveBeenCalledWith("잘못된 요청입니다", "error");
       // UX-10: 모순되는 성공 토스트가 없고, 입력값이 복원된다
       expect(mockToast).not.toHaveBeenCalledWith("추가 완료", "success");
-      expect(screen.getByRole("button", { name: /시간 추가/ })).toHaveTextContent("1시간");
+      expect(cardButton(/시간 추가/)).toHaveTextContent("1시간");
     });
 
     it("rolls back on network error", async () => {
@@ -538,8 +548,8 @@ describe("TimerControls", () => {
       fireEvent.change(screen.getByLabelText("시청자 닉네임"), {
         target: { value: "테스터" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "+1시간" }));
-      fireEvent.click(screen.getByRole("button", { name: /시간 추가/ }));
+      fireEvent.click(cardButton("+1시간"));
+      fireEvent.click(cardButton(/시간 추가/));
 
       // 1차: optimistic
       expect(onModified).toHaveBeenCalledWith(
@@ -555,7 +565,7 @@ describe("TimerControls", () => {
 
       expect(screen.getByRole("alert")).toHaveTextContent("시간 변경에 실패했습니다");
       expect(mockToast).not.toHaveBeenCalledWith("추가 완료", "success");
-      expect(screen.getByRole("button", { name: /시간 추가/ })).toHaveTextContent("1시간");
+      expect(cardButton(/시간 추가/)).toHaveTextContent("1시간");
     });
 
     it("does not overwrite a new amount typed while the failed request was in flight", async () => {
@@ -565,17 +575,17 @@ describe("TimerControls", () => {
       render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={5000} />);
 
       fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "테스터" } });
-      fireEvent.click(screen.getByRole("button", { name: "+1시간" }));
-      fireEvent.click(screen.getByRole("button", { name: /시간 추가/ }));
+      fireEvent.click(cardButton("+1시간"));
+      fireEvent.click(cardButton(/시간 추가/));
 
       // 응답 전에 다음 금액을 입력
-      fireEvent.click(screen.getByRole("button", { name: "+5시간" }));
+      fireEvent.click(cardButton("+5시간"));
 
       await act(async () => {
         rejectFirst!(new Error("Network error"));
       });
 
-      expect(screen.getByRole("button", { name: /시간 추가/ })).toHaveTextContent("5시간");
+      expect(cardButton(/시간 추가/)).toHaveTextContent("5시간");
     });
 
     it("does not restore a failed amount after a newer amount was submitted", async () => {
@@ -588,12 +598,12 @@ describe("TimerControls", () => {
       render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={5000} />);
 
       fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "테스터" } });
-      fireEvent.click(screen.getByRole("button", { name: "+1시간" }));
-      fireEvent.click(screen.getByRole("button", { name: /시간 추가/ }));
+      fireEvent.click(cardButton("+1시간"));
+      fireEvent.click(cardButton(/시간 추가/));
 
       // 응답 전에 다른 금액을 다시 제출
-      fireEvent.click(screen.getByRole("button", { name: "+5시간" }));
-      fireEvent.click(screen.getByRole("button", { name: /시간 추가/ }));
+      fireEvent.click(cardButton("+5시간"));
+      fireEvent.click(cardButton(/시간 추가/));
 
       await act(async () => {
         rejectFirst!(new Error("Network error"));
@@ -614,7 +624,7 @@ describe("TimerControls", () => {
 
       // 대체된 1시간이 되살아나지 않고 입력은 비어 있어야 한다
       expect(screen.queryByRole("button", { name: /시간 추가 \(/ })).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "시간 추가" })).toBeDisabled();
+      expect(cardButton("시간 추가")).toBeDisabled();
     });
 
     it("instant bar applies optimistically on tap", async () => {
@@ -646,7 +656,7 @@ describe("TimerControls", () => {
       });
 
       // 하단 바 클릭 — 즉시 optimistic 적용
-      fireEvent.click(screen.getByRole("button", { name: "+1h" }));
+      fireEvent.click(quickBar().getByRole("button", { name: "+1시간" }));
 
       expect(onModified).toHaveBeenCalledTimes(1);
       expect(onModified).toHaveBeenCalledWith(
@@ -684,11 +694,11 @@ describe("TimerControls", () => {
       });
 
       // 첫 번째 하단 바 클릭
-      fireEvent.click(screen.getByRole("button", { name: "+1h" }));
+      fireEvent.click(quickBar().getByRole("button", { name: "+1시간" }));
       expect(onModified).toHaveBeenCalledTimes(1);
 
       // 두 번째 클릭 — 첫 번째 API 완료 전
-      fireEvent.click(screen.getByRole("button", { name: "+1h" }));
+      fireEvent.click(quickBar().getByRole("button", { name: "+1시간" }));
       expect(onModified).toHaveBeenCalledTimes(2);
 
       // fetch가 2번 호출됨 (loading으로 블로킹되지 않음)
@@ -707,14 +717,14 @@ describe("TimerControls", () => {
     it("asks for a nickname and disables the bar when no actor is available", () => {
       render(<Harness timerId={timerId} status="RUNNING" />);
       expect(screen.getByText("닉네임을 먼저 입력하세요")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "+1h" })).toBeDisabled();
+      expect(quickBar().getByRole("button", { name: "+1시간" })).toBeDisabled();
     });
 
     it("shows the typed nickname as the target", () => {
       render(<Harness timerId={timerId} status="RUNNING" />);
       fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: " 치즈냥 " } });
       expect(screen.getByText("즉시 적용 → 치즈냥")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "+1h" })).toBeEnabled();
+      expect(quickBar().getByRole("button", { name: "+1시간" })).toBeEnabled();
     });
 
     it("falls back to the default nickname and submits with the shown name", async () => {
@@ -729,11 +739,100 @@ describe("TimerControls", () => {
       fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "" } });
       expect(screen.getByText("즉시 적용 → 기본냥")).toBeInTheDocument();
 
-      fireEvent.click(screen.getByRole("button", { name: "+1h" }));
+      fireEvent.click(quickBar().getByRole("button", { name: "+1시간" }));
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
       expect(body).toEqual({ action: "ADD", deltaSeconds: 3600, actorName: "기본냥" });
       await waitFor(() => expect(mockToast).toHaveBeenCalledWith("+1시간 · 기본냥", "success", expect.anything()));
+    });
+  });
+
+  // C023·C042: 모바일에서는 하단 바 한 자리가 주 행동이다. 프리셋은 한 벌, 값을 넣으면 바가 그 값의 제출 버튼이 된다
+  describe("mobile quick bar = 주 행동 한 자리", () => {
+    it("카드 프리셋 행과 카드 확인 버튼은 md 이상에서만 보이고, 바는 카드와 같은 라벨을 쓴다", () => {
+      render(<Harness timerId={timerId} status="RUNNING" />);
+      expect(cardButton("+1시간").parentElement!.className).toMatch(/(^|\s)hidden md:flex\b/);
+      expect(cardButton("시간 추가").className).toMatch(/\bmax-md:hidden\b/);
+      expect(quickBar().getAllByRole("button").map((b) => b.textContent)).toEqual(["+1시간", "+5시간", "+10시간"]);
+    });
+
+    it("값이 있으면 바의 세 프리셋 자리가 '시간 추가 (10분)' 제출 버튼 하나로 바뀌고, 0이면 돌아간다", () => {
+      render(<Harness timerId={timerId} status="RUNNING" />);
+      fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "시청자A" } });
+      fireEvent.change(screen.getAllByLabelText("분")[0], { target: { value: "10" } });
+
+      const buttons = quickBar().getAllByRole("button");
+      expect(buttons).toHaveLength(1);
+      expect(buttons[0]).toHaveAccessibleName("시간 추가 (10분)");
+      expect(buttons[0]).toHaveAttribute("type", "submit");
+      expect(buttons[0]).toBeEnabled();
+      expect(screen.getByText("즉시 적용 → 시청자A")).toBeInTheDocument();
+
+      fireEvent.change(screen.getAllByLabelText("분")[0], { target: { value: "0" } });
+      expect(quickBar().getAllByRole("button").map((b) => b.textContent)).toEqual(["+1시간", "+5시간", "+10시간"]);
+    });
+
+    it("차감 모드에서는 바 제출 버튼도 '시간 차감 (…)'이다", () => {
+      render(<Harness timerId={timerId} status="RUNNING" initialAction="SUBTRACT" />);
+      expect(quickBar().getAllByRole("button").map((b) => b.textContent)).toEqual(["-1시간", "-5시간", "-10시간"]);
+      fireEvent.change(screen.getAllByLabelText("분")[0], { target: { value: "10" } });
+      expect(quickBar().getByRole("button")).toHaveAccessibleName("시간 차감 (10분)");
+    });
+
+    it("바 제출 버튼은 폼 제출이라 입력값을 입력란의 닉네임으로 한 번 보내고, 입력이 비면 프리셋으로 돌아간다", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { id: timerId, remainingSeconds: 4200, status: "RUNNING", log: { id: "l1", actionType: "ADD", actorName: "시청자A", deltaSeconds: 600 } } }),
+      });
+      render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3600} />);
+      fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "시청자A" } });
+      fireEvent.change(screen.getAllByLabelText("분")[0], { target: { value: "10" } });
+
+      fireEvent.click(quickBar().getByRole("button", { name: "시간 추가 (10분)" }));
+
+      await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+      expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ action: "ADD", deltaSeconds: 600, actorName: "시청자A" });
+      expect(quickBar().getAllByRole("button").map((b) => b.textContent)).toEqual(["+1시간", "+5시간", "+10시간"]);
+    });
+
+    it("바 제출 직후 같은 자리에 나타난 프리셋은 잠깐 잠겨 두 번 탭이 +5시간으로 새지 않는다", async () => {
+      vi.useFakeTimers();
+      try {
+        mockFetch.mockResolvedValue({
+          ok: true,
+          json: async () => ({ data: { id: timerId, remainingSeconds: 4200, status: "RUNNING", log: { id: "l1", actionType: "ADD", actorName: "시청자A", deltaSeconds: 600 } } }),
+        });
+        render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3600} />);
+        fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "시청자A" } });
+        fireEvent.change(screen.getAllByLabelText("분")[0], { target: { value: "10" } });
+
+        fireEvent.click(quickBar().getByRole("button", { name: "시간 추가 (10분)" }));
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+        const five = quickBar().getByRole("button", { name: "+5시간" });
+        expect(five).toBeDisabled();
+        fireEvent.click(five);
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+
+        await act(async () => { vi.advanceTimersByTime(800); });
+        expect(quickBar().getByRole("button", { name: "+5시간" })).toBeEnabled();
+        fireEvent.click(quickBar().getByRole("button", { name: "+5시간" }));
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+        expect(JSON.parse(mockFetch.mock.calls[1][1].body).deltaSeconds).toBe(18000);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("값이 있을 때 입력란 닉네임이 비면 기본 닉네임이 있어도 바 제출은 비활성이다(폼 제출은 입력란 닉네임이 필요)", () => {
+      localStorageMock.setItem("defaultActorName", "기본냥");
+      render(<Harness timerId={timerId} status="RUNNING" />);
+      fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "" } });
+      // 값이 0이면 프리셋은 기본 닉네임으로 즉시 적용된다
+      expect(screen.getByText("즉시 적용 → 기본냥")).toBeInTheDocument();
+
+      fireEvent.change(screen.getAllByLabelText("분")[0], { target: { value: "10" } });
+      expect(quickBar().getByRole("button", { name: "시간 추가 (10분)" })).toBeDisabled();
+      expect(screen.getByText("닉네임을 먼저 입력하세요")).toBeInTheDocument();
     });
   });
 
@@ -757,7 +856,7 @@ describe("TimerControls", () => {
       render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={7800} onModified={onModified} initialAction="SUBTRACT" />);
       fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "테스터" } });
       fireEvent.change(screen.getByLabelText("분"), { target: { value: "10" } });
-      fireEvent.click(screen.getByRole("button", { name: /시간 차감/ }));
+      fireEvent.click(cardButton(/시간 차감/));
 
       await waitFor(() => expect(mockToast).toHaveBeenCalledWith("-10분 · 테스터", "success", expect.anything()));
       const { action } = mockToast.mock.calls[0][2];
@@ -789,7 +888,7 @@ describe("TimerControls", () => {
       render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3600} onModified={onModified} />);
       fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "테스터" } });
       fireEvent.change(screen.getByLabelText("분"), { target: { value: "10" } });
-      fireEvent.click(screen.getByRole("button", { name: /시간 추가/ }));
+      fireEvent.click(cardButton(/시간 추가/));
       await waitFor(() => expect(mockToast).toHaveBeenCalledTimes(1));
       const calls = onModified.mock.calls.length;
 
