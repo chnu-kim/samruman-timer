@@ -524,7 +524,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
           <>
             <div className="space-y-2">
               {SHORTCUT_HELP.map((item) => (
-                <div key={item.key} className="flex items-center justify-between text-sm">
+                <div key={item.key} className="flex items-center gap-3 text-sm">
                   <kbd className="rounded border border-border bg-muted px-2 py-0.5 font-mono text-xs">
                     {item.key}
                   </kbd>

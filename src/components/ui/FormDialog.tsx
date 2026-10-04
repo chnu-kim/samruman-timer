@@ -49,7 +49,7 @@ export function FormDialog({ open, title, onClose, children }: FormDialogProps) 
       }}
       aria-modal="true"
       aria-labelledby={titleId}
-      className="m-auto rounded-xl border border-border bg-background p-0 shadow-dialog backdrop:bg-black/50 w-full max-w-[min(28rem,calc(100%-2rem))] max-h-[85dvh] overflow-hidden"
+      className="m-auto rounded-xl border border-border bg-background text-foreground p-0 shadow-dialog backdrop:bg-black/50 w-full max-w-[min(28rem,calc(100%-2rem))] max-h-[85dvh] overflow-hidden"
       style={{ animation: open ? "fade-in 0.15s ease-out" : undefined }}
     >
       <div className="flex items-center justify-between gap-4 p-6 pb-0">
