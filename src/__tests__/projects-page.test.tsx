@@ -175,10 +175,25 @@ describe("신규 유저의 검색·정렬 (UX-46)", () => {
     expect(screen.getByRole("combobox", { name: "정렬 기준" })).toHaveClass("border-border-input");
   });
 
-  it("로그인하지 않았으면 검색창을 보여 준다", async () => {
-    stubProjects(0, false);
+  it("로그인하지 않았어도 공개 프로젝트가 있으면 검색창을 보여 준다", async () => {
+    const card = {
+      id: "p1", name: "주말 방송", description: null, ownerNickname: "삼루먼", timerCount: 0,
+      timerStatus: null, remainingSeconds: null, scheduledStartAt: null, createdAt: "2026-03-01T12:00:00Z",
+    };
+    global.fetch = vi.fn(async (input: RequestInfo | URL) =>
+      String(input).startsWith("/api/auth/me")
+        ? new Response(null, { status: 401 })
+        : jsonResponse({ projects: [card], pagination: { page: 1, limit: 12, total: 1, totalPages: 1 } }),
+    ) as typeof fetch;
     render(<ProjectsPage />);
     expect(await screen.findByRole("textbox", { name: "프로젝트 검색" })).toBeInTheDocument();
+  });
+
+  it("로그인하지 않았고 공개 프로젝트가 0개이면 검색창을 숨긴다", async () => {
+    stubProjects(0, false);
+    render(<ProjectsPage />);
+    expect(await screen.findByText("공개된 프로젝트가 없습니다.")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "프로젝트 검색" })).not.toBeInTheDocument();
   });
 });
 
@@ -337,6 +352,8 @@ describe("목록 탭·빈 상태·로딩 골격 (W29)", () => {
     stub({ mine: 0, others: 0, loggedIn: false });
     render(<ProjectsPage />);
     expect(await screen.findByText("공개된 프로젝트가 없습니다.")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 
   it("탭 개수는 처음 한 번만 세고, 검색·정렬·탭을 바꿔도 다시 세거나 검색 결과 수로 바꾸지 않는다", async () => {

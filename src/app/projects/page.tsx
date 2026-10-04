@@ -156,7 +156,7 @@ export default function ProjectsPage() {
   const tabEmpty =
     tabTotal === 0 ||
     (tabTotal === null && !loading && !error && !debouncedQuery && page === 1 && projects.length === 0);
-  const hideSearchControls = !!user && tabEmpty && !searchQuery;
+  const hideSearchControls = tabEmpty && !searchQuery;
 
   // 빈 목록에서는 본문의 '첫 프로젝트 만들기' 하나만 남긴다. 폼을 열면 헤더 버튼이 '취소'로 돌아와 닫을 수 있다.
   // 본문 버튼이 실제로 그려질 때만 숨긴다. 목록 요청이 로딩 중이거나 실패하면 본문 버튼이 없어 만들 길이 사라진다
