@@ -69,19 +69,24 @@ export const GET = withErrorHandler(async (
 
   // since(직전에 본 updatedAt)를 주면 그 뒤 지금 상태까지 들어온 시간 추가·차감의 실제 변경량 합계를 내려 준다.
   // 오버레이가 '+N'을 폴링 시각으로 추정하지 않고 이 값으로 그린다(추정은 1~2초 어긋나 '+60초'가 '+1:01'로 보인다)
-  const since = request.nextUrl.searchParams.get("since");
-  let deltaSinceSeconds: number | null = null;
-  if (since && !Number.isNaN(Date.parse(since)) && since < checked.updatedAt) {
+  // 계산할 수 없으면(since 없음·잘못된 값·지금 updatedAt보다 늦음) 필드를 빼서 클라이언트가 추정으로 돌아가게 하고,
+  // 계산했는데 그사이 추가·차감이 없으면 null(제목 수정·만료 기록 등 연출할 변경이 아님)
+  const sinceParam = request.nextUrl.searchParams.get("since");
+  const sinceMs = sinceParam ? Date.parse(sinceParam) : NaN;
+  // 로그·updatedAt은 toISOString() 형식 문자열로 비교하므로 다른 ISO 표기(오프셋, 밀리초 생략)도 같은 형식으로 맞춘다
+  const since = Number.isNaN(sinceMs) ? null : new Date(sinceMs).toISOString();
+  let deltaSince: { deltaSinceSeconds: number | null } | Record<string, never> = {};
+  if (since && sinceMs < Date.parse(checked.updatedAt)) {
     const sum = await db
       .prepare(
-        `SELECT COUNT(*) AS n, COALESCE(SUM(after_seconds - before_seconds), 0) AS d
+        `SELECT SUM(after_seconds - before_seconds) AS d
            FROM timer_logs
           WHERE timer_id = ? AND action_type IN ('ADD', 'SUBTRACT')
             AND created_at > ? AND created_at <= ?`
       )
       .bind(checked.id, since, checked.updatedAt)
-      .first<{ n: number; d: number }>();
-    if (sum && sum.n > 0) deltaSinceSeconds = sum.d;
+      .first<{ d: number | null }>();
+    deltaSince = { deltaSinceSeconds: sum?.d ?? null };
   }
 
   const remainingSeconds =
@@ -108,7 +113,7 @@ export const GET = withErrorHandler(async (
       projectOwnerId: row.owner_user_id,
       createdAt: checked.createdAt,
       updatedAt: checked.updatedAt,
-      deltaSinceSeconds,
+      ...deltaSince,
     },
   });
 });

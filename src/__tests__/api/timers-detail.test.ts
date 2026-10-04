@@ -101,12 +101,12 @@ describe("GET /api/timers/[id]", () => {
   });
 
   describe("deltaSinceSeconds (C062: 오버레이 '+N'의 실제 변경량)", () => {
-    const SINCE = "2024-12-31T23:59:55.000Z";
+    const SINCE = "2024-12-31T23:59:55.000Z"; // = 2025-01-01T08:59:55+09:00
 
     it("since 뒤 지금 상태까지의 ADD·SUBTRACT 변경량 합계를 내려 준다", async () => {
       db._stmt.first
         .mockResolvedValueOnce({ ...TIMER_ROW })
-        .mockResolvedValueOnce({ n: 2, d: 120 });
+        .mockResolvedValueOnce({ d: 120 });
       const res = await GET(
         createGetRequest(`/api/timers/timer-1?since=${encodeURIComponent(SINCE)}`) as never,
         makeParams() as never,
@@ -123,7 +123,7 @@ describe("GET /api/timers/[id]", () => {
     it("그사이 추가·차감이 없으면(제목 수정 등) null", async () => {
       db._stmt.first
         .mockResolvedValueOnce({ ...TIMER_ROW })
-        .mockResolvedValueOnce({ n: 0, d: 0 });
+        .mockResolvedValueOnce({ d: null });
       const res = await GET(
         createGetRequest(`/api/timers/timer-1?since=${encodeURIComponent(SINCE)}`) as never,
         makeParams() as never,
@@ -132,15 +132,28 @@ describe("GET /api/timers/[id]", () => {
       expect(body.data.deltaSinceSeconds).toBeNull();
     });
 
-    it("since가 없거나 지금 updatedAt 이후·잘못된 값이면 조회하지 않고 null", async () => {
+    it("since가 없거나 지금 updatedAt 이후·잘못된 값이면 조회하지 않고 필드를 빼서 클라이언트가 추정하게 한다", async () => {
       for (const q of ["", "?since=2025-01-01T00:00:00Z", "?since=not-a-date"]) {
         db.prepare.mockClear();
         db._stmt.first.mockResolvedValueOnce({ ...TIMER_ROW });
         const res = await GET(createGetRequest(`/api/timers/timer-1${q}`) as never, makeParams() as never);
         const body = await parseJson(res);
-        expect(body.data.deltaSinceSeconds).toBeNull();
+        expect(body.data).not.toHaveProperty("deltaSinceSeconds");
         expect(db.prepare).toHaveBeenCalledTimes(1);
       }
+    });
+
+    it("다른 ISO 표기(오프셋)의 since도 저장 형식으로 맞춰 비교한다", async () => {
+      db._stmt.first
+        .mockResolvedValueOnce({ ...TIMER_ROW })
+        .mockResolvedValueOnce({ d: 60 });
+      const res = await GET(
+        createGetRequest(`/api/timers/timer-1?since=${encodeURIComponent("2025-01-01T08:59:55+09:00")}`) as never,
+        makeParams() as never,
+      );
+      const body = await parseJson(res);
+      expect(body.data.deltaSinceSeconds).toBe(60);
+      expect(db._stmt.bind).toHaveBeenLastCalledWith("timer-1", SINCE, TIMER_ROW.updated_at);
     });
   });
 });

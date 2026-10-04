@@ -414,7 +414,7 @@ CHZZK OAuth 콜백을 처리한다.
 ```
 - 조회 시 예약 활성화 감지 → 만료 감지 로직 체이닝 실행 (TIMER-LOGIC.md 참조)
 - `SCHEDULED` 상태: `remainingSeconds`는 `baseRemainingSeconds` (고정값)
-- 쿼리 `since`(선택, ISO 8601): 직전에 본 `updatedAt`. 주면 `deltaSinceSeconds`에 `since` 뒤부터 지금 `updatedAt`까지 기록된 `ADD`·`SUBTRACT` 로그의 실제 변경량 합계(초, `after_seconds - before_seconds`라 차감은 음수, 0에서 멈춘 차감은 실제로 줄어든 만큼)를 준다. 그사이 추가·차감이 없거나(제목 수정, 예약 활성화·만료 기록 등) `since`가 없거나 지금 `updatedAt` 이후·잘못된 값이면 `null`. 오버레이가 변경량 연출('+1:00')에 쓴다
+- 쿼리 `since`(선택, ISO 8601): 직전에 본 `updatedAt`. 주면 `deltaSinceSeconds`에 `since` 뒤부터 지금 `updatedAt`까지 기록된 `ADD`·`SUBTRACT` 로그의 실제 변경량 합계(초, `after_seconds - before_seconds`라 차감은 음수, 0에서 멈춘 차감은 실제로 줄어든 만큼)를 준다. 그사이 추가·차감이 없으면(제목 수정, 예약 활성화·만료 기록 등) `null`, `since`가 없거나 잘못된 값이거나 지금 `updatedAt`보다 늦으면 필드를 넣지 않는다. 오버레이가 변경량 연출('+1:00')에 쓰고, 필드가 없을 때만 폴링 시각으로 추정한다
 - **에러**: `404`: 타이머 없음 또는 삭제됨
 
 ### PATCH /api/timers/[id]

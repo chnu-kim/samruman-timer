@@ -22,7 +22,7 @@ export interface TimerChangeResult {
   floatingText: string;
 }
 
-/** 변경량이 이 범위 안이면 시간 흐름의 오차로 보고 연출하지 않는다 */
+/** 추정 변경량이 이 범위 안이면 시간 흐름의 오차로 보고 연출하지 않는다 */
 const NOISE_SECONDS = 2;
 
 export function detectTimerChange(
@@ -41,6 +41,8 @@ export function detectTimerChange(
   if (current.deltaSinceSeconds === null) return null;
   let delta: number;
   if (typeof current.deltaSinceSeconds === "number") {
+    // 실제 값이므로 오차 범위를 두지 않는다(+1초 추가, 2초 남았을 때의 차감도 연출한다)
+    if (current.deltaSinceSeconds === 0) return null;
     delta = current.deltaSinceSeconds;
   } else {
     // 카운트다운은 RUNNING일 때만 진행되고 0 아래로 내려가지 않는다.
@@ -48,9 +50,8 @@ export function detectTimerChange(
     const elapsedSec = prev.status === "RUNNING" ? Math.round((now - prev.fetchedAt) / 1000) : 0;
     const expectedRemaining = Math.max(0, prev.remainingSeconds - elapsedSec);
     delta = current.remainingSeconds - expectedRemaining;
+    if (Math.abs(delta) <= NOISE_SECONDS) return null;
   }
-
-  if (Math.abs(delta) <= NOISE_SECONDS) return null;
 
   const absDelta = Math.abs(delta);
   const sign = delta > 0 ? "+" : "-";

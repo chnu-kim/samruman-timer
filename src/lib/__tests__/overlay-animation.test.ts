@@ -225,6 +225,14 @@ describe("detectTimerChange — 서버의 실제 변경량 (C062)", () => {
     expect(result).toBeNull();
   });
 
+  it("실제 값은 오차 범위 없이 작은 변경도 연출하고, 합계가 0이면 연출하지 않는다", () => {
+    const at = (deltaSinceSeconds: number) =>
+      detectTimerChange(prev, { remainingSeconds: 3596, updatedAt: "2024-01-01T00:00:05Z", deltaSinceSeconds }, BASE_TIME + 5000);
+    expect(at(1)?.floatingText).toBe("+1초");
+    expect(at(-2)?.floatingText).toBe("-2초");
+    expect(at(0)).toBeNull();
+  });
+
   it("서버 값이 없으면(undefined) 반올림한 경과 시간으로 추정한다", () => {
     const result = detectTimerChange(
       prev,

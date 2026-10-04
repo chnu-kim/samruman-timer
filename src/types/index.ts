@@ -203,8 +203,9 @@ export interface TimerDetailResponse {
   projectOwnerId: string;
   createdAt: string;
   updatedAt: string;
-  /** `?since=<updatedAt>`로 조회했을 때 그 뒤 지금까지의 시간 추가·차감 변경량 합계(초, 차감은 음수). 해당 변경이 없거나 since가 없으면 null */
-  deltaSinceSeconds: number | null;
+  /** `?since=<updatedAt>`로 조회했을 때 그 뒤 지금까지의 시간 추가·차감 변경량 합계(초, 차감은 음수).
+   *  그사이 추가·차감이 없으면 null, since가 없거나 계산할 수 없으면 필드가 없다 */
+  deltaSinceSeconds?: number | null;
 }
 
 export interface TimerModifyResponse {
