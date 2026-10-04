@@ -83,9 +83,13 @@ export default function TimerOverlayPage() {
   }, [hasTimer]);
 
   const fetchTimer = useCallback(async (): Promise<PollOutcome> => {
+    // 직전에 본 updatedAt을 since로 보내 그 뒤의 실제 변경량 합계를 받는다('+N' 연출용)
+    const since = prevTimerRef.current?.updatedAt ?? null;
     let res: Response;
     try {
-      res = await fetch(`/api/timers/${timerId}`);
+      res = await fetch(
+        since ? `/api/timers/${timerId}?since=${encodeURIComponent(since)}` : `/api/timers/${timerId}`,
+      );
     } catch {
       warnOnce("network", "[오버레이] 서버에 연결하지 못했습니다. 잠시 후 다시 시도합니다.");
       return "network";
@@ -129,7 +133,12 @@ export default function TimerOverlayPage() {
 
     // 변경 감지: updatedAt이 바뀌었으면 수동 조작 발생
     if (animation && prevTimerRef.current) {
-      const change = detectTimerChange(prevTimerRef.current, data, now);
+      // 요청을 보낸 뒤 다른 응답이 먼저 반영돼 기준(since)이 바뀌었으면 합계가 겹치므로 서버 값을 쓰지 않고 추정한다
+      const change = detectTimerChange(
+        prevTimerRef.current,
+        prevTimerRef.current.updatedAt === since ? data : { ...data, deltaSinceSeconds: undefined },
+        now,
+      );
       if (change) {
         setFloatingText(change.floatingText);
         setFloatingKey((k) => k + 1);

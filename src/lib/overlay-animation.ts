@@ -22,36 +22,33 @@ export interface TimerChangeResult {
   floatingText: string;
 }
 
-/** 추정 변경량이 이 범위 안이면 시간 흐름의 오차로 보고 연출하지 않는다 */
+/** 변경량이 이 범위 안이면 시간 흐름의 오차로 보고 연출하지 않는다 */
 const NOISE_SECONDS = 2;
 
 export function detectTimerChange(
   prev: TimerSnapshot,
-  current: { remainingSeconds: number; updatedAt: string; status?: TimerStatus; lastDeltaSeconds?: number | null },
+  current: { remainingSeconds: number; updatedAt: string; deltaSinceSeconds?: number | null },
   now: number,
 ): TimerChangeResult | null {
   if (prev.updatedAt === current.updatedAt) return null;
   // SCHEDULED에서는 시간 변경이 불가능하므로, 값이 바뀌었다면 예약 활성화(ACTIVATE)다
   if (prev.status === "SCHEDULED") return null;
 
-  // 카운트다운은 RUNNING일 때만 진행되고 0 아래로 내려가지 않는다.
-  // 만료 상태에서 흐른 시간까지 빼면 재오픈 시 변경량이 부풀려진다.
-  const elapsedSec = prev.status === "RUNNING" ? Math.round((now - prev.fetchedAt) / 1000) : 0;
-  const expectedRemaining = Math.max(0, prev.remainingSeconds - elapsedSec);
-  const estimated = current.remainingSeconds - expectedRemaining;
-
-  // 추정값은 폴링 시각과 서버의 초 내림 때문에 1~2초 어긋나 '+60초'가 '+1:01'·'59초'로 보인다.
-  // 서버가 준 실제 변경량이 추정과 맞으면(폴링 사이 변경이 한 번이면) 실제 값을 쓰고,
-  // 크게 다르면 폴링 사이에 여러 번 바뀐 것이므로 합계에 가까운 추정값을 쓴다.
-  // 폴링 사이에 만료·재오픈이 끼면 카운트다운이 흐른 시간을 알 수 없어 추정이 최대 그 간격만큼 어긋나므로
-  // (만료 → +60초 → 3초 뒤 폴링이면 추정 57초) 그때는 폴링 간격까지 맞는 것으로 본다
-  const actual = current.lastDeltaSeconds;
-  const statusChanged = prev.status !== "RUNNING" || (current.status !== undefined && current.status !== "RUNNING");
-  const tolerance = statusChanged
-    ? Math.ceil(Math.max(0, now - prev.fetchedAt) / 1000) + NOISE_SECONDS
-    : NOISE_SECONDS;
-  const delta =
-    typeof actual === "number" && Math.abs(estimated - actual) <= tolerance ? actual : estimated;
+  // 서버가 직전 updatedAt(since) 이후의 실제 변경량 합계를 주면 그대로 쓴다. 폴링 시각으로 추정하면
+  // 폴링 시각과 서버의 초 내림 때문에 1~2초 어긋나 '+60초'가 '+1:01'로 보이고, 만료·재오픈이 끼면 더 어긋난다.
+  // null은 그사이 시간 추가·차감이 없었다는 뜻(제목 수정, 만료 기록 등)이라 연출하지 않는다.
+  // undefined(since를 보내지 않았거나 이 필드가 없는 이전 서버)일 때만 폴링 시각으로 추정한다
+  if (current.deltaSinceSeconds === null) return null;
+  let delta: number;
+  if (typeof current.deltaSinceSeconds === "number") {
+    delta = current.deltaSinceSeconds;
+  } else {
+    // 카운트다운은 RUNNING일 때만 진행되고 0 아래로 내려가지 않는다.
+    // 만료 상태에서 흐른 시간까지 빼면 재오픈 시 변경량이 부풀려진다.
+    const elapsedSec = prev.status === "RUNNING" ? Math.round((now - prev.fetchedAt) / 1000) : 0;
+    const expectedRemaining = Math.max(0, prev.remainingSeconds - elapsedSec);
+    delta = current.remainingSeconds - expectedRemaining;
+  }
 
   if (Math.abs(delta) <= NOISE_SECONDS) return null;
 

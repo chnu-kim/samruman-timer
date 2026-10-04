@@ -100,37 +100,47 @@ describe("GET /api/timers/[id]", () => {
     expect(body.data.remainingSeconds).toBe(0);
   });
 
-  describe("lastDeltaSeconds (C062: 오버레이 '+N'의 실제 변경량)", () => {
-    it("지금 상태를 만든 추가·차감의 변경량을 그대로 내려 준다", async () => {
-      db._stmt.first.mockResolvedValue({ ...TIMER_ROW, last_delta_seconds: -600 });
-      const res = await GET(createGetRequest("/api/timers/timer-1") as never, makeParams() as never);
+  describe("deltaSinceSeconds (C062: 오버레이 '+N'의 실제 변경량)", () => {
+    const SINCE = "2024-12-31T23:59:55.000Z";
+
+    it("since 뒤 지금 상태까지의 ADD·SUBTRACT 변경량 합계를 내려 준다", async () => {
+      db._stmt.first
+        .mockResolvedValueOnce({ ...TIMER_ROW })
+        .mockResolvedValueOnce({ n: 2, d: 120 });
+      const res = await GET(
+        createGetRequest(`/api/timers/timer-1?since=${encodeURIComponent(SINCE)}`) as never,
+        makeParams() as never,
+      );
       const body = await parseJson(res);
 
-      expect(body.data.lastDeltaSeconds).toBe(-600);
-      // updatedAt과 같은 시각에 기록된 ADD·SUBTRACT 로그만 본다(제목 수정·만료·재개 로그는 제외)
-      const sql = db.prepare.mock.calls[0][0] as string;
-      expect(sql).toContain("l.created_at = t.updated_at");
-      expect(sql).toContain("l.action_type IN ('ADD', 'SUBTRACT')");
+      expect(body.data.deltaSinceSeconds).toBe(120);
+      const sql = db.prepare.mock.calls[1][0] as string;
+      expect(sql).toContain("action_type IN ('ADD', 'SUBTRACT')");
+      expect(sql).toContain("created_at > ? AND created_at <= ?");
+      expect(db._stmt.bind).toHaveBeenLastCalledWith("timer-1", SINCE, TIMER_ROW.updated_at);
     });
 
-    it("해당 로그가 없으면 null", async () => {
-      db._stmt.first.mockResolvedValue({ ...TIMER_ROW, last_delta_seconds: null });
-      const res = await GET(createGetRequest("/api/timers/timer-1") as never, makeParams() as never);
+    it("그사이 추가·차감이 없으면(제목 수정 등) null", async () => {
+      db._stmt.first
+        .mockResolvedValueOnce({ ...TIMER_ROW })
+        .mockResolvedValueOnce({ n: 0, d: 0 });
+      const res = await GET(
+        createGetRequest(`/api/timers/timer-1?since=${encodeURIComponent(SINCE)}`) as never,
+        makeParams() as never,
+      );
       const body = await parseJson(res);
-      expect(body.data.lastDeltaSeconds).toBeNull();
+      expect(body.data.deltaSinceSeconds).toBeNull();
     });
 
-    it("이 조회에서 만료가 기록돼 updatedAt이 바뀌면 이전 변경량을 내려 주지 않는다", async () => {
-      db._stmt.first.mockResolvedValue({
-        ...TIMER_ROW,
-        base_remaining_seconds: 5,
-        last_calculated_at: new Date(Date.now() - 20_000).toISOString(),
-        last_delta_seconds: 60,
-      });
-      const res = await GET(createGetRequest("/api/timers/timer-1") as never, makeParams() as never);
-      const body = await parseJson(res);
-      expect(body.data.status).toBe("EXPIRED");
-      expect(body.data.lastDeltaSeconds).toBeNull();
+    it("since가 없거나 지금 updatedAt 이후·잘못된 값이면 조회하지 않고 null", async () => {
+      for (const q of ["", "?since=2025-01-01T00:00:00Z", "?since=not-a-date"]) {
+        db.prepare.mockClear();
+        db._stmt.first.mockResolvedValueOnce({ ...TIMER_ROW });
+        const res = await GET(createGetRequest(`/api/timers/timer-1${q}`) as never, makeParams() as never);
+        const body = await parseJson(res);
+        expect(body.data.deltaSinceSeconds).toBeNull();
+        expect(db.prepare).toHaveBeenCalledTimes(1);
+      }
     });
   });
 });

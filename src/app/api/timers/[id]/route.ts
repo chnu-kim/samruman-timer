@@ -4,7 +4,7 @@ import { calculateRemaining, detectExpiry, detectScheduledActivation } from "@/l
 import type { Timer } from "@/types";
 
 export const GET = withErrorHandler(async (
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) => {
   const { id } = await params;
@@ -17,13 +17,7 @@ export const GET = withErrorHandler(async (
               t.scheduled_start_at,
               t.created_by, t.created_at, t.updated_at,
               u.id AS creator_id, u.nickname AS creator_nickname,
-              p.owner_user_id, p.name AS project_name,
-              (SELECT l.after_seconds - l.before_seconds
-                 FROM timer_logs l
-                WHERE l.timer_id = t.id
-                  AND l.created_at = t.updated_at
-                  AND l.action_type IN ('ADD', 'SUBTRACT')
-                LIMIT 1) AS last_delta_seconds
+              p.owner_user_id, p.name AS project_name
        FROM timers t
        JOIN users u ON u.id = t.created_by
        JOIN projects p ON p.id = t.project_id
@@ -46,7 +40,6 @@ export const GET = withErrorHandler(async (
       creator_nickname: string;
       owner_user_id: string;
       project_name: string;
-      last_delta_seconds: number | null;
     }>();
 
   if (!row || row.status === "DELETED") {
@@ -74,6 +67,23 @@ export const GET = withErrorHandler(async (
   const activated = await detectScheduledActivation(db, timer);
   const checked = await detectExpiry(db, activated);
 
+  // since(직전에 본 updatedAt)를 주면 그 뒤 지금 상태까지 들어온 시간 추가·차감의 실제 변경량 합계를 내려 준다.
+  // 오버레이가 '+N'을 폴링 시각으로 추정하지 않고 이 값으로 그린다(추정은 1~2초 어긋나 '+60초'가 '+1:01'로 보인다)
+  const since = request.nextUrl.searchParams.get("since");
+  let deltaSinceSeconds: number | null = null;
+  if (since && !Number.isNaN(Date.parse(since)) && since < checked.updatedAt) {
+    const sum = await db
+      .prepare(
+        `SELECT COUNT(*) AS n, COALESCE(SUM(after_seconds - before_seconds), 0) AS d
+           FROM timer_logs
+          WHERE timer_id = ? AND action_type IN ('ADD', 'SUBTRACT')
+            AND created_at > ? AND created_at <= ?`
+      )
+      .bind(checked.id, since, checked.updatedAt)
+      .first<{ n: number; d: number }>();
+    if (sum && sum.n > 0) deltaSinceSeconds = sum.d;
+  }
+
   const remainingSeconds =
     checked.status === "RUNNING"
       ? calculateRemaining(checked.baseRemainingSeconds, checked.lastCalculatedAt)
@@ -98,10 +108,7 @@ export const GET = withErrorHandler(async (
       projectOwnerId: row.owner_user_id,
       createdAt: checked.createdAt,
       updatedAt: checked.updatedAt,
-      // 지금 상태를 만든 시간 추가·차감의 실제 변경량(초, 차감은 음수). 오버레이가 '+N'을 추정 대신 이 값으로 그린다.
-      // 이 조회에서 예약 활성화·만료가 기록돼 updatedAt이 바뀌었으면 지금 상태를 만든 변경이 아니므로 null
-      lastDeltaSeconds:
-        checked.updatedAt === row.updated_at ? (row.last_delta_seconds ?? null) : null,
+      deltaSinceSeconds,
     },
   });
 });

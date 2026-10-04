@@ -476,7 +476,7 @@ describe("오버레이 렌더 오류 복구 상태 초기화", () => {
 });
 
 describe("오버레이 변경량('+N') 연출 (C061·C062)", () => {
-  const response = (remainingSeconds: number, updatedAt: string, lastDeltaSeconds: number | null) => () => ({
+  const response = (remainingSeconds: number, updatedAt: string, deltaSinceSeconds: number | null) => () => ({
     ok: true,
     status: 200,
     json: async () => ({
@@ -492,7 +492,7 @@ describe("오버레이 변경량('+N') 연출 (C061·C062)", () => {
         projectOwnerId: "u1",
         createdAt: "2026-01-01T00:00:00.000Z",
         updatedAt,
-        lastDeltaSeconds,
+        deltaSinceSeconds,
       },
     }),
   });
@@ -514,21 +514,26 @@ describe("오버레이 변경량('+N') 연출 (C061·C062)", () => {
       response(3600, "2026-01-01T00:00:00.000Z", null),
       response(3656, "2026-01-01T00:00:05.000Z", 60),
     ];
-    const fallback = response(3651, "2026-01-01T00:00:05.000Z", 60);
-    vi.stubGlobal("fetch", vi.fn(async () => (responses.shift() ?? fallback)()));
+    const fallback = response(3651, "2026-01-01T00:00:05.000Z", null);
+    const fetchMock = vi.fn(async (_url: string) => (responses.shift() ?? fallback)());
+    vi.stubGlobal("fetch", fetchMock);
     render(<TimerOverlayPage />);
     await act(() => vi.advanceTimersByTimeAsync(0));
     await act(() => vi.advanceTimersByTimeAsync(5_000));
-    return screen.getByText("+1:00");
+    return { floating: screen.getByText("+1:00"), fetchMock };
   }
 
-  it("추정 대신 서버의 실제 변경량으로 '+1:00'을 그린다", async () => {
-    await renderWithChange();
+  it("직전 updatedAt을 since로 보내고, 추정 대신 서버의 실제 변경량으로 '+1:00'을 그린다", async () => {
+    const { fetchMock } = await renderWithChange();
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/timers/abc");
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      `/api/timers/abc?since=${encodeURIComponent("2026-01-01T00:00:00.000Z")}`,
+    );
   });
 
   it("숫자 줄 옆에 붙이고 위로 빼지 않아 제목과 겹치거나 화면 위로 잘리지 않는다", async () => {
     search = "showTitle=true";
-    const floating = await renderWithChange();
+    const { floating } = await renderWithChange();
 
     // 숫자와 같은 줄(래퍼) 안에서 가운데에 걸리고, 음수 top으로 제목 쪽에 나가지 않는다
     expect(floating.parentElement).toBe(screen.getByRole("timer").parentElement);
@@ -540,7 +545,7 @@ describe("오버레이 변경량('+N') 연출 (C061·C062)", () => {
 
   it("오른쪽 배치에서는 숫자 왼쪽에 붙여 화면 오른쪽 밖으로 넘치지 않는다", async () => {
     search = "position=bottom-right";
-    const floating = await renderWithChange();
+    const { floating } = await renderWithChange();
     expect(floating.style.right).toBe("100%");
     expect(floating.style.left).toBe("");
   });
