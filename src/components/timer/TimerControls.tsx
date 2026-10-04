@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
 import { authFetch } from "@/lib/auth-fetch";
+import { useUndoableModifyToast } from "@/hooks/useUndoableModifyToast";
 import { normalizeTimeParts, resolveQuickActor, type TimeParts } from "@/lib/timer-input";
 import type { ApiSuccessResponse, ApiErrorResponse, TimerModifyResponse, TimerLogResponse, ModifyAction, TimerStatus } from "@/types";
 
@@ -76,6 +77,7 @@ function saveDefaultActor(name: string) {
 
 export function TimerControls({ timerId, status, remainingSeconds, selectedAction, onActionChange, onModified, onTimerRemoved, quickActorRef, className }: TimerControlsProps) {
   const { toast } = useToast();
+  const showModifiedToast = useUndoableModifyToast(timerId, onModified);
   const [actorName, setActorName] = useState("");
   const [hours, setHours] = useState(0);
   const [minutes, setMinutes] = useState(0);
@@ -187,7 +189,8 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
 
       const json = (await res.json()) as ApiSuccessResponse<TimerModifyResponse>;
       onModified?.(json.data); // 서버 값으로 확정
-      toast(`${action === "ADD" ? "추가" : "차감"} 완료`, "success");
+      // 폼·하단 바 공통: '+10분 · 닉네임' + 되돌리기. 결과 잔여는 카운트다운이 보여 준다
+      showModifiedToast(json.data.log);
     } catch {
       // 롤백
       onModified?.({

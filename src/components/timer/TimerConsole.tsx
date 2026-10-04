@@ -10,11 +10,12 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { FormDialog } from "@/components/ui/FormDialog";
 import { useToast } from "@/components/ui/Toast";
-import { cn, formatDateTime, displayActorName } from "@/lib/utils";
+import { cn, formatDateTime, displayActorName, formatDeltaSeconds } from "@/lib/utils";
 import { RemainingChart } from "@/components/graph/RemainingChart";
 import { useKeyboardShortcuts, SHORTCUT_HELP } from "@/hooks/useKeyboardShortcuts";
 import { usePolling } from "@/hooks/usePolling";
 import { useCountdownEnded } from "@/hooks/useCountdownEnded";
+import { useUndoableModifyToast } from "@/hooks/useUndoableModifyToast";
 import { authFetch } from "@/lib/auth-fetch";
 import { hasExternalChange, type SyncedTimerSnapshot } from "@/lib/timer-sync";
 import type {
@@ -54,19 +55,6 @@ const FILTER_ACTIONS: ActionType[] = ["CREATE", "ADD", "SUBTRACT", "EXPIRE", "RE
 // 접힌 기록은 방금 일어난 일만 확인하는 용도라 몇 건만 보여 준다. 펼치면 필터와 페이지가 생긴다
 const RECENT_LOG_LIMIT = 5;
 const FULL_LOG_LIMIT = 20;
-
-function formatSeconds(s: number): string {
-  const abs = Math.abs(s);
-  const h = Math.floor(abs / 3600);
-  const m = Math.floor((abs % 3600) / 60);
-  const sec = abs % 60;
-
-  const parts: string[] = [];
-  if (h > 0) parts.push(`${h}시간`);
-  if (m > 0) parts.push(`${m}분`);
-  if (sec > 0 || parts.length === 0) parts.push(`${sec}초`);
-  return parts.join(" ");
-}
 
 interface TimerConsoleProps {
   timerId: string;
@@ -260,6 +248,9 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
     }
   }
 
+  // 단축키 성공 토스트('+10분 · 닉네임' + 되돌리기). 되돌린 결과도 handleModified로 반영해 기록·그래프·목표를 다시 불러온다
+  const showModifiedToast = useUndoableModifyToast(timerId, handleModified);
+
   // 숫자 단축키가 기록할 닉네임. 시간 조작 카드(TimerControls)가 모바일 하단 바와 같은 규칙으로 렌더마다 채운다
   // (입력란의 이름 우선, 비면 기본 닉네임). 단축키 핸들러가 다시 만들어지지 않도록 ref로 들고 있는다
   const quickActorRef = useRef("");
@@ -278,7 +269,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
         if (res.ok) {
           const json = (await res.json()) as ApiSuccessResponse<TimerModifyResponse>;
           handleModified(json.data);
-          toast(`${selectedAction === "ADD" ? "추가" : "차감"} 완료 (${actor})`, "success");
+          showModifiedToast(json.data.log);
         } else {
           const json = (await res.json().catch(() => null)) as ApiErrorResponse | null;
           toast(json?.error?.message || "시간 변경에 실패했습니다.", "error");
@@ -290,7 +281,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
       toast("시청자 닉네임을 입력하거나 기본 닉네임을 설정하면 숫자키로 즉시 적용됩니다", "info");
     }
     // handleModified가 읽는 기록 상태(필터, 펼침)가 바뀌면 다시 만들어 오래된 값으로 기록을 불러오지 않게 한다
-  }, [isOwner, timer, toast, timerId, selectedAction, activeFilters, logsExpanded]);
+  }, [isOwner, timer, toast, showModifiedToast, timerId, selectedAction, activeFilters, logsExpanded]);
 
   const handleToggleAction = useCallback(() => {
     setSelectedAction((prev) => (prev === "ADD" ? "SUBTRACT" : "ADD"));
@@ -301,8 +292,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
     fetchLogs(logPage, activeFilters, logsExpanded);
     fetchGraph();
     onTimeChanged?.();
-    toast("새로고침 완료", "success");
-  }, [fetchTimer, fetchLogs, fetchGraph, onTimeChanged, logPage, activeFilters, logsExpanded, toast]);
+  }, [fetchTimer, fetchLogs, fetchGraph, onTimeChanged, logPage, activeFilters, logsExpanded]);
 
   const { showHelp, setShowHelp } = useKeyboardShortcuts({
     enabled: isOwner && !!timer && timer.status !== "SCHEDULED",
@@ -460,14 +450,20 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                     <Badge variant={ACTION_TYPE_BADGE_VARIANT[log.actionType]}>
                       {ACTION_TYPE_LABELS[log.actionType]}
                     </Badge>
-                    <span className="truncate">{displayActorName(log)}</span>
+                    {/* 되돌린 기록은 지우지 않고 글자로 표시한다(통계·그래프에서는 빠진다) */}
+                    <span className="truncate">
+                      {displayActorName(log)}
+                      {log.revertedAt && <span className="ml-1.5 text-xs text-muted-foreground">· 되돌림</span>}
+                    </span>
                     {log.deltaSeconds > 0 ? (
                       <span className={cn(
                         "text-right font-mono text-xs font-medium",
-                        log.actionType === "ADD" ? "text-green-700 dark:text-green-400" : log.actionType === "SUBTRACT" ? "text-red-600 dark:text-red-400" : "",
+                        log.revertedAt
+                          ? "text-muted-foreground line-through"
+                          : log.actionType === "ADD" ? "text-green-700 dark:text-green-400" : log.actionType === "SUBTRACT" ? "text-red-600 dark:text-red-400" : "",
                       )}>
                         {log.actionType === "ADD" ? "+" : log.actionType === "SUBTRACT" ? "-" : ""}
-                        {formatSeconds(log.deltaSeconds)}
+                        {formatDeltaSeconds(log.deltaSeconds)}
                       </span>
                     ) : (
                       <span className="text-right font-mono text-xs text-muted-foreground">—</span>
@@ -476,7 +472,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                     <div className="col-span-3 flex flex-wrap items-baseline justify-between gap-x-3 font-mono text-xs text-muted-foreground">
                       <span className="whitespace-nowrap">{formatDateTime(log.createdAt)}</span>
                       <span className="ml-auto whitespace-nowrap text-right">
-                        {formatSeconds(log.beforeSeconds)} → <span className="text-foreground">{formatSeconds(log.afterSeconds)}</span>
+                        {formatDeltaSeconds(log.beforeSeconds)} → <span className="text-foreground">{formatDeltaSeconds(log.afterSeconds)}</span>
                       </span>
                     </div>
                   </li>

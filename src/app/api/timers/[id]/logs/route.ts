@@ -56,7 +56,7 @@ export const GET = withErrorHandler(async (
   const offset = (page - 1) * limit;
   const rows = await db
     .prepare(
-      `SELECT id, action_type, actor_name, actor_user_id, delta_seconds, before_seconds, after_seconds, created_at
+      `SELECT id, action_type, actor_name, actor_user_id, delta_seconds, before_seconds, after_seconds, created_at, reverted_at
        FROM timer_logs
        ${whereClause}
        ORDER BY created_at DESC
@@ -72,6 +72,7 @@ export const GET = withErrorHandler(async (
       before_seconds: number;
       after_seconds: number;
       created_at: string;
+      reverted_at: string | null;
     }>();
 
   const logs = rows.results.map((r) => ({
@@ -83,6 +84,7 @@ export const GET = withErrorHandler(async (
     beforeSeconds: r.before_seconds,
     afterSeconds: r.after_seconds,
     createdAt: r.created_at,
+    revertedAt: r.reverted_at ?? null,
   }));
 
   return NextResponse.json({

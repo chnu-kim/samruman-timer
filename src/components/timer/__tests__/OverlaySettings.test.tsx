@@ -23,66 +23,128 @@ beforeAll(() => {
   };
 });
 
-describe("OverlaySettings URL 복사 (UX-11)", () => {
+describe("OverlaySettings 저장을 포함한 URL 복사 (UX-11·C069)", () => {
+  type Call = { url: string; init?: RequestInit };
+  let calls: Call[];
+  let putOk: boolean;
+
   beforeEach(() => {
     mockToast.mockReset();
     writeText.mockReset();
+    calls = [];
+    putOk = true;
     Object.defineProperty(navigator, "clipboard", {
       value: { writeText },
       configurable: true,
     });
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(input), init });
+      if (init?.method === "PUT" && !putOk) {
+        return { ok: false, status: 500, json: async () => ({ error: { code: "INTERNAL", message: "서버 오류" } }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ data: null }) };
+    }));
   });
 
-  it("클립보드 쓰기가 끝난 뒤에 성공 토스트를 띄운다", async () => {
+  const writes = () => calls.filter((c) => c.init?.method === "PUT" || c.init?.method === "PATCH");
+
+  it("상단에는 복사 버튼이 없고 하단 주 버튼 하나가 복사한다", async () => {
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    expect(await screen.findByRole("button", { name: "URL 복사" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "복사" })).not.toBeInTheDocument();
+  });
+
+  it("변경이 없으면 저장 요청 없이 복사만 하고, 쓰기가 끝난 뒤 성공을 알린다", async () => {
     writeText.mockResolvedValueOnce(undefined);
     render(<OverlaySettings timerId="abc" onClose={() => {}} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "복사" }));
+    fireEvent.click(await screen.findByRole("button", { name: "URL 복사" }));
 
     await waitFor(() => {
-      expect(mockToast).toHaveBeenCalledWith("OBS 오버레이 URL이 복사되었습니다", "success");
+      expect(mockToast).toHaveBeenCalledWith("URL을 복사했습니다. OBS에 붙여넣으세요", "success");
     });
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("/timers/abc/overlay"));
+    expect(writeText).toHaveBeenCalledWith(expect.stringMatching(/\/timers\/abc\/overlay$/));
+    expect(writes()).toHaveLength(0);
   });
 
-  it("클립보드 쓰기가 실패하면 성공 대신 오류 토스트를 띄운다", async () => {
-    writeText.mockRejectedValueOnce(new Error("denied"));
+  it("설정을 바꾸고 한 번 누르면 저장하고 새 URL을 복사한다", async () => {
+    writeText.mockResolvedValueOnce(undefined);
     render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: "게이밍 네온" }));
 
-    fireEvent.click(await screen.findByRole("button", { name: "복사" }));
+    fireEvent.click(screen.getByRole("button", { name: "URL 복사" }));
 
     await waitFor(() => {
-      expect(mockToast).toHaveBeenCalledWith(expect.stringContaining("복사하지 못했습니다"), "error");
+      expect(mockToast).toHaveBeenCalledWith("URL을 복사했습니다. OBS에 붙여넣으세요", "success");
+    });
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("fontSize=96&color=%2300ff88"));
+    const put = calls.find((c) => c.init?.method === "PUT");
+    expect(JSON.parse(String(put!.init!.body))).toMatchObject({ fontSize: 96, color: "#00ff88" });
+    // 저장됐으므로 더 이상 변경 상태가 아니다
+    expect(screen.getByRole("button", { name: "변경 취소" })).toHaveAttribute("tabindex", "-1");
+  });
+
+  it("복사가 실패하면 저장 성공과 나눠 알린다", async () => {
+    writeText.mockRejectedValueOnce(new Error("denied"));
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: "게이밍 네온" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "URL 복사" }));
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(expect.stringContaining("저장했지만 복사하지 못했습니다"), "error");
     });
     expect(mockToast).not.toHaveBeenCalledWith(expect.anything(), "success");
   });
-});
 
-describe("OverlaySettings 반영 안내 (UX-20)", () => {
-  beforeEach(() => {
-    mockToast.mockReset();
+  it("변경 없이 복사만 실패하면 오류만 알린다", async () => {
+    writeText.mockRejectedValueOnce(new Error("denied"));
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "URL 복사" }));
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(expect.stringContaining("URL을 복사하지 못했습니다"), "error");
+    });
+    expect(mockToast).not.toHaveBeenCalledWith(expect.anything(), "success");
   });
 
-  it("URL 블록에 OBS에 새로 붙여넣어야 반영된다는 안내를 보여 준다", async () => {
+  it("저장이 실패하면 복사는 됐어도 성공으로 알리지 않고 변경 상태를 남긴다", async () => {
+    putOk = false;
+    writeText.mockResolvedValueOnce(undefined);
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: "게이밍 네온" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "URL 복사" }));
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith("URL은 복사했지만 저장하지 못했습니다", "error");
+    });
+    expect(mockToast).not.toHaveBeenCalledWith(expect.anything(), "success");
+    expect(screen.getByRole("button", { name: "변경 취소" })).toHaveAttribute("tabindex", "0");
+  });
+});
+
+describe("OverlaySettings OBS 연결 안내 (UX-20·C108)", () => {
+  beforeEach(() => {
+    mockToast.mockReset();
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ data: null }) })));
+  });
+
+  it("URL 아래에 붙여넣을 곳과 권장 크기를 한 줄로 보여 준다", async () => {
     render(<OverlaySettings timerId="abc" onClose={() => {}} />);
 
     expect(
-      await screen.findByText("URL을 바꿨다면 OBS 브라우저 소스에 새로 붙여넣어야 방송에 반영됩니다."),
+      await screen.findByText("OBS 브라우저 소스에 붙여넣기 · 너비 1920 높이 1080"),
     ).toBeInTheDocument();
+    // 다시 붙여넣으라는 안내는 복사 토스트로 옮겼다
+    expect(screen.queryByText(/새로 붙여넣어야/)).not.toBeInTheDocument();
   });
 
-  it("저장 성공 토스트에 OBS에 다시 붙여넣으라는 짧은 안내를 덧붙인다", async () => {
+  it("변경이 있으면 복사할 때 저장된다고 알린다", async () => {
     render(<OverlaySettings timerId="abc" onClose={() => {}} />);
-
     fireEvent.click(await screen.findByRole("button", { name: "게이밍 네온" }));
-    fireEvent.click(screen.getByRole("button", { name: "저장" }));
-
-    await waitFor(() => {
-      expect(mockToast).toHaveBeenCalledWith(
-        "저장되었습니다. OBS에 URL을 다시 붙여넣으세요",
-        "success",
-      );
-    });
+    expect(screen.getByText("복사하면 변경 사항도 저장됩니다")).toHaveClass("opacity-100");
   });
 });
 
@@ -155,11 +217,33 @@ describe("OverlaySettings 색 입력 검증 (UX-55)", () => {
   });
 });
 
-describe("OverlaySettings 미리보기 배경 (UX-57)", () => {
+describe("OverlaySettings 미리보기 (UX-57·C063)", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ data: null }) })));
+  });
+
   it("투명 배경은 테마와 무관한 고정 어두운 색으로 미리 본다", async () => {
     render(<OverlaySettings timerId="abc" onClose={() => {}} />);
     const iframe = await screen.findByTitle("오버레이 미리보기", {}, { timeout: 2000 });
     expect(iframe.style.background).toMatch(/#3f3f46|rgb\(63, 63, 70\)/);
+  });
+
+  it("1920×1080 방송 캔버스로 그려 16:9 상자 폭에 맞춰 축소한다", async () => {
+    const width = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(640);
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    const iframe = await screen.findByTitle("오버레이 미리보기", {}, { timeout: 2000 });
+    expect(iframe.style.width).toBe("1920px");
+    expect(iframe.style.height).toBe("1080px");
+    expect(iframe.style.transform).toBe("scale(" + 640 / 1920 + ")");
+    expect(screen.getByTestId("overlay-preview")).toHaveClass("aspect-video", "overflow-hidden");
+    width.mockRestore();
+  });
+
+  it("미리보기는 URL 바로 아래, 설정보다 먼저 온다", async () => {
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    const preview = await screen.findByTestId("overlay-preview");
+    const preset = screen.getByRole("button", { name: "기본 흰색" });
+    expect(preview.compareDocumentPosition(preset) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
 
@@ -192,30 +276,84 @@ describe("OverlaySettings 표시할 제목", () => {
     fireEvent.change(input, { target: { value: "  주말 서브어톤  " } });
     expect(screen.getByText("저장하지 않은 변경 사항이 있습니다")).toHaveClass("opacity-100");
     fireEvent.click(screen.getByRole("button", { name: "게이밍 네온" }));
-    fireEvent.click(screen.getByRole("button", { name: "저장" }));
+    expect(screen.getByText("복사하면 변경 사항도 저장됩니다")).toHaveClass("opacity-100");
+    fireEvent.click(screen.getByRole("button", { name: "URL 복사" }));
 
     await waitFor(() => expect(calls.some((c) => c.init?.method === "PUT")).toBe(true));
     const patch = calls.find((c) => c.url === "/api/timers/abc" && c.init?.method === "PATCH");
     expect(JSON.parse(String(patch!.init!.body))).toEqual({ title: "주말 서브어톤" });
   });
 
-  it("제목만 바꾸면 설정은 저장하지 않고 URL을 다시 붙여넣으라고 하지 않는다", async () => {
+  it("제목만 바꾸면 주 버튼이 '제목 저장'이 되고, 설정 저장·복사 없이 다시 붙여넣지 않아도 된다고 알린다", async () => {
+    const writeText = vi.fn();
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     render(<OverlaySettings timerId="abc" onClose={() => {}} />);
     fireEvent.change(await screen.findByLabelText("표시할 제목"), { target: { value: "새 제목" } });
-    fireEvent.click(screen.getByRole("button", { name: "저장" }));
+    expect(screen.queryByRole("button", { name: "URL 복사" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "제목 저장" }));
 
-    await waitFor(() => expect(mockToast).toHaveBeenCalledWith("제목이 저장되었습니다", "success"));
+    await waitFor(() =>
+      expect(mockToast).toHaveBeenCalledWith("제목을 저장했습니다. 다시 붙여넣지 않아도 됩니다", "success"),
+    );
     expect(calls.some((c) => c.init?.method === "PUT")).toBe(false);
-    expect(mockToast).not.toHaveBeenCalledWith(expect.stringContaining("다시 붙여넣으세요"), "success");
+    expect(calls.some((c) => c.init?.method === "PATCH")).toBe(true);
+    expect(writeText).not.toHaveBeenCalled();
+    // 저장 뒤에는 다시 URL 복사 버튼으로 돌아간다
+    expect(await screen.findByRole("button", { name: "URL 복사" })).toBeInTheDocument();
   });
 
   it("제목을 비우면 저장하지 않고 알린다", async () => {
     render(<OverlaySettings timerId="abc" onClose={() => {}} />);
     fireEvent.change(await screen.findByLabelText("표시할 제목"), { target: { value: "   " } });
-    fireEvent.click(screen.getByRole("button", { name: "저장" }));
+    fireEvent.click(screen.getByRole("button", { name: "제목 저장" }));
 
     expect(mockToast).toHaveBeenCalledWith("표시할 제목을 입력해주세요", "error");
     expect(calls.some((c) => c.init?.method === "PATCH" || c.init?.method === "PUT")).toBe(false);
+  });
+
+  it("제목이 비어 있어도 URL 복사와 설정 저장은 막지 않고, 제목만 저장하지 않았다고 알린다", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    fireEvent.change(await screen.findByLabelText("표시할 제목"), { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: "게이밍 네온" }));
+    fireEvent.click(screen.getByRole("button", { name: "URL 복사" }));
+
+    await waitFor(() => expect(mockToast).toHaveBeenCalledWith("제목이 비어 있어 제목은 저장하지 않았습니다", "error"));
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(calls.some((c) => c.init?.method === "PUT")).toBe(true);
+    expect(calls.some((c) => c.init?.method === "PATCH")).toBe(false);
+  });
+
+  it("제목 저장이 실패해도 설정은 저장한다", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const base = vi.mocked(fetch).getMockImplementation()!;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        calls.push({ url: String(input), init });
+        return { ok: false, status: 400, json: async () => ({ error: { code: "BAD_REQUEST", message: "제목 오류" } }) };
+      }
+      return base(input, init);
+    }));
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    fireEvent.change(await screen.findByLabelText("표시할 제목"), { target: { value: "새 제목" } });
+    fireEvent.click(screen.getByRole("button", { name: "게이밍 네온" }));
+    fireEvent.click(screen.getByRole("button", { name: "URL 복사" }));
+
+    await waitFor(() => expect(mockToast).toHaveBeenCalledWith("URL은 복사했지만 저장하지 못했습니다", "error"));
+    expect(calls.some((c) => c.init?.method === "PUT")).toBe(true);
+    // 설정은 저장됐고 제목만 남아 있으므로 주 버튼은 '제목 저장'이 된다
+    expect(screen.getByRole("button", { name: "제목 저장" })).toBeInTheDocument();
+  });
+
+  it("타이틀 표시를 끄면 고친 제목을 되돌려 숨은 값을 저장하지 않는다", async () => {
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    fireEvent.change(await screen.findByLabelText("표시할 제목"), { target: { value: "숨을 제목" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "타이틀 표시" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "타이틀 표시" }));
+    expect(screen.getByLabelText("표시할 제목")).toHaveValue("본방 타이머");
+    expect(screen.getByRole("status")).toHaveTextContent("");
   });
 
   it("타이틀 표시를 끄면 제목 입력란을 숨긴다", async () => {
@@ -245,7 +383,7 @@ describe("OverlaySettings 네이티브 모달 (C002·C007)", () => {
   it("변경이 없으면 Esc(cancel)로 바로 닫고 기본 닫기는 막는다", async () => {
     const onClose = vi.fn();
     render(<OverlaySettings timerId="abc" onClose={onClose} />);
-    await screen.findByRole("button", { name: "복사" });
+    await screen.findByRole("button", { name: "URL 복사" });
 
     const cancel = new Event("cancel", { cancelable: true });
     act(() => {
@@ -272,7 +410,7 @@ describe("OverlaySettings 네이티브 모달 (C002·C007)", () => {
   it("배경(dialog 자신)을 누르면 닫고, 안쪽을 누르면 닫지 않는다", async () => {
     const onClose = vi.fn();
     render(<OverlaySettings timerId="abc" onClose={onClose} />);
-    fireEvent.click(await screen.findByRole("button", { name: "복사" }).then((b) => b.closest("div")!));
+    fireEvent.click(await screen.findByText("OBS 브라우저 소스 URL").then((el) => el.closest("div")!));
     expect(onClose).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("dialog", { name: "OBS 오버레이 설정" }));
@@ -293,7 +431,7 @@ describe("OverlaySettings 네이티브 모달 (C002·C007)", () => {
     const opener = screen.getByRole("button", { name: "OBS 오버레이" });
     opener.focus();
     fireEvent.click(opener);
-    await screen.findByRole("button", { name: "복사" });
+    await screen.findByRole("button", { name: "URL 복사" });
     screen.getByRole("button", { name: "닫기" }).focus();
 
     fireEvent.click(screen.getByRole("button", { name: "닫기" }));
@@ -346,7 +484,7 @@ describe("OverlaySettings 현재 상태 표시 (C036·C038·C026·C070)", () => 
 
   it("저장 안 한 변경 경고는 라이트에서 amber-700을 쓴다", async () => {
     render(<OverlaySettings timerId="abc" onClose={() => {}} />);
-    await screen.findByRole("button", { name: "복사" });
-    expect(screen.getByText("저장하지 않은 변경 사항이 있습니다")).toHaveClass("text-amber-700");
+    fireEvent.click(await screen.findByRole("button", { name: "게이밍 네온" }));
+    expect(screen.getByText("복사하면 변경 사항도 저장됩니다")).toHaveClass("text-amber-700");
   });
 });

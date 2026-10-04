@@ -62,6 +62,7 @@ src/
           route.ts                      — 타이머 상세/수정/삭제
           modify/route.ts               — 시간 증감
           logs/route.ts                 — 로그 조회
+          logs/[logId]/revert/route.ts  — 시간 변경 되돌리기(로그 취소 처리)
           graph/route.ts                — 그래프 데이터
           stats/route.ts                — 통계 데이터
           overlay-settings/route.ts     — 오버레이 설정 조회/저장
@@ -155,6 +156,7 @@ migrations/
   0007_refresh_tokens.sql               — refresh token
   0008_overlay_animation.sql            — 오버레이 애니메이션 설정
   0009_timer_unique_and_session_lifetime.sql — 프로젝트당 타이머 유일 인덱스, refresh family 절대 만료
+  0010_log_reverted.sql — 시간 변경 기록 되돌리기(timer_logs.reverted_at)
 
 scripts/
   deploy.mjs                            — pnpm run deploy 진입점 (git short SHA 버전 태그, dirty 트리·origin/main 밖 HEAD 거부)

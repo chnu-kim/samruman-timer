@@ -45,7 +45,7 @@ export const GET = withErrorHandler(async (
         COUNT(CASE WHEN action_type IN ('ADD', 'SUBTRACT') THEN 1 END) AS total_events,
         COUNT(DISTINCT CASE WHEN action_type = 'ADD' THEN actor_name END) AS unique_donors
       FROM timer_logs
-      WHERE timer_id = ?
+      WHERE timer_id = ? AND reverted_at IS NULL
     `)
     .bind(timerId)
     .first<{
@@ -62,6 +62,7 @@ export const GET = withErrorHandler(async (
       FROM timer_logs
       WHERE timer_id = ?
         AND action_type = 'ADD'
+        AND reverted_at IS NULL
       GROUP BY actor_name
       ORDER BY total_seconds DESC
       LIMIT ?
@@ -73,6 +74,7 @@ export const GET = withErrorHandler(async (
       event_count: number;
     }>();
 
+  // 되돌린 기록(reverted_at)은 없던 일로 보고 모든 집계에서 뺀다.
   // created_at은 UTC로 저장되므로 시간대·일별 집계는 KST(UTC+9)로 옮겨서 묶는다.
   // 한국 전용 서비스라 시간대 파라미터 없이 고정한다.
 
@@ -88,6 +90,7 @@ export const GET = withErrorHandler(async (
       FROM timer_logs
       WHERE timer_id = ?
         AND action_type IN ('ADD', 'SUBTRACT')
+        AND reverted_at IS NULL
       GROUP BY hour_of_day
       ORDER BY hour_of_day ASC
     `)
@@ -111,6 +114,7 @@ export const GET = withErrorHandler(async (
       FROM timer_logs
       WHERE timer_id = ?
         AND action_type IN ('ADD', 'SUBTRACT')
+        AND reverted_at IS NULL
       GROUP BY date
       ORDER BY date ASC
     `)

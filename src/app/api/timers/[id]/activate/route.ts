@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDB, withErrorHandler } from "@/lib/db";
 import { activateTimerNow, calculateRemaining, TimerStateError } from "@/lib/timer";
-import type { ActionType, Timer, TimerLogResponse, TimerModifyResponse } from "@/types";
+import type { ActionType, Timer, TimerLog, TimerLogResponse, TimerModifyResponse } from "@/types";
 
 const ID_PATTERN = /^[0-9a-f]{32}$/;
 
@@ -107,7 +107,7 @@ export const POST = withErrorHandler(async (
   }
 
   const { timer: current } = result;
-  const log: TimerLogResponse | null = result.log ?? (await latestLog(db, current.id));
+  const log: TimerLog | TimerLogResponse | null = result.log ?? (await latestLog(db, current.id));
   if (!log) {
     // 로그가 없는 타이머는 없다(생성 때 CREATE). 방어적으로만 둔다
     return NextResponse.json(
@@ -130,6 +130,7 @@ export const POST = withErrorHandler(async (
       beforeSeconds: log.beforeSeconds,
       afterSeconds: log.afterSeconds,
       createdAt: log.createdAt,
+      revertedAt: log.revertedAt ?? null,
     },
   };
 
@@ -139,7 +140,7 @@ export const POST = withErrorHandler(async (
 async function latestLog(db: D1Database, timerId: string): Promise<TimerLogResponse | null> {
   const row = await db
     .prepare(
-      `SELECT id, action_type, actor_name, actor_user_id, delta_seconds, before_seconds, after_seconds, created_at
+      `SELECT id, action_type, actor_name, actor_user_id, delta_seconds, before_seconds, after_seconds, created_at, reverted_at
        FROM timer_logs WHERE timer_id = ? ORDER BY created_at DESC LIMIT 1`
     )
     .bind(timerId)
@@ -152,6 +153,7 @@ async function latestLog(db: D1Database, timerId: string): Promise<TimerLogRespo
       before_seconds: number;
       after_seconds: number;
       created_at: string;
+      reverted_at: string | null;
     }>();
   if (!row) return null;
   return {
@@ -163,5 +165,6 @@ async function latestLog(db: D1Database, timerId: string): Promise<TimerLogRespo
     beforeSeconds: row.before_seconds,
     afterSeconds: row.after_seconds,
     createdAt: row.created_at,
+    revertedAt: row.reverted_at ?? null,
   };
 }
