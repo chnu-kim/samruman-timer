@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 interface BadgeProps {
-  variant: "running" | "expired" | "scheduled" | "create" | "add" | "subtract" | "expire" | "reopen" | "activate" | "delete" | "completed";
+  variant: "running" | "expired" | "scheduled" | "create" | "add" | "subtract" | "expire" | "reopen" | "activate" | "delete" | "completed" | "disconnected";
   children: React.ReactNode;
   className?: string;
 }
@@ -18,6 +18,8 @@ const variantStyles: Record<BadgeProps["variant"], string> = {
   activate: "bg-cyan-700 text-white dark:bg-cyan-900/30 dark:text-cyan-400",
   delete: "bg-gray-700 text-white dark:bg-gray-800/30 dark:text-gray-300",
   completed: "bg-blue-600 text-white dark:bg-blue-900/30 dark:text-blue-400",
+  // 상태가 아니라 '서버 상태를 모름'이라 색을 칠하지 않고 윤곽만 둔다. 흑백에서도 칠한 상태 배지와 모양으로 구분된다
+  disconnected: "bg-transparent text-muted-foreground ring-1 ring-inset ring-muted-foreground",
 };
 
 export function Badge({ variant, children, className }: BadgeProps) {
