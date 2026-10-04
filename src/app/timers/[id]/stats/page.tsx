@@ -160,9 +160,9 @@ export default function TimerStatsPage() {
           {/* KPI 카드 */}
           <StatsCardGrid summary={stats.summary} />
 
-          {/* 상위 후원자 */}
+          {/* 상위 시청자 */}
           <div>
-            <h2 className="border-l-2 border-accent pl-3 text-lg font-bold">상위 후원자</h2>
+            <h2 className="border-l-2 border-accent pl-3 text-lg font-bold">상위 시청자</h2>
             <DonorRankingTable donors={stats.topDonors} className="mt-4" />
           </div>
 
@@ -178,7 +178,7 @@ export default function TimerStatsPage() {
 
           {/* 시간대별 활동 */}
           <div>
-            <h2 className="border-l-2 border-accent pl-3 text-lg font-bold">시간대별 이벤트 횟수</h2>
+            <h2 className="border-l-2 border-accent pl-3 text-lg font-bold">시간대별 변경 횟수</h2>
             <div className="mt-4 rounded-xl border border-border bg-muted p-4">
               <HourlyActivityChart data={stats.hourlyDistribution} />
             </div>

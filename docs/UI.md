@@ -68,7 +68,7 @@
   - DELETE(삭제): 짙은 회색
 
 #### 그래프
-- 잔여 시간 추이(`RemainingChart`) 하나. 누적 변경량은 통계 화면에 있고, 이벤트 빈도는 통계의 시간대별 이벤트 횟수와 겹쳐 없앴다
+- 잔여 시간 추이(`RemainingChart`) 하나. 누적 변경량은 통계 화면에 있고, 이벤트 빈도는 통계의 시간대별 변경 횟수와 겹쳐 없앴다
 
 #### OBS 오버레이 설정 (`OverlaySettings`)
 - '타이틀 표시'를 켜면 '표시할 제목'(타이머 제목, 1~100자)을 고칠 수 있다. 다른 설정과 같은 저장 버튼으로 저장되고 저장 전 변경·닫기 경고에 포함된다. 제목은 오버레이가 폴링으로 다시 읽으므로 URL을 다시 붙여넣지 않아도 반영된다
@@ -79,7 +79,12 @@
 
 ### 4. 타이머 통계 (`/timers/[id]/stats`)
 
-- 요약 카드(`StatsCardGrid`), 상위 후원자(`DonorRankingTable`), 누적 변경량(`CumulativeChart`, 불러오지 못하면 이 섹션만 숨긴다), 시간대별 이벤트 횟수(`HourlyActivityChart`), 일별 활동 최근 30일(`DailyActivityChart`)
+- 요약 카드(`StatsCardGrid`), 상위 시청자(`DonorRankingTable`), 누적 변경량(`CumulativeChart`, 불러오지 못하면 이 섹션만 숨긴다), 시간대별 변경 횟수(`HourlyActivityChart`), 일별 활동 최근 30일(`DailyActivityChart`)
+- 용어는 콘솔과 같다: 시간을 바꾼 사람은 '시청자', 더한 시간은 '추가 시간', 기록 건수는 '변경 횟수'
+- 요약 카드: 순 추가 시간은 숫자에 부호(`+12시간 50분`)를 넣고, 숫자를 되풀이하는 보조문구는 두지 않는다(시청자 수의 '고유 닉네임 기준'만 남긴다)
+- 순위는 모두 숫자, 1~3위만 굵게. 표는 `max-w-2xl`로 폭을 제한한다
+- 추가는 초록·0선 위, 차감은 빨강·0선 아래(시간대별·일별 막대는 `stackOffset="sign"`로 음수 막대), 누적 변경량의 차감은 점선. 범례에 `+`/`-` 부호를 붙여 색 없이도 갈린다
+- 일별 활동은 마지막 기록일까지 30일을 빈 날 0으로 채운 고정 축이고 막대 폭은 `maxBarSize` 24px. Y축은 콘솔 그래프와 같은 `durationAxisTicks`·`formatDurationTick`('4시간', '30분')
 - 제목은 프로젝트 이름 기준(「프로젝트 이름 통계」), 복귀 링크는 프로젝트 화면
 
 ### 5. 오버레이 (`/timers/[id]/overlay`)
@@ -197,10 +202,10 @@ RootLayout (ThemeProvider, ToastProvider, SessionExpiredHandler)
 </AreaChart>
 ```
 
-- 누적 추가량 (초록 영역)과 누적 차감량 (빨강 영역)을 겹쳐 표시
+- 누적 추가량 (초록 영역)과 누적 차감량 (빨강 영역·점선)을 겹쳐 표시. 범례는 '+ 누적 추가', '- 누적 차감'
 - 누적량은 이벤트 시점에만 바뀌므로 stepAfter로 그린다. 곡선(monotone)은 이벤트 사이에 없는 중간값을 그린다
 
-그래프 API(`/api/timers/[id]/graph`)는 `mode=frequency`(시간대별 이벤트 횟수)도 계속 지원하지만, 화면에서는 통계의 `HourlyActivityChart`가 같은 정보를 보여 주므로 쓰지 않는다.
+그래프 API(`/api/timers/[id]/graph`)는 `mode=frequency`(시간대별 변경 횟수)도 계속 지원하지만, 화면에서는 통계의 `HourlyActivityChart`가 같은 정보를 보여 주므로 쓰지 않는다.
 
 ## 반응형 디자인
 
