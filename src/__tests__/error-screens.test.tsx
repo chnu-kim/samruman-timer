@@ -17,6 +17,20 @@ vi.mock("@/components/ui/Toast", () => ({
   useToast: () => ({ toast: vi.fn() }),
 }));
 
+// 실제 모듈은 페이지 수명 동안 한 번만 이벤트를 보내 테스트 사이에 상태가 남으므로 호출만 센다
+const sessionExpired = vi.hoisted(() => ({ fire: vi.fn() }));
+vi.mock("@/lib/session-expired", () => ({
+  fireSessionExpired: sessionExpired.fire,
+  onSessionExpired: () => () => {},
+}));
+
+function unauthorized(code: "UNAUTHORIZED" | "SESSION_EXPIRED") {
+  return new Response(JSON.stringify({ error: { code, message: "" } }), {
+    status: 401,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify({ data }), { status, headers: { "Content-Type": "application/json" } });
 }
@@ -27,7 +41,9 @@ function stubFetch(handler: (url: string) => Response) {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  sessionExpired.fire.mockClear();
   route.id = "x1";
+  document.title = "";
 });
 
 // 찾을 수 없음·권한 없음은 다시 시도로 풀리지 않는 안내라
@@ -76,13 +92,40 @@ describe("오류 화면", () => {
     render(<TimerStatsPage />);
     await screen.findByRole("heading", { level: 1, name: "통계를 볼 수 없습니다" });
     expectNoticeScreen("통계를 볼 수 없습니다", { name: "프로젝트로 돌아가기", href: "/projects/p9" });
+    expect(document.title).toBe("통계를 볼 수 없음 | 삼루먼타이머");
   });
 
-  it("타이머 조회까지 실패하면 프로젝트 목록으로 돌려보낸다", async () => {
-    stubFetch(() => new Response(null, { status: 401 }));
+  // 로그아웃 상태는 미들웨어가 라우트의 소유·존재 판별 전에 401을 낸다. 소유자 문구로 오해하지 않게 로그인 안내를 준다
+  it("로그아웃 상태면 소유자 문구 대신 로그인 안내와 프로젝트 링크", async () => {
+    stubFetch((url) => {
+      if (url === "/api/timers/x1") return jsonResponse({ id: "x1", projectId: "p9" });
+      return unauthorized("UNAUTHORIZED");
+    });
     render(<TimerStatsPage />);
-    await screen.findByRole("heading", { level: 1, name: "통계를 볼 수 없습니다" });
-    expectNoticeScreen("통계를 볼 수 없습니다", { name: "프로젝트 목록으로", href: "/projects" });
+    await screen.findByRole("heading", { level: 1, name: "로그인이 필요합니다" });
+    expectNoticeScreen("로그인이 필요합니다", { name: "프로젝트로 돌아가기", href: "/projects/p9" });
+    expect(screen.queryByText(/소유자만/)).not.toBeInTheDocument();
+    expect(sessionExpired.fire).not.toHaveBeenCalled();
+    expect(document.title).toBe("통계를 볼 수 없음 | 삼루먼타이머");
+  });
+
+  it("로그아웃 상태의 없는 id도 찾을 수 없음이 아니라 로그인 안내, 링크는 프로젝트 목록", async () => {
+    stubFetch((url) => (url === "/api/timers/x1/stats" ? unauthorized("UNAUTHORIZED") : new Response(null, { status: 404 })));
+    render(<TimerStatsPage />);
+    await screen.findByRole("heading", { level: 1, name: "로그인이 필요합니다" });
+    expectNoticeScreen("로그인이 필요합니다", { name: "프로젝트 목록으로", href: "/projects" });
+    expect(sessionExpired.fire).not.toHaveBeenCalled();
+  });
+
+  it("세션이 만료됐으면 세션 만료 흐름을 한 번 태운다", async () => {
+    stubFetch((url) => {
+      if (url === "/api/timers/x1") return jsonResponse({ id: "x1", projectId: "p9" });
+      return unauthorized("SESSION_EXPIRED");
+    });
+    render(<TimerStatsPage />);
+    await screen.findByRole("heading", { level: 1, name: "로그인이 필요합니다" });
+    expect(sessionExpired.fire).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/소유자만/)).not.toBeInTheDocument();
   });
 
   it("없는 타이머의 통계는 찾을 수 없음 안내", async () => {
@@ -90,6 +133,7 @@ describe("오류 화면", () => {
     render(<TimerStatsPage />);
     await screen.findByRole("heading", { level: 1, name: "타이머를 찾을 수 없습니다" });
     expectNoticeScreen("타이머를 찾을 수 없습니다", { name: "프로젝트 목록으로", href: "/projects" });
+    expect(document.title).toBe("찾을 수 없음 | 삼루먼타이머");
   });
 
   it("안내를 띄운 뒤 다른 타이머를 정상으로 불러오면 이전 안내가 남지 않는다", async () => {
@@ -165,11 +209,27 @@ describe("오류 화면", () => {
     expect(screen.queryByRole("heading", { name: /이전 방송 통계/ })).not.toBeInTheDocument();
   });
 
-  it("일시적 오류는 지금처럼 다시 시도를 보여 주고 링크는 없다", async () => {
-    stubFetch(() => new Response(null, { status: 500 }));
+  // 다시 시도할 수 있는 실패라도 화면 제목(h1)과 돌아갈 경로는 남기고, 오류는 본문 한 덩어리(아이콘·문장·다시 시도)로만
+  it("일시적 오류에도 h1 '통계'와 프로젝트로 돌아가는 링크 하나, 본문에 다시 시도", async () => {
+    stubFetch((url) => (url === "/api/timers/x1" ? jsonResponse({ id: "x1", projectId: "p9" }) : new Response(null, { status: 500 })));
     render(<TimerStatsPage />);
     const retry = await screen.findByRole("button", { name: "다시 시도" });
     expect(within(retry.parentElement!).queryByRole("link")).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("통계");
+    const links = screen.getAllByRole("link");
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAccessibleName("프로젝트로 돌아가기");
+    expect(links[0]).toHaveAttribute("href", "/projects/p9");
+  });
+
+  it("타이머 조회까지 실패하면 돌아갈 곳은 프로젝트 목록", async () => {
+    stubFetch(() => new Response(null, { status: 500 }));
+    render(<TimerStatsPage />);
+    await screen.findByRole("button", { name: "다시 시도" });
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    const links = screen.getAllByRole("link");
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute("href", "/projects");
   });
 });

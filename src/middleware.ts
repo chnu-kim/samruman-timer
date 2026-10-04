@@ -135,9 +135,10 @@ async function handle(
       } else {
         logger.info("auth.refresh.rejected", { requestId, method, path, reason: result.reason });
       }
-      // 갱신 실패 → 401 반환 (쿠키 삭제는 로그아웃에서만 수행)
+      // 갱신 실패 → 401 반환 (쿠키 삭제는 로그아웃에서만 수행).
+      // refresh 쿠키가 없는 로그아웃 상태(UNAUTHORIZED)와 코드를 나눠, 화면이 '로그인 필요'와 '세션 만료'를 구분하게 한다
       return NextResponse.json(
-        { error: { code: "UNAUTHORIZED", message: "유효하지 않은 세션입니다" } },
+        { error: { code: "SESSION_EXPIRED", message: "유효하지 않은 세션입니다" } },
         { status: 401 }
       );
     }

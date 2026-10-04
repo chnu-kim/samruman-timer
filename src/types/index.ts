@@ -60,6 +60,7 @@ export interface TimerLog {
 export type ErrorCode =
   | "BAD_REQUEST"
   | "UNAUTHORIZED"
+  | "SESSION_EXPIRED"
   | "FORBIDDEN"
   | "NOT_FOUND"
   | "CONFLICT"
