@@ -131,7 +131,7 @@ describe("프로젝트 상세 목표 섹션 (UX-50)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "더보기" }));
     fireEvent.click(screen.getByRole("button", { name: "프로젝트 삭제" }));
     const dialog = (await screen.findByRole("heading", { name: "프로젝트 삭제" })).closest("dialog")!;
-    expect(dialog).toHaveTextContent("타이머와 변경 기록이 함께 지워지고 되돌릴 수 없습니다.");
+    expect(dialog).toHaveTextContent("타이머·목표·변경 기록이 함께 지워지고 되돌릴 수 없습니다.");
     expect(dialog).not.toHaveTextContent("정말로");
     expect(within(dialog).getByRole("button", { name: "프로젝트 삭제" })).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "돌아가기" })).toBeInTheDocument();

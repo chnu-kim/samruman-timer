@@ -545,7 +545,7 @@ export default function ProjectDetailPage() {
       <ConfirmDialog
         open={showDeleteDialog}
         title="프로젝트 삭제"
-        description="타이머와 변경 기록이 함께 지워지고 되돌릴 수 없습니다."
+        description="타이머·목표·변경 기록이 함께 지워지고 되돌릴 수 없습니다."
         confirmLabel="프로젝트 삭제"
         variant="danger"
         onConfirm={handleDelete}
