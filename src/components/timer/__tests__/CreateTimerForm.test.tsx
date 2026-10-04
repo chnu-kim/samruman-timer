@@ -31,4 +31,25 @@ describe("CreateTimerForm", () => {
     expect(screen.getByRole("combobox", { name: "일" }).className).toContain("w-14");
     expect(screen.getByRole("combobox", { name: "연도" }).className).toContain("w-20");
   });
+
+  // C021: 초기 시간이 0이면 만들 수 없고, 그 이유를 입력칸 아래 한 줄로 알린다(기본값은 채우지 않는다)
+  it("초기 시간이 0이면 만들기 버튼이 비활성이고 이유가 연결되어 있다", () => {
+    render(<CreateTimerForm projectId="p1" defaultTitle="주말 서브어톤" />);
+    const submit = screen.getByRole("button", { name: "타이머 만들기" });
+    expect(submit).toBeDisabled();
+    expect(submit).toHaveAccessibleDescription("초기 시간을 입력하면 만들 수 있습니다.");
+
+    fireEvent.change(screen.getByRole("spinbutton", { name: "시간" }), { target: { value: "2" } });
+    expect(submit).toBeEnabled();
+    expect(screen.queryByText("초기 시간을 입력하면 만들 수 있습니다.")).not.toBeInTheDocument();
+  });
+
+  // C017과 같은 규칙: 60 이상의 분·초는 윗자리로 올린다
+  it("분 90은 1시간 30분으로 올린다", () => {
+    render(<CreateTimerForm projectId="p1" defaultTitle="주말 서브어톤" />);
+    fireEvent.change(screen.getByRole("spinbutton", { name: "분" }), { target: { value: "90" } });
+    expect(screen.getByRole("spinbutton", { name: "시간" })).toHaveValue(1);
+    expect(screen.getByRole("spinbutton", { name: "분" })).toHaveValue(30);
+    expect(screen.getByRole("spinbutton", { name: "분" })).not.toHaveAttribute("max");
+  });
 });

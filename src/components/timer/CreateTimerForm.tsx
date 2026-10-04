@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
 import { authFetch } from "@/lib/auth-fetch";
+import { normalizeTimeParts, type TimeParts } from "@/lib/timer-input";
 import type { ApiSuccessResponse, ApiErrorResponse, TimerCreateResponse } from "@/types";
 
 function formatRelativeTime(targetMs: number): string {
@@ -91,9 +92,20 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess, onCan
   const { toast } = useToast();
   const [title, setTitle] = useState(defaultTitle);
   const titleHintId = useId();
+  const timeHintId = useId();
   const [hours, setHours] = useState(0);
   const [minutes, setMinutes] = useState(0);
   const [seconds, setSeconds] = useState(0);
+  const initialSeconds = hours * 3600 + minutes * 60 + seconds;
+
+  // 시간 조작 폼과 같은 규칙: 60 이상의 분·초는 윗자리로 올린다(90분 → 1시간 30분)
+  function changeTime(field: keyof TimeParts, value: number) {
+    const next = { hours, minutes, seconds, [field]: value };
+    const normalized = normalizeTimeParts(next.hours, next.minutes, next.seconds);
+    setHours(normalized.hours);
+    setMinutes(normalized.minutes);
+    setSeconds(normalized.seconds);
+  }
   const [useScheduled, setUseScheduled] = useState(false);
   const [scheduledStartAt, setScheduledStartAt] = useState("");
   const [loading, setLoading] = useState(false);
@@ -189,7 +201,6 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess, onCan
     e.preventDefault();
     setError("");
 
-    const initialSeconds = hours * 3600 + minutes * 60 + seconds;
     if (initialSeconds <= 0) {
       setError("초기 시간은 1초 이상이어야 합니다.");
       return;
@@ -197,7 +208,7 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess, onCan
 
     if (useScheduled) {
       if (!scheduledStartAt) {
-        setError("예약 시작 시각을 입력해주세요.");
+        setError("예약 시작 시각을 입력해 주세요.");
         return;
       }
       const scheduled = new Date(scheduledStartAt);
@@ -268,7 +279,7 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess, onCan
             type="number"
             min={0}
             value={hours}
-            onChange={(e) => setHours(Number(e.target.value))}
+            onChange={(e) => changeTime("hours", Number(e.target.value))}
             className="w-20 text-center"
             placeholder="시"
             aria-label="시간"
@@ -277,9 +288,8 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess, onCan
           <Input
             type="number"
             min={0}
-            max={59}
             value={minutes}
-            onChange={(e) => setMinutes(Number(e.target.value))}
+            onChange={(e) => changeTime("minutes", Number(e.target.value))}
             className="w-20 text-center"
             placeholder="분"
             aria-label="분"
@@ -288,15 +298,20 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess, onCan
           <Input
             type="number"
             min={0}
-            max={59}
             value={seconds}
-            onChange={(e) => setSeconds(Number(e.target.value))}
+            onChange={(e) => changeTime("seconds", Number(e.target.value))}
             className="w-20 text-center"
             placeholder="초"
             aria-label="초"
           />
           <span className="text-sm text-muted-foreground">초</span>
         </div>
+        {/* 만들기 버튼이 비활성인 이유. 기본값을 채우지 않고 0이면 막기만 한다 */}
+        {initialSeconds <= 0 && (
+          <p id={timeHintId} className="mt-1 text-xs text-muted-foreground">
+            초기 시간을 입력하면 만들 수 있습니다.
+          </p>
+        )}
       </div>
 
       {/* 시작 방식 */}
@@ -417,7 +432,12 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess, onCan
             취소
           </Button>
         )}
-        <Button type="submit" disabled={loading || !title.trim()} className="flex-1">
+        <Button
+          type="submit"
+          disabled={loading || !title.trim() || initialSeconds <= 0}
+          aria-describedby={initialSeconds <= 0 ? timeHintId : undefined}
+          className="flex-1"
+        >
           {loading ? "생성 중..." : "타이머 만들기"}
         </Button>
       </div>

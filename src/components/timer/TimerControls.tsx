@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
 import { authFetch } from "@/lib/auth-fetch";
+import { normalizeTimeParts, resolveQuickActor, type TimeParts } from "@/lib/timer-input";
 import type { ApiSuccessResponse, ApiErrorResponse, TimerModifyResponse, TimerLogResponse, ModifyAction, TimerStatus } from "@/types";
 
 interface TimerControlsProps {
@@ -16,6 +17,11 @@ interface TimerControlsProps {
   selectedAction: ModifyAction;
   onActionChange: (action: ModifyAction) => void;
   onModified?: (data: TimerModifyResponse) => void;
+  /**
+   * 즉시 적용 닉네임을 상위와 공유하는 ref. 숫자 단축키(상위 소유)가 모바일 바와 같은 이름으로 기록하게 한다.
+   * effect가 아니라 렌더 중에 채워, 닉네임을 바꾼 직후의 단축키도 화면에 보이는 이름을 쓴다
+   */
+  quickActorRef?: { current: string };
   className?: string;
 }
 
@@ -65,7 +71,7 @@ function saveDefaultActor(name: string) {
   localStorage.setItem(DEFAULT_ACTOR_KEY, name);
 }
 
-export function TimerControls({ timerId, status, remainingSeconds, selectedAction, onActionChange, onModified, className }: TimerControlsProps) {
+export function TimerControls({ timerId, status, remainingSeconds, selectedAction, onActionChange, onModified, quickActorRef, className }: TimerControlsProps) {
   const { toast } = useToast();
   const [actorName, setActorName] = useState("");
   const [hours, setHours] = useState(0);
@@ -83,7 +89,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   const addRadioRef = useRef<HTMLSpanElement>(null);
   const subtractRadioRef = useRef<HTMLSpanElement>(null);
   const actionGroupLabelId = useId();
-  const timeHintId = useId();
+  const submitHintId = useId();
 
   useEffect(() => {
     setRecentActors(getRecentActors());
@@ -95,14 +101,25 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   }, []);
 
   const totalSeconds = hours * 3600 + minutes * 60 + seconds;
-  // 즉시 적용(모바일 하단 바)이 기록할 닉네임. 표시와 제출이 어긋나지 않도록 한 곳에서 정한다
-  const quickActor = actorName.trim() || defaultActor;
+  // 즉시 적용(모바일 하단 바·숫자 단축키)이 기록할 닉네임. 표시와 제출이 어긋나지 않도록 한 곳에서 정한다
+  const actionLabel = selectedAction === "ADD" ? "추가" : "차감";
+  const quickActor = resolveQuickActor(actorName, defaultActor);
+  if (quickActorRef) quickActorRef.current = quickActor;
+
+  function setTime({ hours, minutes, seconds }: TimeParts) {
+    setHours(hours);
+    setMinutes(minutes);
+    setSeconds(seconds);
+  }
+
+  // 60 이상의 분·초는 자르지 않고 윗자리로 올린다(90분 → 1시간 30분). 결과는 확인 버튼 라벨에 보인다
+  function changeTime(field: keyof TimeParts, value: number) {
+    const next = { hours, minutes, seconds, [field]: value };
+    setTime(normalizeTimeParts(next.hours, next.minutes, next.seconds));
+  }
+
   function addPreset(presetSeconds: number) {
-    const current = hours * 3600 + minutes * 60 + seconds;
-    const next = current + presetSeconds;
-    setHours(Math.floor(next / 3600));
-    setMinutes(Math.floor((next % 3600) / 60));
-    setSeconds(next % 60);
+    setTime(normalizeTimeParts(hours, minutes, seconds + presetSeconds));
   }
 
   async function submitModify(action: ModifyAction, delta: number, actor: string) {
@@ -180,16 +197,17 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   // 모바일 하단 바: 프리셋 탭 한 번으로 즉시 적용
   async function handleQuickApply(presetSeconds: number) {
     if (!quickActor) {
-      setError("닉네임을 먼저 입력해주세요.");
-      toast("닉네임을 먼저 입력해주세요.", "error");
+      setError("닉네임을 먼저 입력해 주세요.");
+      toast("닉네임을 먼저 입력해 주세요.", "error");
       return;
     }
     await submitModify(selectedAction, presetSeconds, quickActor);
   }
 
-  async function handleSubmit() {
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
     if (!actorName.trim()) {
-      setError("시청자 닉네임을 입력해주세요.");
+      setError("시청자 닉네임을 입력해 주세요.");
       return;
     }
     if (totalSeconds <= 0) {
@@ -239,8 +257,16 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
     );
   }
 
+  // 한국어 IME 조합 중에 누른 Enter는 글자 확정이지 제출이 아니다
+  function handleFormKeyDown(e: React.KeyboardEvent<HTMLFormElement>) {
+    if (e.key === "Enter" && (e.nativeEvent.isComposing || e.keyCode === 229)) {
+      e.preventDefault();
+    }
+  }
+
   return (
-    <div className={cn("space-y-5", className)}>
+    // Enter로 제출한다. 오류 안내는 아래 role=alert 문구가 맡으므로 브라우저 기본 검증 말풍선은 끈다
+    <form noValidate onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className={cn("space-y-5", className)}>
       {/* 만료 상태에서 추가는 곧 재시작이므로 미리 알린다 */}
       {status === "EXPIRED" && (
         <p className="text-sm text-muted-foreground">
@@ -384,7 +410,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
               inputMode="numeric"
               min={0}
               value={hours}
-              onChange={(e) => setHours(Math.max(0, Number(e.target.value)))}
+              onChange={(e) => changeTime("hours", Number(e.target.value))}
               className="w-20 text-center"
               placeholder="0"
               aria-label="시간"
@@ -394,49 +420,47 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
               type="number"
               inputMode="numeric"
               min={0}
-              max={59}
               value={minutes}
-              onChange={(e) => setMinutes(Math.max(0, Math.min(59, Number(e.target.value))))}
+              onChange={(e) => changeTime("minutes", Number(e.target.value))}
               className="w-20 text-center"
               placeholder="0"
               aria-label="분"
-              aria-describedby={timeHintId}
             />
             <span className="text-sm text-muted-foreground">분</span>
             <Input
               type="number"
               inputMode="numeric"
               min={0}
-              max={59}
               value={seconds}
-              onChange={(e) => setSeconds(Math.max(0, Math.min(59, Number(e.target.value))))}
+              onChange={(e) => changeTime("seconds", Number(e.target.value))}
               className="w-20 text-center"
               placeholder="0"
               aria-label="초"
-              aria-describedby={timeHintId}
             />
             <span className="text-sm text-muted-foreground">초</span>
           </div>
         </div>
-        {/* 59를 넘기면 59로 잘리므로 범위를 미리 알린다 */}
-        <p id={timeHintId} className="mt-1 text-xs text-muted-foreground">
-          분과 초는 0~59까지 입력할 수 있습니다.
-        </p>
+        {/* 확인 버튼이 비활성인 이유. 값을 넣으면 사라지고 버튼 라벨이 적용될 양을 보여 준다 */}
+        {totalSeconds <= 0 && (
+          <p id={submitHintId} className="mt-1 text-xs text-muted-foreground">
+            시간을 입력하면 {actionLabel}할 수 있습니다.
+          </p>
+        )}
       </div>
 
       {/* 에러 메시지 */}
       {error && <p className="text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>}
 
+      {/* 라벨은 늘 동작(동사)이고, 값이 있으면 적용될 양을 덧붙인다 */}
       <Button
+        type="submit"
         size="lg"
         variant={selectedAction === "SUBTRACT" ? "danger" : "primary"}
         disabled={totalSeconds <= 0}
-        onClick={handleSubmit}
+        aria-describedby={totalSeconds <= 0 ? submitHintId : undefined}
         className="w-full"
       >
-        {totalSeconds > 0
-          ? `${selectedAction === "ADD" ? "추가" : "차감"} 확인 (${formatDelta(totalSeconds)})`
-          : "시간을 입력해주세요"}
+        {totalSeconds > 0 ? `시간 ${actionLabel} (${formatDelta(totalSeconds)})` : `시간 ${actionLabel}`}
       </Button>
 
       {/* 모바일 하단 고정 빠른 액션 바 */}
@@ -465,7 +489,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
           {quickActor ? `즉시 적용 → ${quickActor}` : "닉네임을 먼저 입력하세요"}
         </p>
       </div>
-    </div>
+    </form>
   );
 }
 
