@@ -366,6 +366,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
             <div className="flex items-center gap-1">
               <input
                 type="number"
+                inputMode="numeric"
                 min={24}
                 max={200}
                 value={fontSizeInput}

@@ -274,33 +274,37 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess, onCan
       {/* 초기 시간 */}
       <div>
         <label className="text-sm font-medium text-foreground">초기 시간</label>
-        <div className="mt-1.5 flex items-center gap-2">
+        {/* 칸 폭을 고정하지 않고 줄 폭을 나눠 써서 좁은 모달에서도 넘치지 않게 한다 */}
+        <div className="mt-1.5 flex items-center gap-2 [&>div]:min-w-0 [&>div]:flex-1">
           <Input
             type="number"
+            inputMode="numeric"
             min={0}
             value={hours}
             onChange={(e) => changeTime("hours", Number(e.target.value))}
-            className="w-20 text-center"
+            className="w-full text-center"
             placeholder="시"
             aria-label="시간"
           />
           <span className="text-sm text-muted-foreground">시</span>
           <Input
             type="number"
+            inputMode="numeric"
             min={0}
             value={minutes}
             onChange={(e) => changeTime("minutes", Number(e.target.value))}
-            className="w-20 text-center"
+            className="w-full text-center"
             placeholder="분"
             aria-label="분"
           />
           <span className="text-sm text-muted-foreground">분</span>
           <Input
             type="number"
+            inputMode="numeric"
             min={0}
             value={seconds}
             onChange={(e) => changeTime("seconds", Number(e.target.value))}
-            className="w-20 text-center"
+            className="w-full text-center"
             placeholder="초"
             aria-label="초"
           />
@@ -436,7 +440,8 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess, onCan
           type="submit"
           disabled={loading || !title.trim() || initialSeconds <= 0}
           aria-describedby={initialSeconds <= 0 ? timeHintId : undefined}
-          className="flex-1"
+          // 320px 모달에서 라벨이 '만들/기'로 꺾여 버튼 높이를 넘지 않게 한 줄로 두고 취소 버튼이 줄어든다
+          className="flex-1 whitespace-nowrap"
         >
           {loading ? "생성 중..." : "타이머 만들기"}
         </Button>
