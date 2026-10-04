@@ -147,6 +147,8 @@ RootLayout (ThemeProvider, ToastProvider, SessionExpiredHandler)
 
 공용 UI는 `src/components/ui/`(Badge, Button, Input, Pagination, ConfirmDialog, FormDialog, EditableText, ErrorState, MoreMenu, Skeleton, Spinner, Toast, ThemeToggle, Icons)에 있다.
 
+테마는 `src/lib/theme.ts`의 `applyTheme` 하나로 정한다. 저장값(`localStorage.theme`)이 `light`·`dark`면 그대로, `system`이거나 없으면 OS 설정을 따라 html에 `dark`·`light` 중 정확히 하나만 붙인다. 레이아웃의 첫 페인트 전 인라인 스크립트도 같은 함수 소스를 실행한다. `ThemeToggle`은 라이트 → 다크 → 시스템 순으로 돌고, 이름은 "테마: 다크 (눌러서 시스템으로)"처럼 지금 상태와 다음 동작을 함께 알린다.
+
 ## Recharts 그래프 설계
 
 ### 잔여 시간 추이 (LineChart, 콘솔)
