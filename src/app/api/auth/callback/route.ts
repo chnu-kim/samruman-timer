@@ -37,8 +37,19 @@ function stateFailureReason(
   return null;
 }
 
-function failureRedirect(baseUrl: string): NextResponse {
-  const response = NextResponse.redirect(`${baseUrl}/login?error=auth_failed`);
+/**
+ * 로그인 화면으로 되돌린다. 돌아갈 경로(next)는 쿠키 대신 URL에 실어 로그인 버튼이 다시 들고 가게 한다
+ * (세션 만료 뒤 재로그인이 한 번 실패해도 보던 화면으로 돌아갈 수 있게). 이 next로 바로 이동하지는 않고,
+ * 로그인 화면과 로그인 라우트가 다시 검증한다.
+ * 동의 화면에서 취소한 경우(cancelled)는 실패가 아니므로 오류 안내 없이 돌려보낸다.
+ */
+function failureRedirect(baseUrl: string, request: NextRequest, cancelled = false): NextResponse {
+  const params = new URLSearchParams();
+  if (!cancelled) params.set("error", "auth_failed");
+  const next = sanitizeNextPath(request.cookies.get(NEXT_COOKIE_NAME)?.value);
+  if (next) params.set("next", next);
+  const qs = params.toString();
+  const response = NextResponse.redirect(`${baseUrl}/login${qs ? `?${qs}` : ""}`);
   response.cookies.delete(NEXT_COOKIE_NAME);
   return response;
 }
@@ -58,7 +69,9 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
     // warn 필터를 state 위조 의심(mismatch·missing_state·missing_cookie)에만 남기려고 info로 낮춘다
     const level = stateFailure === "missing_code" ? "info" : "warn";
     logger[level]("auth.oauth_state_invalid", { requestId, reason: stateFailure });
-    return failureRedirect(baseUrl);
+    // 취소로 보는 것은 code만 없고 state가 저장한 값과 맞을 때다(직접 연 주소·state 누락은 실패로 안내)
+    const cancelled = stateFailure === "missing_code" && !!state && state === savedState;
+    return failureRedirect(baseUrl, request, cancelled);
   }
 
   const startedAt = Date.now();
@@ -157,6 +170,6 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
       durationMs: Date.now() - startedAt,
       ...errorFields(error),
     });
-    return failureRedirect(baseUrl);
+    return failureRedirect(baseUrl, request);
   }
 });

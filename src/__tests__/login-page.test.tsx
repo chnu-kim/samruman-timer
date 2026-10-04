@@ -1,0 +1,94 @@
+// @vitest-environment jsdom
+import { render, screen, waitFor } from "@testing-library/react";
+import LoginPage from "@/app/(auth)/login/page";
+import { SITE_SUMMARY, SITE_TAGLINE } from "@/lib/site";
+
+const replace = vi.fn();
+let search = "";
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace }),
+  useSearchParams: () => new URLSearchParams(search),
+}));
+
+function mockMe(status: number) {
+  global.fetch = vi.fn(async () =>
+    status === 200
+      ? new Response(JSON.stringify({ data: { id: "u1", chzzkUserId: "c1", nickname: "삼루먼", profileImageUrl: null } }), { status })
+      : new Response(JSON.stringify({ error: { code: "UNAUTHORIZED", message: "인증이 필요합니다" } }), { status })
+  ) as typeof fetch;
+}
+
+afterEach(() => {
+  replace.mockReset();
+  search = "";
+  vi.restoreAllMocks();
+});
+
+// C153: 제목은 브랜드명 반복 대신 서비스 설명. 공개 소개 문구에는 플랫폼 이름을 넣지 않고 로그인 버튼에만 둔다
+describe("로그인 화면 문구", () => {
+  it("제목·부제가 서비스 설명이고 로그인 버튼은 가운데 정렬이다", () => {
+    mockMe(401);
+    render(<LoginPage />);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(SITE_TAGLINE);
+    expect(screen.getByText(SITE_SUMMARY)).toBeInTheDocument();
+    expect(`${SITE_TAGLINE} ${SITE_SUMMARY}`).not.toMatch(/CHZZK|치지직/);
+    const cta = screen.getByRole("link", { name: "CHZZK로 로그인" });
+    expect(cta.className).toContain("text-center");
+  });
+
+  it("next가 있으면 로그인 버튼이 next를 들고 간다", () => {
+    mockMe(401);
+    search = `next=${encodeURIComponent("/timers/abc")}`;
+    render(<LoginPage />);
+    expect(screen.getByRole("link", { name: "CHZZK로 로그인" })).toHaveAttribute(
+      "href",
+      `/api/auth/login?next=${encodeURIComponent("/timers/abc")}`
+    );
+  });
+});
+
+// C155: 이미 로그인한 사용자가 /login에 오면 로그인 화면을 보여 주지 않고 보낸다
+describe("로그인 상태에서 /login", () => {
+  it("next가 없으면 프로젝트 목록으로 보낸다", async () => {
+    mockMe(200);
+    render(<LoginPage />);
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/projects"));
+    expect(global.fetch).toHaveBeenCalledWith("/api/auth/me");
+  });
+
+  it("next가 있으면 그곳으로 보낸다", async () => {
+    mockMe(200);
+    search = `next=${encodeURIComponent("/timers/abc?tab=logs")}`;
+    render(<LoginPage />);
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/timers/abc?tab=logs"));
+  });
+
+  it("허용되지 않는 next(외부 주소)는 무시하고 목록으로 보낸다", async () => {
+    mockMe(200);
+    search = `next=${encodeURIComponent("//evil.com")}`;
+    render(<LoginPage />);
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/projects"));
+  });
+
+  it("?error=가 있으면 실패 안내를 보여 주고 머문다(되돌려 보내 반복되지 않게)", async () => {
+    mockMe(200);
+    search = "error=auth_failed";
+    render(<LoginPage />);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("로그아웃 상태(401)면 머물고 세션 만료 이벤트를 내지 않는다", async () => {
+    mockMe(401);
+    const expired = vi.fn();
+    window.addEventListener("session-expired", expired);
+    render(<LoginPage />);
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 20));
+    expect(replace).not.toHaveBeenCalled();
+    expect(expired).not.toHaveBeenCalled();
+    window.removeEventListener("session-expired", expired);
+  });
+});

@@ -11,7 +11,7 @@
  * Workers 런타임은 `migrations/`를 읽을 수 없어 상수로 둔다. 새 마이그레이션을 추가하면 함께 바꾼다
  * (`src/lib/__tests__/health.test.ts`가 디렉토리의 최신 파일명과 대조한다)
  */
-export const EXPECTED_LATEST_MIGRATION = "0009_timer_unique_and_session_lifetime.sql";
+export const EXPECTED_LATEST_MIGRATION = "0010_log_reverted.sql";
 
 /**
  * - `current`: 기대값과 같다

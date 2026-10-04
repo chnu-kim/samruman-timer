@@ -310,8 +310,8 @@ describe("TimerControls", () => {
         }),
       );
 
-      // UX-10: 성공 토스트는 서버 응답 전에는 뜨지 않는다
-      expect(mockToast).not.toHaveBeenCalledWith("추가 완료", "success");
+      // UX-10: 성공 토스트는 서버 응답 전에는 뜨지 않는다(되돌릴 기록 id가 응답에 있다)
+      expect(mockToast).not.toHaveBeenCalled();
 
       // fetch 완료
       await act(async () => {
@@ -328,8 +328,10 @@ describe("TimerControls", () => {
         } as Response);
       });
 
-      // 서버 값으로 확정된 뒤 성공 토스트
-      expect(mockToast).toHaveBeenCalledWith("추가 완료", "success");
+      // 서버 값으로 확정된 뒤 성공 토스트: '+변경량 · 닉네임' + 되돌리기(C156)
+      expect(mockToast).toHaveBeenCalledWith("+1시간 · 테스터", "success", {
+        action: { label: "되돌리기", onClick: expect.any(Function) },
+      });
       expect(onModified).toHaveBeenCalledTimes(2);
       expect(onModified).toHaveBeenLastCalledWith(
         expect.objectContaining({
@@ -639,7 +641,7 @@ describe("TimerControls", () => {
       localStorageMock.setItem("defaultActorName", "기본냥");
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ data: { id: timerId, remainingSeconds: 7200, status: "RUNNING", log: { id: "l1" } } }),
+        json: async () => ({ data: { id: timerId, remainingSeconds: 7200, status: "RUNNING", log: { id: "l1", actionType: "ADD", actorName: "기본냥", deltaSeconds: 3600 } } }),
       });
       render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3600} />);
 
@@ -651,7 +653,71 @@ describe("TimerControls", () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
       expect(body).toEqual({ action: "ADD", deltaSeconds: 3600, actorName: "기본냥" });
-      await waitFor(() => expect(mockToast).toHaveBeenCalledWith("추가 완료", "success"));
+      await waitFor(() => expect(mockToast).toHaveBeenCalledWith("+1시간 · 기본냥", "success", expect.anything()));
+    });
+  });
+
+  // C013: 되돌리기는 반대 방향 modify가 아니라 그 기록의 취소 처리(revert) 요청이다
+  describe("undo toast", () => {
+    it("되돌리기를 누르면 그 기록의 revert를 호출하고 결과를 onModified로 반영한다", async () => {
+      const onModified = vi.fn();
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            data: { id: timerId, remainingSeconds: 7200, status: "RUNNING", log: { id: "log-add", actionType: "SUBTRACT", actorName: "테스터", deltaSeconds: 600 } },
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            data: { id: timerId, remainingSeconds: 7800, status: "RUNNING", log: { id: "log-add", revertedAt: "2026-01-01T00:00:00Z" } },
+          }),
+        });
+      render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={7800} onModified={onModified} initialAction="SUBTRACT" />);
+      fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "테스터" } });
+      fireEvent.change(screen.getByLabelText("분"), { target: { value: "10" } });
+      fireEvent.click(screen.getByRole("button", { name: /시간 차감/ }));
+
+      await waitFor(() => expect(mockToast).toHaveBeenCalledWith("-10분 · 테스터", "success", expect.anything()));
+      const { action } = mockToast.mock.calls[0][2];
+      await act(async () => {
+        await action.onClick();
+      });
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch.mock.calls[1][0]).toBe(`/api/timers/${timerId}/logs/log-add/revert`);
+      expect(mockFetch.mock.calls[1][1]).toMatchObject({ method: "POST" });
+      // modify를 한 번 더 보내지 않는다(보정 행을 만들지 않음)
+      expect(mockFetch.mock.calls.filter(([url]) => String(url).endsWith("/modify"))).toHaveLength(1);
+      expect(onModified).toHaveBeenLastCalledWith(expect.objectContaining({ remainingSeconds: 7800 }));
+      expect(mockToast).toHaveBeenLastCalledWith("되돌렸습니다 (-10분 · 테스터)", "success");
+    });
+
+    it("되돌리기 실패는 서버 문구로 오류 토스트를 띄우고 화면 값을 바꾸지 않는다", async () => {
+      const onModified = vi.fn();
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ data: { id: timerId, remainingSeconds: 4200, status: "RUNNING", log: { id: "l9", actionType: "ADD", actorName: "테스터", deltaSeconds: 600 } } }),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 409,
+          json: async () => ({ error: { code: "CONFLICT", message: "이미 되돌린 기록입니다" } }),
+        });
+      render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3600} onModified={onModified} />);
+      fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "테스터" } });
+      fireEvent.change(screen.getByLabelText("분"), { target: { value: "10" } });
+      fireEvent.click(screen.getByRole("button", { name: /시간 추가/ }));
+      await waitFor(() => expect(mockToast).toHaveBeenCalledTimes(1));
+      const calls = onModified.mock.calls.length;
+
+      await act(async () => {
+        await mockToast.mock.calls[0][2].action.onClick();
+      });
+      expect(onModified).toHaveBeenCalledTimes(calls);
+      expect(mockToast).toHaveBeenLastCalledWith("이미 되돌린 기록입니다", "error");
     });
   });
 });

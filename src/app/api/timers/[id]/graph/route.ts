@@ -34,6 +34,8 @@ export const GET = withErrorHandler(async (
     );
   }
 
+  // 되돌린 기록(reverted_at)은 세 모드 모두에서 뺀다. 잔여 모드에서 그 기록과 되돌리기 사이의 다른 기록은
+  // 당시 실제 잔여(되돌린 변경량 포함)를 그대로 그린다.
   // 로그가 많은 타이머도 응답 크기가 일정하도록 MAX_POINTS개 안팎으로 균등 추출한다.
   // step = ceil(전체 / MAX_POINTS), 마지막 점은 항상 포함한다.
   if (mode === "remaining") {
@@ -44,7 +46,7 @@ export const GET = withErrorHandler(async (
                   ROW_NUMBER() OVER (ORDER BY created_at, id) AS rn,
                   COUNT(*) OVER () AS total
            FROM timer_logs
-           WHERE timer_id = ?
+           WHERE timer_id = ? AND reverted_at IS NULL
          )
          SELECT created_at, after_seconds
          FROM ordered
@@ -76,7 +78,7 @@ export const GET = withErrorHandler(async (
                   ROW_NUMBER() OVER w AS rn,
                   COUNT(*) OVER () AS total
            FROM timer_logs
-           WHERE timer_id = ? AND action_type IN ('ADD', 'SUBTRACT')
+           WHERE timer_id = ? AND action_type IN ('ADD', 'SUBTRACT') AND reverted_at IS NULL
            WINDOW w AS (ORDER BY created_at, id ROWS UNBOUNDED PRECEDING)
          )
          SELECT created_at, total_added, total_subtracted
@@ -106,7 +108,7 @@ export const GET = withErrorHandler(async (
            SUM(CASE WHEN action_type = 'ADD' THEN 1 ELSE 0 END) AS adds,
            SUM(CASE WHEN action_type = 'SUBTRACT' THEN 1 ELSE 0 END) AS subtracts
          FROM timer_logs
-         WHERE timer_id = ? AND action_type IN ('ADD', 'SUBTRACT')
+         WHERE timer_id = ? AND action_type IN ('ADD', 'SUBTRACT') AND reverted_at IS NULL
          GROUP BY hour
          ORDER BY hour DESC
          LIMIT ${MAX_POINTS}

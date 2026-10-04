@@ -226,24 +226,27 @@ export function GoalForm({ projectId, onSuccess, onCancel }: GoalFormProps) {
       {goalType === "DURATION" && (
         <div>
           <label className="text-sm font-medium text-foreground">목표 시간</label>
-          <div className="mt-1.5 flex items-center gap-2">
+          {/* 칸 폭을 고정하지 않고 줄 폭을 나눠 써서 좁은 모달에서도 넘치지 않게 한다 */}
+          <div className="mt-1.5 flex items-center gap-2 [&>div]:min-w-0 [&>div]:flex-1">
             <Input
               type="number"
+              inputMode="numeric"
               min={0}
               value={hours}
               onChange={(e) => setHours(Number(e.target.value))}
-              className="w-20 text-center"
+              className="w-full text-center"
               placeholder="시"
               aria-label="시간"
             />
             <span className="text-sm text-muted-foreground">시간</span>
             <Input
               type="number"
+              inputMode="numeric"
               min={0}
               max={59}
               value={minutes}
               onChange={(e) => setMinutes(Number(e.target.value))}
-              className="w-20 text-center"
+              className="w-full text-center"
               placeholder="분"
               aria-label="분"
             />
