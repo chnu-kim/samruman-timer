@@ -130,6 +130,12 @@ export interface ProjectListItem {
   description: string | null;
   ownerNickname: string;
   timerCount: number;
+  /** 조회 시점에 계산한 타이머 상태. 타이머가 없으면 null */
+  timerStatus: Exclude<TimerStatus, "DELETED"> | null;
+  /** 조회 시점 잔여초. 타이머가 없으면 null */
+  remainingSeconds: number | null;
+  /** 예약 상태일 때 시작 시각 */
+  scheduledStartAt: string | null;
   createdAt: string;
 }
 
@@ -344,6 +350,8 @@ export interface GoalProgress {
   remainingToTarget?: number;
   timerSurvivesDeadline?: boolean;
   deadlineIn?: number;
+  /** DEADLINE: 지금 잔여 시간대로면 타이머가 마감 전에 끝난다 */
+  deadlineAfterTimerEnd?: boolean;
 }
 
 // ─── Refresh Token 타입 ───

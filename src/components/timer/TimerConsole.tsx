@@ -260,24 +260,25 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
     }
   }
 
+  // 숫자 단축키가 기록할 닉네임. 시간 조작 카드(TimerControls)가 모바일 하단 바와 같은 규칙으로 렌더마다 채운다
+  // (입력란의 이름 우선, 비면 기본 닉네임). 단축키 핸들러가 다시 만들어지지 않도록 ref로 들고 있는다
+  const quickActorRef = useRef("");
+
   // 키보드 단축키 핸들러
   const handleKeyboardPreset = useCallback(async (seconds: number) => {
     if (!isOwner || !timer || timer.status === "SCHEDULED") return;
-    // 기본 닉네임이 설정되어 있으면 즉시 적용 가능
-    const defaultActor = (() => {
-      try { return localStorage.getItem("defaultActorName") || ""; } catch { return ""; }
-    })();
-    if (defaultActor) {
+    const actor = quickActorRef.current;
+    if (actor) {
       try {
         const res = await authFetch(`/api/timers/${timerId}/modify`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: selectedAction, deltaSeconds: seconds, actorName: defaultActor }),
+          body: JSON.stringify({ action: selectedAction, deltaSeconds: seconds, actorName: actor }),
         });
         if (res.ok) {
           const json = (await res.json()) as ApiSuccessResponse<TimerModifyResponse>;
           handleModified(json.data);
-          toast(`${selectedAction === "ADD" ? "추가" : "차감"} 완료 (${defaultActor})`, "success");
+          toast(`${selectedAction === "ADD" ? "추가" : "차감"} 완료 (${actor})`, "success");
         } else {
           const json = (await res.json().catch(() => null)) as ApiErrorResponse | null;
           toast(json?.error?.message || "시간 변경에 실패했습니다.", "error");
@@ -286,7 +287,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
         toast("시간 변경에 실패했습니다.", "error");
       }
     } else {
-      toast("기본 닉네임을 설정하면 숫자키로 즉시 적용됩니다", "info");
+      toast("시청자 닉네임을 입력하거나 기본 닉네임을 설정하면 숫자키로 즉시 적용됩니다", "info");
     }
     // handleModified가 읽는 기록 상태(필터, 펼침)가 바뀌면 다시 만들어 오래된 값으로 기록을 불러오지 않게 한다
   }, [isOwner, timer, toast, timerId, selectedAction, activeFilters, logsExpanded]);
@@ -382,6 +383,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                 selectedAction={selectedAction}
                 onActionChange={setSelectedAction}
                 onModified={handleModified}
+                quickActorRef={quickActorRef}
                 className="mt-3"
               />
             </section>
@@ -518,13 +520,13 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
       </div>
 
       {/* 단축키 도움말. 다른 다이얼로그와 같은 FormDialog(닫기 버튼, Escape, 배경 클릭)를 쓴다.
-          본문은 localStorage를 읽으므로 열렸을 때만 렌더한다(서버 렌더와 어긋나지 않게) */}
+          본문은 열렸을 때만 렌더한다 */}
       <FormDialog open={showHelp} title="키보드 단축키" onClose={() => setShowHelp(false)}>
         {showHelp && (
           <>
             <div className="space-y-2">
               {SHORTCUT_HELP.map((item) => (
-                <div key={item.key} className="flex items-center justify-between text-sm">
+                <div key={item.key} className="flex items-center gap-3 text-sm">
                   <kbd className="rounded border border-border bg-muted px-2 py-0.5 font-mono text-xs">
                     {item.key}
                   </kbd>
@@ -533,10 +535,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
               ))}
             </div>
             <p className="mt-4 text-xs text-muted-foreground">
-              입력 필드에 포커스가 없을 때만 동작합니다.
-              {(() => {
-                try { return localStorage.getItem("defaultActorName"); } catch { return ""; }
-              })() ? " 기본 닉네임이 설정되어 있으면 숫자키로 즉시 적용됩니다." : " 기본 닉네임을 설정하면 숫자키로 즉시 적용할 수 있습니다."}
+              입력 필드에 포커스가 없을 때만 동작합니다. 숫자키는 입력한 시청자 닉네임(비어 있으면 기본 닉네임)으로 즉시 적용됩니다.
             </p>
           </>
         )}

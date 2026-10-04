@@ -9,7 +9,7 @@ export const LONG_BACKOFF_MAX_MS = 5 * 60_000;
 export const SHORT_BACKOFF_MAX_MS = 60_000;
 
 /**
- * - not_found: 404. 타이머가 삭제됐거나 URL이 틀렸다
+ * - not_found: 404·410. 타이머가 삭제됐거나 URL이 틀렸다. 오버레이는 이때만 화면을 비운다(page.tsx)
  * - rate_limited: 429, 또는 200인데 JSON이 아닌 응답(판정은 page.tsx)
  * - server: 5xx와 그 밖의 실패 응답. 프록시·CDN의 HTML 502/503/504는 곧 회복되는 경우가 많아 본문 형식과 무관하게 여기로 둔다
  * - network: fetch 자체가 실패
@@ -21,7 +21,7 @@ export type PollOutcome = "ok" | "not_found" | "rate_limited" | "server" | "netw
  * 공개 엔드포인트라 401·403에 별도 분기를 두지 않고 server(60초 상한)로 다룬다
  */
 export function classifyFailedResponse(res: Pick<Response, "status">): Exclude<PollOutcome, "ok" | "network"> {
-  if (res.status === 404) return "not_found";
+  if (res.status === 404 || res.status === 410) return "not_found";
   if (res.status === 429) return "rate_limited";
   return "server";
 }

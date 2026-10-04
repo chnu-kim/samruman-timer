@@ -1,5 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { formatAxisSeconds, formatHoursFromSeconds, formatTimestampShort, formatHourShort, displayActorName } from "@/lib/utils";
+import {
+  buildTimeAxis,
+  durationAxisTicks,
+  formatDurationTick,
+  formatHoursFromSeconds,
+  formatTimeTicks,
+  formatTimestampShort,
+  formatHourShort,
+  displayActorName,
+  timeAxisTicks,
+} from "@/lib/utils";
 
 describe("formatHoursFromSeconds", () => {
   it("초를 시간 단위 문자열로 변환한다", () => {
@@ -31,26 +41,82 @@ describe("formatHourShort", () => {
   });
 });
 
-// UX-27: 정수 시간으로 반올림하면 '1h, 1h, 1h, 0h'처럼 눈금이 겹치고 5.5h가 '6h'로 나온다
-describe("formatAxisSeconds", () => {
-  it("최댓값이 2시간 이상이면 시간 단위로 소수 한 자리까지 쓴다", () => {
-    const max = 16.5 * 3600;
-    expect(formatAxisSeconds(5.5 * 3600, max)).toBe("5.5h");
-    expect(formatAxisSeconds(16.5 * 3600, max)).toBe("16.5h");
-    expect(formatAxisSeconds(2 * 3600, max)).toBe("2h");
-    expect(formatAxisSeconds(0, max)).toBe("0h");
+// C025·C092: 축 최댓값을 등분하면 '16.7h, 12.5h, 8.3h'처럼 소수 눈금이 나온다. 정수 시간·분 간격으로 고정한다
+describe("durationAxisTicks / formatDurationTick", () => {
+  const labels = (max: number) => {
+    const ticks = durationAxisTicks(max);
+    return ticks.map((t) => formatDurationTick(t, ticks));
+  };
+
+  it("16시간대 최댓값은 정수 시간 눈금이 되고 최댓값을 덮는다", () => {
+    const max = 16 * 3600 + 47 * 60;
+    const ticks = durationAxisTicks(max);
+    expect(ticks[ticks.length - 1]).toBeGreaterThanOrEqual(max);
+    expect(labels(max)).toEqual(["0", "5시간", "10시간", "15시간", "20시간"]);
   });
 
-  it("최댓값이 2시간 미만이면 분 단위를 써서 눈금 라벨이 겹치지 않는다", () => {
-    const max = 4000;
-    const labels = [0, 1000, 2000, 3000, 4000].map((v) => formatAxisSeconds(v, max));
-    expect(labels).toEqual(["0m", "16.7m", "33.3m", "50m", "66.7m"]);
-    expect(new Set(labels).size).toBe(labels.length);
+  it("99시간 방송은 25시간 간격", () => {
+    expect(labels(99 * 3600)).toEqual(["0", "25시간", "50시간", "75시간", "100시간"]);
   });
 
-  it("2시간 경계에서 단위를 바꾼다", () => {
-    expect(formatAxisSeconds(3600, 7199)).toBe("60m");
-    expect(formatAxisSeconds(3600, 7200)).toBe("1h");
+  it("1시간 미만 간격은 분 단위 한 가지로 쓴다(15·30분)", () => {
+    expect(labels(80 * 60)).toEqual(["0", "30분", "60분", "90분"]);
+    expect(labels(50 * 60)).toEqual(["0", "15분", "30분", "45분", "60분"]);
+  });
+
+  it("눈금은 최대 5개이고 라벨이 겹치지 않는다", () => {
+    for (const max of [0, 59, 3599, 3600, 7200, 4000, 12 * 3600, 36 * 3600, 400 * 3600, 900 * 3600]) {
+      const l = labels(max);
+      expect(l.length).toBeLessThanOrEqual(5);
+      expect(l.length).toBeGreaterThanOrEqual(2);
+      expect(new Set(l).size).toBe(l.length);
+    }
+  });
+});
+
+// C024: x축이 기록 순번이라 같은 분의 기록마다 '10. 04. 06:30'이 되풀이됐다. 실제 시각 눈금으로 바꾼다
+describe("timeAxisTicks / formatTimeTicks / buildTimeAxis", () => {
+  // 로컬 시각으로 만들어 실행 환경의 시간대와 무관하게 한다
+  const at = (d: number, h: number, m: number, s = 0) => new Date(2026, 9, d, h, m, s).getTime();
+
+  it("한 분에 몰린 기록 13건과 14분 뒤 기록 1건은 서로 다른 HH:mm 눈금이 된다(시드 데이터 모양)", () => {
+    const times = [...Array.from({ length: 13 }, (_, i) => at(4, 6, 30, 54) + i * 100), at(4, 6, 44, 10)];
+    const axis = buildTimeAxis(times);
+    const l = axis.ticks.map(axis.label);
+    expect(l.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(l).size).toBe(l.length);
+    for (const label of l) expect(label).toMatch(/^\d{2}:\d{2}$/);
+    expect(axis.domain).toEqual([Math.min(...times), Math.max(...times)]);
+  });
+
+  it("눈금은 로컬 시각의 깔끔한 경계에 놓인다", () => {
+    const ticks = timeAxisTicks(at(4, 6, 30, 54), at(4, 6, 44, 10));
+    expect(formatTimeTicks(ticks)).toEqual(["06:35", "06:40"]);
+    const day = timeAxisTicks(at(4, 6, 0), at(4, 18, 0));
+    expect(formatTimeTicks(day)).toEqual(["06:00", "09:00", "12:00", "15:00", "18:00"]);
+  });
+
+  it("날짜가 바뀌면 첫 눈금과 바뀌는 눈금에만 날짜를 붙인다", () => {
+    const ticks = timeAxisTicks(at(4, 18, 0), at(5, 6, 0));
+    expect(formatTimeTicks(ticks)).toEqual(["10. 04. 18:00", "21:00", "10. 05. 00:00", "03:00", "06:00"]);
+  });
+
+  it("1분이 안 되는 범위는 초까지 쓴다", () => {
+    const ticks = timeAxisTicks(at(4, 6, 30, 5), at(4, 6, 31, 0));
+    const l = formatTimeTicks(ticks);
+    expect(l).toEqual(["06:30:30", "06:31:00"]);
+  });
+
+  it("점이 하나면 앞뒤 5분을 범위로 둔다", () => {
+    const axis = buildTimeAxis([at(4, 6, 30)]);
+    expect(axis.domain).toEqual([at(4, 6, 25), at(4, 6, 35)]);
+    expect(axis.ticks.map(axis.label)).toEqual(["06:25", "06:30", "06:35"]);
+  });
+
+  it("며칠에 걸친 범위도 눈금이 5개를 넘지 않는다", () => {
+    const ticks = timeAxisTicks(at(1, 0, 0), at(20, 0, 0));
+    expect(ticks.length).toBeLessThanOrEqual(5);
+    expect(ticks.length).toBeGreaterThanOrEqual(2);
   });
 });
 

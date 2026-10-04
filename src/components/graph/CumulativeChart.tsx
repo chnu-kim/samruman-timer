@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -10,7 +11,15 @@ import {
   CartesianGrid,
   Legend,
 } from "recharts";
-import { cn, formatAxisSeconds, formatHoursFromSeconds, formatTimestampShort } from "@/lib/utils";
+import {
+  buildTimeAxis,
+  cn,
+  durationAxisTicks,
+  formatDuration,
+  formatDurationTick,
+  formatHoursFromSeconds,
+  formatTimestampShort,
+} from "@/lib/utils";
 import type { CumulativeGraphPoint } from "@/types";
 
 interface CumulativeChartProps {
@@ -18,8 +27,31 @@ interface CumulativeChartProps {
   className?: string;
 }
 
+/** 그래프 이름으로 읽힐 요약 */
+export function summarizeCumulative(points: CumulativeGraphPoint[]): string {
+  const last = points[points.length - 1];
+  return `누적 변경량 그래프, 누적 추가 ${formatDuration(last.totalAdded)}, 누적 차감 ${formatDuration(last.totalSubtracted)}`;
+}
+
 export function CumulativeChart({ points, className }: CumulativeChartProps) {
-  if (points.length === 0) {
+  // x축은 기록 순번이 아니라 실제 시각(ms)이다
+  const chart = useMemo(() => {
+    if (points.length === 0) return null;
+    const data = points.map((p) => ({
+      t: Date.parse(p.timestamp),
+      totalAdded: p.totalAdded,
+      totalSubtracted: p.totalSubtracted,
+    }));
+    const maxSeconds = Math.max(...data.map((p) => Math.max(p.totalAdded, p.totalSubtracted)));
+    return {
+      data,
+      xAxis: buildTimeAxis(data.map((p) => p.t)),
+      yTicks: durationAxisTicks(maxSeconds),
+      summary: summarizeCumulative(points),
+    };
+  }, [points]);
+
+  if (!chart) {
     return (
       <div className={cn("flex h-64 items-center justify-center text-muted-foreground", className)}>
         데이터가 없습니다
@@ -27,27 +59,34 @@ export function CumulativeChart({ points, className }: CumulativeChartProps) {
     );
   }
 
-  const maxSeconds = Math.max(...points.map((p) => Math.max(p.totalAdded, p.totalSubtracted)));
+  const { data, xAxis, yTicks, summary } = chart;
 
+  // 그래프 내부는 축 눈금만 읽히고 Tab 정지점이 생기므로 접근성 레이어를 끄고, 요약을 그림 이름으로 준다.
   return (
-    <div className={cn("h-64 w-full", className)} role="img" aria-label="누적 변경량 그래프">
+    <div className={cn("h-64 w-full", className)} role="img" aria-label={summary}>
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={points} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
+        <AreaChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 0 }} accessibilityLayer={false}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-foreground)" opacity={0.1} />
           <XAxis
-            dataKey="timestamp"
-            tickFormatter={formatTimestampShort}
+            dataKey="t"
+            type="number"
+            scale="time"
+            domain={xAxis.domain}
+            ticks={xAxis.ticks}
+            tickFormatter={xAxis.label}
             tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
             stroke="var(--color-border)"
           />
           <YAxis
-            tickFormatter={(v: number) => formatAxisSeconds(v, maxSeconds)}
+            domain={[0, yTicks[yTicks.length - 1]]}
+            ticks={yTicks}
+            tickFormatter={(v: number) => formatDurationTick(v, yTicks)}
             tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
             stroke="var(--color-border)"
-            width={44}
+            width={52}
           />
           <Tooltip
-            labelFormatter={(label) => formatTimestampShort(String(label))}
+            labelFormatter={(label) => formatTimestampShort(Number(label))}
             formatter={(value, name) => [
               formatHoursFromSeconds(Number(value)),
               name === "totalAdded" ? "누적 추가" : "누적 차감",
@@ -69,7 +108,7 @@ export function CumulativeChart({ points, className }: CumulativeChartProps) {
             labelStyle={{ color: "var(--color-foreground)" }}
           />
           <Area
-            type="monotone"
+            type="stepAfter"
             dataKey="totalAdded"
             stroke="#22c55e"
             fill="#22c55e"
@@ -77,7 +116,7 @@ export function CumulativeChart({ points, className }: CumulativeChartProps) {
             strokeWidth={2}
           />
           <Area
-            type="monotone"
+            type="stepAfter"
             dataKey="totalSubtracted"
             stroke="#ef4444"
             fill="#ef4444"

@@ -149,7 +149,29 @@ describe("DELETE /api/projects/[id]/goals/[goalId]", () => {
     expect(db.prepare).not.toHaveBeenCalled();
   });
 
-  it("200 목표 소프트 삭제 성공", async () => {
+  // C118: '삭제'가 취소와 같은 동작이던 것을 실제 행 삭제로 바꿨다. 실패·취소로 끝난 목표만 지운다
+  it.each(["CANCELLED", "FAILED"])("200 %s 목표는 행을 실제로 지운다", async (status) => {
+    db._stmt.first
+      .mockResolvedValueOnce(PROJECT_ROW)
+      .mockResolvedValueOnce({ id: "goal-1", status });
+    db._stmt.run.mockResolvedValueOnce({ meta: { changes: 1 } });
+
+    const req = createDeleteRequest(
+      "/api/projects/proj-1/goals/goal-1",
+      { "x-user-id": "user-1" },
+    );
+    const res = await DELETE(req as never, makeParams() as never);
+    const json = await parseJson(res);
+
+    expect(res.status).toBe(200);
+    expect(json.data.id).toBe("goal-1");
+    const sqls = db.prepare.mock.calls.map((c: unknown[]) => String(c[0]));
+    expect(sqls.some((q: string) => q.startsWith("DELETE FROM goals"))).toBe(true);
+    expect(sqls.some((q: string) => q.includes("UPDATE goals"))).toBe(false);
+    expect(db._stmt.bind).toHaveBeenLastCalledWith("goal-1", "proj-1");
+  });
+
+  it("409 진행 중인 목표는 지우지 않는다(먼저 취소)", async () => {
     db._stmt.first
       .mockResolvedValueOnce(PROJECT_ROW)
       .mockResolvedValueOnce({ id: "goal-1", status: "ACTIVE" });
@@ -161,12 +183,13 @@ describe("DELETE /api/projects/[id]/goals/[goalId]", () => {
     const res = await DELETE(req as never, makeParams() as never);
     const json = await parseJson(res);
 
-    expect(res.status).toBe(200);
-    expect(json.data.id).toBe("goal-1");
-    expect(db._stmt.run).toHaveBeenCalled();
+    expect(res.status).toBe(409);
+    expect(json.error.code).toBe("CONFLICT");
+    expect(db._stmt.run).not.toHaveBeenCalled();
   });
 
-  it("200 COMPLETED 목표도 삭제 가능", async () => {
+  // 예전에는 DELETE가 달성 목표를 CANCELLED로 덮어써 달성 기록이 사라졌다
+  it("409 달성한 목표는 지우지도 상태를 바꾸지도 않는다", async () => {
     db._stmt.first
       .mockResolvedValueOnce(PROJECT_ROW)
       .mockResolvedValueOnce({ id: "goal-1", status: "COMPLETED" });
@@ -177,13 +200,15 @@ describe("DELETE /api/projects/[id]/goals/[goalId]", () => {
     );
     const res = await DELETE(req as never, makeParams() as never);
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(409);
+    expect(db._stmt.run).not.toHaveBeenCalled();
   });
 
-  it("400 이미 CANCELLED인 목표 삭제 시도", async () => {
+  it("404 조회 뒤 다른 요청이 먼저 지웠으면 없는 목표로 답한다", async () => {
     db._stmt.first
       .mockResolvedValueOnce(PROJECT_ROW)
       .mockResolvedValueOnce({ id: "goal-1", status: "CANCELLED" });
+    db._stmt.run.mockResolvedValueOnce({ meta: { changes: 0 } });
 
     const req = createDeleteRequest(
       "/api/projects/proj-1/goals/goal-1",
@@ -191,7 +216,7 @@ describe("DELETE /api/projects/[id]/goals/[goalId]", () => {
     );
     const res = await DELETE(req as never, makeParams() as never);
 
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(404);
   });
 
   it("404 프로젝트 없으면 에러", async () => {

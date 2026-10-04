@@ -11,6 +11,10 @@ describe("classifyFailedResponse", () => {
     expect(classifyFailedResponse(res(429, "application/json"))).toBe("rate_limited");
   });
 
+  it("410(삭제됨)도 not_found", () => {
+    expect(classifyFailedResponse(res(410, "application/json"))).toBe("not_found");
+  });
+
   it("HTML 5xx(프록시·CDN 일시 장애)는 긴 백오프가 아니라 server", () => {
     expect(classifyFailedResponse(res(503, "text/html; charset=UTF-8"))).toBe("server");
     expect(classifyFailedResponse(res(502, "text/html"))).toBe("server");

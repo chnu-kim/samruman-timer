@@ -265,7 +265,7 @@
 - **근거**: [11-timer-running-owner--d-light.png](ux-review/11-timer-running-owner--d-light.png), [19-timer-stats--d-light.png](ux-review/19-timer-stats--d-light.png) · `src/components/graph/RemainingChart.tsx:35-48`, `CumulativeChart.tsx:40-46`, `FrequencyChart.tsx:40-46`, `src/components/stats/HourlyActivityChart.tsx:44-52, 69-73`, `DailyActivityChart.tsx:51-58`
 
 #### UX-27. 잔여·누적 그래프의 Y축 눈금이 정수 시간으로 반올림되어 중복되거나 틀린 라벨이 붙는다
-- **상태**: 해결 — Y축 눈금을 `formatAxisSeconds`로 바꿨다. 축 최댓값이 2시간 미만이면 분, 아니면 시간 단위이고 소수 한 자리까지 쓴다(5.5h, 16.7m). 라벨이 길어진 만큼 축 폭을 40→44px로 늘렸다.
+- **상태**: 해결 — Y축 눈금을 `formatAxisSeconds`로 바꿨다. 축 최댓값이 2시간 미만이면 분, 아니면 시간 단위이고 소수 한 자리까지 쓴다(5.5h, 16.7m). 라벨이 길어진 만큼 축 폭을 40→44px로 늘렸다. 이후 눈금 자체를 정수 시간·분 간격(`durationAxisTicks`)으로 바꾸고 라벨을 `4시간`·`30분`으로 고쳤다(축 폭 52px). 소수 눈금(16.7h)이 바로 읽히지 않았기 때문이다.
 - **심각도**: minor · **영역**: 타이머 상태 / 모바일
 - **관찰**: `${(v/3600).toFixed(0)}h` 때문에 15번 화면은 '3h, 3h, 2h, 1h, 0h', 16번은 '2h, 2h, 1h, 1h, 0h', 17번은 '1h, 1h, 1h, 0h, 0h'로 나온다. 11번의 '6h, 17h' 눈금은 실제로는 5.5h, 16.5h다.
 - **이유**: 잔여 시간이 짧은 만료 임박 타이머일수록 축이 의미를 잃는다.

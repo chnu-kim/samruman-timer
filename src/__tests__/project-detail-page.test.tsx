@@ -75,14 +75,14 @@ const goal = {
   status: "CANCELLED",
 };
 
-type FetchCall = { url: string; method: string };
+type FetchCall = { url: string; method: string; body?: string };
 
 function stubApi({ timers, goals, me = null }: { timers: unknown[]; goals: unknown[]; me?: unknown }) {
   const calls: FetchCall[] = [];
   global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? "GET";
-    calls.push({ url, method });
+    calls.push({ url, method, body: typeof init?.body === "string" ? init.body : undefined });
     if (url.startsWith("/api/auth/me")) return me ? jsonResponse(me) : new Response(null, { status: 401 });
     if (url === "/api/projects/p1/timers") return jsonResponse(timers);
     if (url === "/api/projects/p1/goals") return jsonResponse(goals);
@@ -216,11 +216,46 @@ describe("프로젝트 콘솔", () => {
       const calls = stubApi({ timers: [timer], goals: [], me: owner });
       render(<ProjectDetailPage />);
       await screen.findByRole("heading", { name: "시간 조작" });
+      // 기본 닉네임은 시간 조작 카드가 마운트 뒤 localStorage에서 읽어 입력란에 채운다
+      await waitFor(() => expect(screen.getByLabelText("시청자 닉네임")).toHaveValue("기본냥"));
 
       fireEvent.keyDown(window, { key: "1", code: "Digit1" });
-      await waitFor(() =>
-        expect(calls.some((c) => c.url === "/api/timers/t1/modify" && c.method === "POST")).toBe(true),
-      );
+      await waitFor(() => {
+        const modify = calls.find((c) => c.url === "/api/timers/t1/modify" && c.method === "POST");
+        expect(JSON.parse(modify!.body!)).toMatchObject({ actorName: "기본냥" });
+      });
+    });
+
+    // C014: 모바일 하단 바와 같은 규칙. 입력란에 적은 시청자 이름이 기본 닉네임보다 우선한다
+    it("입력한 시청자 닉네임이 있으면 '1'은 그 이름으로 기록한다", async () => {
+      const calls = stubApi({ timers: [timer], goals: [], me: owner });
+      render(<ProjectDetailPage />);
+      await screen.findByRole("heading", { name: "시간 조작" });
+
+      fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "벌칙룰렛" } });
+      fireEvent.keyDown(window, { key: "1", code: "Digit1" });
+      await waitFor(() => {
+        const modify = calls.find((c) => c.url === "/api/timers/t1/modify" && c.method === "POST");
+        expect(JSON.parse(modify!.body!)).toMatchObject({ actorName: "벌칙룰렛", deltaSeconds: 3600 });
+      });
+    });
+
+    it("기본 닉네임이 없어도 입력한 닉네임이 있으면 '1'로 바로 적용한다", async () => {
+      localStorage.removeItem("defaultActorName");
+      const calls = stubApi({ timers: [timer], goals: [], me: owner });
+      render(<ProjectDetailPage />);
+      await screen.findByRole("heading", { name: "시간 조작" });
+
+      fireEvent.keyDown(window, { key: "1", code: "Digit1" });
+      await new Promise((r) => setTimeout(r, 50));
+      expect(calls.some((c) => c.url === "/api/timers/t1/modify")).toBe(false);
+
+      fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "치즈냥" } });
+      fireEvent.keyDown(window, { key: "1", code: "Digit1" });
+      await waitFor(() => {
+        const modify = calls.find((c) => c.url === "/api/timers/t1/modify" && c.method === "POST");
+        expect(JSON.parse(modify!.body!)).toMatchObject({ actorName: "치즈냥" });
+      });
     });
 
     it("목표 폼이 열려 있으면 '1'이 뒤쪽 타이머를 바꾸지 않는다", async () => {

@@ -96,10 +96,16 @@ export default function TimerOverlayPage() {
       // 방송 화면에 오류 문구를 띄우면 시청자에게 그대로 보이므로 화면에는 아무것도 그리지 않고 콘솔에만 남긴다
       warnOnce(
         res.status,
-        res.status === 404
+        outcome === "not_found"
           ? `[오버레이] 타이머 ${timerId}를 찾을 수 없습니다. 삭제되었거나 URL이 잘못되었습니다.`
           : `[오버레이] 타이머를 불러오지 못했습니다 (HTTP ${res.status}).`,
       );
+      // 타이머가 사라졌으면(삭제) 마지막 시간을 계속 세면 거짓 시간이 방송에 나가므로 화면을 비운다.
+      // 5xx·네트워크 오류는 곧 회복될 수 있어 마지막 값을 유지한다
+      if (outcome === "not_found") {
+        prevTimerRef.current = null;
+        setTimer(null);
+      }
       return outcome;
     }
 

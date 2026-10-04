@@ -4,6 +4,7 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { ToastProvider } from "@/components/ui/Toast";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import { SessionExpiredHandler } from "@/components/providers/SessionExpiredHandler";
 import { ServiceWorkerRegister } from "@/components/providers/ServiceWorkerRegister";
 import { ServiceWorkerCleanup } from "@/components/providers/ServiceWorkerCleanup";
@@ -46,8 +47,6 @@ export const viewport: Viewport = {
   ],
 };
 
-const themeScript = `(function(){try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.add('light');}catch(e){}})();`;
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -56,7 +55,7 @@ export default function RootLayout({
   return (
     <html lang="ko" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body
         className={`${notoSansKR.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}
