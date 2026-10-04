@@ -100,6 +100,8 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess }: Cre
   const titleHintId = useId();
   const submitHintId = useId();
   const startModeLabelId = useId();
+  const timeFieldId = useId();
+  const timeInputId = (unit: "hours" | "minutes" | "seconds") => `${timeFieldId}-${unit}`;
   // 문자열로 들고 있어야 칸을 지웠을 때 '0'이 다시 채워지지 않는다(빈 칸은 placeholder '0')
   const [time, setTime] = useState<TimeFields>(EMPTY_TIME_FIELDS);
   const initialSeconds = timeFieldsToSeconds(time);
@@ -296,11 +298,11 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess }: Cre
             onChange={(e) => changeTime("hours", e.target.value)}
             className="w-full text-center"
             placeholder="0"
-            aria-label="시간"
+            id={timeInputId("hours")}
             // 제목은 프로젝트 이름으로 미리 채워지므로 모달을 열면 비어 있는 시간부터 입력한다
             data-autofocus
           />
-          <span className="text-sm text-muted-foreground">시</span>
+          <label htmlFor={timeInputId("hours")} className="text-sm text-muted-foreground">시</label>
           <Input
             type="number"
             inputMode="numeric"
@@ -309,9 +311,9 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess }: Cre
             onChange={(e) => changeTime("minutes", e.target.value)}
             className="w-full text-center"
             placeholder="0"
-            aria-label="분"
+            id={timeInputId("minutes")}
           />
-          <span className="text-sm text-muted-foreground">분</span>
+          <label htmlFor={timeInputId("minutes")} className="text-sm text-muted-foreground">분</label>
           <Input
             type="number"
             inputMode="numeric"
@@ -320,9 +322,9 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess }: Cre
             onChange={(e) => changeTime("seconds", e.target.value)}
             className="w-full text-center"
             placeholder="0"
-            aria-label="초"
+            id={timeInputId("seconds")}
           />
-          <span className="text-sm text-muted-foreground">초</span>
+          <label htmlFor={timeInputId("seconds")} className="text-sm text-muted-foreground">초</label>
         </div>
       </div>
 

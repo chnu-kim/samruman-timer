@@ -1,27 +1,15 @@
 import { extendTailwindMerge } from "tailwind-merge";
 import type { ActionType } from "@/types";
 
-// globals.css @theme의 커스텀 키를 등록한다. 등록하지 않으면 tailwind-merge가 rounded-card·shadow-card를
-// 모르는 클래스로 보고 rounded-xl과 겹쳐도 지우지 않거나, text-muted-foreground를 글자 크기(text-sm)와 같은 그룹으로 오인해 지운다.
-// @theme에 모서리·그림자·색을 더하면 여기에도 더한다(utils.test.ts가 보존 여부를 확인한다)
+// globals.css @theme의 모서리·그림자 키를 등록한다. 등록하지 않으면 tailwind-merge가 rounded-card·shadow-card를
+// 모르는 클래스로 보고 rounded-xl·shadow-md와 겹쳐도 지우지 않는다. 색 토큰(bg-accent, text-muted-foreground 등)은
+// 기본 규칙이 임의 이름을 색으로 읽어 따로 등록하지 않아도 글자 크기(text-sm)와 섞이지 않는다.
+// @theme에 모서리·그림자를 더하면 여기에도 더한다(utils.test.ts가 보존·병합 여부를 확인한다)
 const twMerge = extendTailwindMerge({
   extend: {
     theme: {
       radius: ["control", "card"],
       shadow: ["card", "card-hover", "dialog"],
-      color: [
-        "background",
-        "foreground",
-        "accent",
-        "accent-hover",
-        "accent-light",
-        "accent-foreground",
-        "muted",
-        "muted-foreground",
-        "border",
-        "border-input",
-        "ring",
-      ],
     },
   },
 });

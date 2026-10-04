@@ -9,8 +9,8 @@ describe("useDocumentTitle", () => {
   });
 
   it("title을 탭 제목으로 쓰고 언마운트하면 이전 제목으로 되돌린다", () => {
-    const { unmount } = renderHook(() => useDocumentTitle("방송 타이머 · 삼루먼타이머"));
-    expect(document.title).toBe("방송 타이머 · 삼루먼타이머");
+    const { unmount } = renderHook(() => useDocumentTitle("방송 타이머 | 삼루먼타이머"));
+    expect(document.title).toBe("방송 타이머 | 삼루먼타이머");
     unmount();
     expect(document.title).toBe("삼루먼타이머");
   });
@@ -24,10 +24,10 @@ describe("useDocumentTitle", () => {
     const { rerender, unmount } = renderHook(({ title }) => useDocumentTitle(title), {
       initialProps: { title: null as string | null },
     });
-    rerender({ title: "A · 삼루먼타이머" });
-    expect(document.title).toBe("A · 삼루먼타이머");
-    rerender({ title: "B · 삼루먼타이머" });
-    expect(document.title).toBe("B · 삼루먼타이머");
+    rerender({ title: "A | 삼루먼타이머" });
+    expect(document.title).toBe("A | 삼루먼타이머");
+    rerender({ title: "B | 삼루먼타이머" });
+    expect(document.title).toBe("B | 삼루먼타이머");
     unmount();
     expect(document.title).toBe("삼루먼타이머");
   });

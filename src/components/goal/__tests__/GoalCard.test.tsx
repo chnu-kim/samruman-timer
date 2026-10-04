@@ -41,6 +41,13 @@ function openMenu(title: string) {
 const ended = (status: GoalResponse["status"]): GoalResponse => ({ ...goal, status, completedAt: "2026-03-02T12:00:00Z" });
 
 describe("GoalCard", () => {
+  // C079: 목표가 여러 개여도 막대를 이름으로 구분하고, 값은 읽히는 단위로 알린다
+  it("진행 막대는 목표 이름과 경과/목표 시간으로 읽힌다", () => {
+    renderCard({ ...goal, title: "12시간 달성", targetSeconds: 43200, progress: { ...goal.progress, currentSeconds: 2460 } });
+    const bar = screen.getByRole("progressbar", { name: "12시간 달성 진행률" });
+    expect(bar).toHaveAttribute("aria-valuetext", "41분 / 12시간");
+  });
+
   // UX-40: '취소'와 '취소하기'가 나란히 있으면 물러서려다 되돌릴 수 없는 버튼을 누를 수 있다
   it("목표 취소 확인창의 물러서기 버튼은 '돌아가기'다", () => {
     renderCard(goal);

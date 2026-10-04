@@ -4,18 +4,10 @@ interface IconProps {
   className?: string;
 }
 
-// cn()은 단순 결합이라 클래스 충돌을 병합하지 않는다. 기본 크기(w-6 h-6)와 넘겨준 w-4가 함께 붙으면
-// CSS 순서상 w-6가 이기므로, className이 너비나 높이를 정하면 그 축의 기본값을 뺀다.
-// 'sm:w-5'처럼 반응형 변형만 있으면 기본값이 필요하므로 접두사 없는 클래스만 본다.
-const WIDTH_CLASS = /(^|\s)(w|size)-/;
-const HEIGHT_CLASS = /(^|\s)(h|size)-/;
-
+// 기본 크기(w-6 h-6)는 cn(tailwind-merge)이 넘겨준 w-4·size-4 같은 클래스에 알아서 내준다.
+// 'sm:w-5'처럼 반응형 변형만 있으면 기본값이 남아 그 변형이 없는 폭에서 쓰인다
 export function iconClass(className?: string): string {
-  return cn(
-    !(className && WIDTH_CLASS.test(className)) && "w-6",
-    !(className && HEIGHT_CLASS.test(className)) && "h-6",
-    className,
-  );
+  return cn("w-6 h-6", className);
 }
 
 export function TrashIcon({ className }: IconProps) {

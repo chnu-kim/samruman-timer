@@ -22,7 +22,8 @@ import { authFetch, isSessionExpired } from "@/lib/auth-fetch";
 import { fetchMe } from "@/lib/session-me";
 import { consumeNewTimerFlag } from "@/lib/project-flow";
 import { cn } from "@/lib/utils";
-import { useDocumentTitle, APP_TITLE } from "@/hooks/useDocumentTitle";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { pageTitle } from "@/lib/site";
 import type {
   ApiSuccessResponse,
   ProjectDetailResponse,
@@ -357,7 +358,8 @@ export default function ProjectDetailPage() {
     toast("프로젝트 설명이 수정되었습니다", "success");
   }
 
-  useDocumentTitle(project ? `${project.name} · ${APP_TITLE}` : null);
+  // 못 찾은 화면도 탭 제목이 이전 화면 것으로 남지 않게 바꾼다(서버 layout의 '프로젝트 상세'는 클라이언트 이동 때 다시 적용되지 않는다)
+  useDocumentTitle(project ? pageTitle(project.name) : notFound ? pageTitle("찾을 수 없음") : null);
 
   // 목록에서 프로젝트를 막 만들고 넘어왔으면 타이머 만들기 창을 바로 연다(만들기 두 단계를 한 흐름으로).
   // 소유자이고 타이머가 아직 없을 때만, 한 번만 연다. 조건을 판정할 수 있게 되면(프로젝트·타이머·로그인 확인 끝)

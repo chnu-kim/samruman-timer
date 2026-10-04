@@ -522,7 +522,6 @@ export function TimerConsole({ timerId, initialSnapshot, isOwner, aside, onTimeC
 
   // 예약 상태의 시간 카드는 안내와 버튼 하나뿐이라 제목을 숨긴다. 만료 상태는 재시작 안내와 입력 폼이 모두 보이므로 제목을 둔다
   const hideControlsHeading = timer.status === "SCHEDULED" && !expired;
-  const showControlsHeader = !hideControlsHeading || shortcutsEnabled;
   // 기록이 아직 하나도 없다: 타이머 전체에 0건이거나 생성(CREATE) 행뿐이다(logsBaseEmpty).
   // 타이머는 만들 때 CREATE 기록이 항상 생기므로 0건만 보면 이 분기에 닿지 못한다. 시간을 한 번도 바꾸지 않았으면 '없음'으로 본다.
   // 오류에는 해당하지 않고, 이미 펼친 뒤에는 숨기지 않는다(누른 '접기'가 사라지면 포커스를 잃고, 필터 결과 0건에도 칩이 있어야 풀 수 있다)
@@ -557,7 +556,7 @@ export function TimerConsole({ timerId, initialSnapshot, isOwner, aside, onTimeC
         }
       />
 
-      {/* 시간 + 곁 영역(목표). 아래 기록·그래프 행과 같은 3:2 트랙·gap-5라 열 경계가 위아래로 맞는다. 방송 중 가장 자주 쓰는 두 가지를 첫 화면에 나란히 둔다 */}
+      {/* 시간 + 곁 영역(목표). 아래 기록·그래프 행과 같은 3:2 트랙·열 간격(gap-x-5)이라 열 경계가 위아래로 맞는다. 방송 중 가장 자주 쓰는 두 가지를 첫 화면에 나란히 둔다 */}
       {(isOwner || aside) && (
         <div className={cn("grid gap-x-5 gap-y-8", isOwner && !!aside && "lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start")}>
           {isOwner && (
@@ -568,31 +567,21 @@ export function TimerConsole({ timerId, initialSnapshot, isOwner, aside, onTimeC
             >
               {/* 단축키가 있다는 사실을 '?'를 몰라도 알 수 있게, 도움말로 가는 진입점을 제목 줄에 하나만 둔다.
                   키보드가 있는 포인터 기기에서만 보인다(터치 기기에서는 단축키를 쓸 수 없다).
-                  예약·만료 상태의 내용은 안내와 버튼 하나뿐이라 제목은 숨긴다(상태는 배지·보조 문구가 알린다) */}
-              {showControlsHeader && (
-                <div
-                  className={cn(
-                    "items-center gap-3",
-                    // 터치 기기에서는 버튼만 있는 줄 전체를 접어 빈 줄 높이가 생기지 않게 한다
-                    hideControlsHeading ? "hidden justify-end pointer-fine:flex" : "flex justify-between",
-                  )}
-                >
-                  {!hideControlsHeading && (
-                    <h2 id="timer-controls-heading" className="text-base font-semibold text-foreground">시간</h2>
-                  )}
+                  예약 상태의 내용은 안내와 버튼 하나뿐이라(단축키도 꺼진다) 제목 줄 전체를 두지 않는다(상태는 배지·보조 문구가 알린다) */}
+              {!hideControlsHeading && (
+                <div className="flex items-center justify-between gap-3">
+                  <h2 id="timer-controls-heading" className="text-base font-semibold text-foreground">시간</h2>
                   {shortcutsEnabled && (
-                    // Button 기본 클래스에 inline-flex가 있어 같은 요소에 hidden을 두면 진다. 표시 여부는 래퍼가 정한다
-                    <span className="hidden pointer-fine:inline-flex">
-                      <Button
-                        type="button"
-                        variant="link"
-                        onClick={() => setShowHelp(true)}
-                        aria-haspopup="dialog"
-                        className="-mr-2"
-                      >
-                        단축키
-                      </Button>
-                    </span>
+                    <Button
+                      type="button"
+                      variant="link"
+                      onClick={() => setShowHelp(true)}
+                      aria-haspopup="dialog"
+                      // cn(tailwind-merge)이 Button 기본 inline-flex를 hidden으로 덮고, 키보드 있는 포인터에서만 다시 켠다
+                      className="-mr-2 hidden pointer-fine:inline-flex"
+                    >
+                      단축키
+                    </Button>
                   )}
                 </div>
               )}
@@ -608,7 +597,7 @@ export function TimerConsole({ timerId, initialSnapshot, isOwner, aside, onTimeC
                 nicknamePromptRef={nicknamePromptRef}
                 expired={expired}
                 disconnected={connection.disconnected}
-                className={showControlsHeader ? "mt-3" : undefined}
+                className={hideControlsHeading ? undefined : "mt-3"}
               />
             </section>
           )}

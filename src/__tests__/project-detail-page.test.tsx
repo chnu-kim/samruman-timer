@@ -12,6 +12,7 @@ vi.mock("next/navigation", () => ({
 const { mockToast } = vi.hoisted(() => ({ mockToast: vi.fn() }));
 vi.mock("@/components/ui/Toast", () => ({
   useToast: () => ({ toast: mockToast }),
+  useAnnounce: () => () => {},
 }));
 
 // jsdom에는 native <dialog>의 showModal/close가 없다
@@ -307,6 +308,13 @@ describe("프로젝트 콘솔", () => {
     expect(time.getAttribute("title")).toMatch(/\d{2}:\d{2}:\d{2}/);
   });
 
+  // R31: 탭 제목은 서버 제목 템플릿과 같은 '이름 | 삼루먼타이머'다
+  it("탭 제목은 '프로젝트 이름 | 삼루먼타이머'다", async () => {
+    stubApi({ timers: [timer], goals: [] });
+    render(<ProjectDetailPage />);
+    await waitFor(() => expect(document.title).toBe("테스트 프로젝트 | 삼루먼타이머"));
+  });
+
   // UX-64: 단축키 도움말은 닫기 버튼이 있는 공용 FormDialog다
   it("'?'로 연 단축키 도움말을 닫기 버튼으로 닫을 수 있다", async () => {
     stubApi({ timers: [timer], goals: [], me: owner });
@@ -333,9 +341,9 @@ describe("프로젝트 콘솔", () => {
 
       const entry = screen.getByRole("button", { name: "단축키" });
       // 터치 기기(pointer: coarse)에서는 숨긴다. 숫자키·X를 누를 키보드가 없기 때문이다
-      // 표시 여부는 래퍼가 정한다. Button 자체의 inline-flex가 hidden을 이기므로 버튼에는 두지 않는다
-      expect(entry).not.toHaveClass("hidden");
-      expect(entry.parentElement).toHaveClass("hidden", "pointer-fine:inline-flex");
+      // cn(tailwind-merge)이 Button 기본 inline-flex를 hidden으로 덮으므로 버튼 자체가 표시 여부를 정한다
+      expect(entry).toHaveClass("hidden", "pointer-fine:inline-flex");
+      expect(entry).not.toHaveClass("inline-flex");
       expect(entry).toHaveAttribute("aria-haspopup", "dialog");
 
       fireEvent.click(entry);
@@ -754,7 +762,7 @@ describe("프로젝트 상세 키보드 포커스", () => {
     render(<ProjectDetailPage />);
     fireEvent.click(await screen.findByRole("button", { name: "타이머 만들기" }));
     await screen.findByRole("heading", { name: "새 타이머 만들기" });
-    expect(screen.getByRole("spinbutton", { name: "시간" })).toHaveFocus();
+    expect(screen.getByRole("spinbutton", { name: "시" })).toHaveFocus();
   });
 
   it("더보기 메뉴는 파괴적 항목 앞에 구분선을 하나 두고, Tab으로 메뉴 밖에 포커스가 가면 닫힌다", async () => {

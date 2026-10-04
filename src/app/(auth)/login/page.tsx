@@ -42,7 +42,7 @@ function LoginContent() {
       </div>
 
       {expired && (
-        <p className="text-center text-sm text-muted-foreground">세션이 만료되어 다시 로그인합니다.</p>
+        <p role="status" className="text-center text-sm text-muted-foreground">세션이 만료되어 다시 로그인합니다.</p>
       )}
 
       {error && (

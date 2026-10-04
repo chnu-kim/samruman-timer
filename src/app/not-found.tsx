@@ -12,6 +12,7 @@ export default function NotFound() {
     <ErrorState
       tone="neutral"
       title="페이지를 찾을 수 없습니다"
+      message="삭제되었거나 주소가 잘못되었습니다."
       action={{ href: "/projects", label: "프로젝트 목록으로" }}
     />
   );

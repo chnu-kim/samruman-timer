@@ -7,7 +7,13 @@ export const SITE_NAME = "삼루먼타이머";
 
 // 중간 layout이 title을 문자열로 두면 그 아래 세그먼트에는 템플릿이 전해지지 않으므로
 // 하위 페이지가 있는 layout은 이 템플릿을 다시 선언한다
-export const TITLE_TEMPLATE = `%s | ${SITE_NAME}`;
+export const TITLE_SEPARATOR = "|";
+export const TITLE_TEMPLATE = `%s ${TITLE_SEPARATOR} ${SITE_NAME}`;
+
+// 클라이언트가 탭 제목을 직접 바꿀 때(useDocumentTitle) 서버 템플릿과 같은 모양을 쓴다
+export function pageTitle(name: string): string {
+  return TITLE_TEMPLATE.replace("%s", name);
+}
 
 // 공개 소개 문구라 플랫폼 이름(CHZZK)을 넣지 않는다. 로그인 버튼 라벨만 예외다.
 // 로그인 화면은 앞 문장을 제목으로, 뒷 문장을 부제로 나눠 쓴다

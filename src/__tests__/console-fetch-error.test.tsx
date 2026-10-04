@@ -12,6 +12,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/components/ui/Toast", () => ({
   useToast: () => ({ toast: vi.fn() }),
+  useAnnounce: () => () => {},
 }));
 
 beforeAll(() => {

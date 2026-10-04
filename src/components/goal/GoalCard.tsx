@@ -206,7 +206,16 @@ export function GoalCard({ goal, projectId, isOwner, onUpdate, compact = false }
       </div>
 
       <div className="mt-2">
-        <GoalProgressBar percentage={goal.progress.percentage} status={goal.status} />
+        <GoalProgressBar
+          percentage={goal.progress.percentage}
+          status={goal.status}
+          title={goal.title}
+          valueText={
+            !isDeadline && goal.progress.currentSeconds != null
+              ? `${formatDuration(goal.progress.currentSeconds)} / ${formatDuration(goal.targetSeconds ?? 0)}`
+              : undefined
+          }
+        />
       </div>
 
       <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">

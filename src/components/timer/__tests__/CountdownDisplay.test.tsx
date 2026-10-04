@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen, act } from "@testing-library/react";
 import { CountdownDisplay, formatTime } from "../CountdownDisplay";
+import { ToastProvider } from "@/components/ui/Toast";
 
 describe("formatTime", () => {
   it("formats zero seconds", () => {
@@ -120,7 +121,7 @@ describe("CountdownDisplay", () => {
       <CountdownDisplay remainingSeconds={45} status="RUNNING" />,
     );
     const timer = screen.getByRole("timer");
-    expect(timer.className).toContain("text-red-600");
+    expect(timer.className).toContain("text-red-800");
     expect(timer.className).toContain("dark:text-red-400");
     expect(timer.className).toContain("animate-pulse-urgent-fast");
     expect(timer.className).not.toContain("animate-pulse-urgent-slow");
@@ -149,7 +150,9 @@ describe("CountdownDisplay", () => {
       <CountdownDisplay remainingSeconds={60} status="RUNNING" size="large" />,
     );
     const timer = screen.getByRole("timer");
-    expect(timer.className).toContain("text-5xl");
+    // C140: 모바일은 clamp()로 폭에 비례(353px부터 상한 60px), sm부터 60px
+    expect(timer.className).toContain("text-[length:clamp(3rem,17vw,3.75rem)]");
+    expect(timer.className).toContain("sm:text-6xl");
   });
 
   it("shows scheduled start time in compact mode", () => {
@@ -244,5 +247,41 @@ describe("CountdownDisplay 서브텍스트", () => {
   it("compact 만료 상태에서는 '만료됨'을 넣지 않는다", () => {
     render(<CountdownDisplay remainingSeconds={0} status="EXPIRED" />);
     expect(screen.queryByText("만료됨")).not.toBeInTheDocument();
+  });
+
+  // C072: 색·깜박임은 보이지 않는 사용자에게 전해지지 않으므로 단계가 올라갈 때 한 번만 polite로 알린다
+  describe("임박 알림", () => {
+    function renderLarge(remainingSeconds: number) {
+      const ui = (seconds: number) => (
+        <ToastProvider>
+          <CountdownDisplay remainingSeconds={seconds} status="RUNNING" size="large" />
+        </ToastProvider>
+      );
+      const view = render(ui(remainingSeconds));
+      return { ...view, update: (seconds: number) => view.rerender(ui(seconds)) };
+    }
+    const live = () => screen.getByRole("status");
+
+    it("5분 미만·1분 미만으로 넘어갈 때 각각 한 번 알린다", () => {
+      renderLarge(400);
+      expect(live()).toHaveTextContent("");
+      act(() => { vi.advanceTimersByTime(101_000); }); // 400 → 299
+      expect(live()).toHaveTextContent("남은 시간이 5분 미만입니다");
+      act(() => { vi.advanceTimersByTime(240_000); }); // 299 → 59
+      expect(live()).toHaveTextContent("남은 시간이 1분 미만입니다");
+    });
+
+    it("처음부터 임박 상태이거나 단계가 내려가면 알리지 않는다", () => {
+      const { update } = renderLarge(45);
+      expect(live()).toHaveTextContent("");
+      update(200);
+      expect(live()).toHaveTextContent("");
+    });
+
+    it("제공자 밖에서도 오류 없이 그린다", () => {
+      render(<CountdownDisplay remainingSeconds={70} status="RUNNING" size="large" />);
+      act(() => { vi.advanceTimersByTime(15_000); });
+      expect(screen.getByRole("timer")).toHaveTextContent("00:00:55");
+    });
   });
 });

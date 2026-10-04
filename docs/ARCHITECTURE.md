@@ -130,7 +130,7 @@ src/
     logger.ts                           — 운영 로그(JSON 한 줄, event 키, 배포 버전 자동 부착)와 errorFields
     safe-redirect.ts                    — 로그인 후 next 경로 검증 (서버·클라이언트 공용)
     overlay-style.ts                    — 오버레이 색상·배경 값 검증 (서버·클라이언트 공용)
-    site.ts                             — 사이트 절대 주소·이름·설명·title 템플릿 (metadata·robots·sitemap 공용)
+    site.ts                             — 사이트 절대 주소·이름·설명·title 템플릿·구분자('|')와 `pageTitle()` (metadata·robots·sitemap 공용)
     auth-fetch.ts                       — (클라이언트) 401이면 세션 만료 이벤트를 보내는 fetch 래퍼
     session-expired.ts                  — (클라이언트) 세션 만료 이벤트
     timer-sync.ts                       — (클라이언트) 폴링 값과 로컬 카운트다운 동기화
@@ -301,7 +301,7 @@ npx opennextjs-cloudflare build && npx opennextjs-cloudflare deploy --tag=<git s
 
 - 절대 주소는 `src/lib/site.ts`의 `SITE_URL` 상수로 둔다. `BASE_URL`은 프로덕션에서 런타임 시크릿이라, 빌드 때 프리렌더되는 metadata·`robots.txt`·`sitemap.xml`에서 읽으면 `.env`의 localhost가 박힌다. 도메인을 바꾸면 이 상수도 고친다.
 - 루트 `layout.tsx`가 `metadataBase`·title 템플릿(`%s | 삼루먼타이머`)·OpenGraph·Twitter 카드를 정한다. OG 이미지는 정적 `src/app/opengraph-image.png`다(한글 폰트·Workers 번들 문제로 `ImageResponse`를 쓰지 않는다).
-- 페이지가 모두 클라이언트 컴포넌트라 페이지별 title은 각 라우트의 서버 `layout.tsx`에 둔다. 하위 페이지가 있는 layout(`projects`, `timers/[id]`)은 title을 문자열로 두면 그 아래에서 템플릿이 끊기므로 `{ default, template }`으로 다시 선언한다.
+- `timers/[id]/page.tsx`만 서버 컴포넌트다(D1 조회 뒤 `redirect()`로 프로젝트 화면으로 보낸다). 나머지 페이지는 클라이언트 컴포넌트라 페이지별 title은 각 라우트의 서버 `layout.tsx`에 둔다. 하위 페이지가 있는 layout(`projects`, `timers/[id]`)은 title을 문자열로 두면 그 아래에서 템플릿이 끊기므로 `{ default, template }`으로 다시 선언한다.
 - 색인 제외: 오버레이·OAuth 콜백·통계(소유자 전용)는 layout의 `robots: noindex`로 막는다. `robots.txt`는 `/api/`만 Disallow한다(Disallow하면 크롤러가 noindex 메타를 읽지 못한다).
 - canonical: `/projects`(검색·정렬 쿼리 통합), `/login`(`?next=`·`?error=` 통합), `/projects/<id>`(상위 canonical을 물려받지 않게 자기 주소).
 - sitemap에는 로그인 없이 보이는 `/projects`, `/login`만 둔다.
