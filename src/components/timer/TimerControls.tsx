@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useId } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { SegmentedControl, type SegmentedOption } from "@/components/ui/SegmentedControl";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
 import { authFetch } from "@/lib/auth-fetch";
@@ -15,7 +15,7 @@ import type { ApiSuccessResponse, ApiErrorResponse, TimerModifyResponse, TimerLo
 const ACTION_OPTIONS = [
   { value: "ADD", label: "추가" },
   { value: "SUBTRACT", label: "차감" },
-] as const satisfies readonly { value: ModifyAction; label: string }[];
+] as const satisfies readonly SegmentedOption<ModifyAction>[];
 
 interface TimerControlsProps {
   timerId: string;
