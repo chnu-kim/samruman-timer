@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { CreateTimerForm } from "@/components/timer/CreateTimerForm";
-import { TimerConsole } from "@/components/timer/TimerConsole";
+import { TimerConsole, loadConsoleSnapshot, type ConsoleSnapshot } from "@/components/timer/TimerConsole";
 import { OverlaySettings } from "@/components/timer/OverlaySettings";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -14,6 +14,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { MoreMenu } from "@/components/ui/MoreMenu";
 import { PlusIcon, TimerIcon, LinkIcon, ChartBarIcon, SettingsIcon } from "@/components/ui/Icons";
 import { ProjectDetailSkeleton } from "@/components/ui/Skeleton";
+import { FILL_FIRST_SCREEN } from "@/components/layout/page-height";
 import { useToast } from "@/components/ui/Toast";
 import { GoalCard } from "@/components/goal/GoalCard";
 import { GoalForm } from "@/components/goal/GoalForm";
@@ -219,6 +220,8 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<ProjectDetailResponse | null>(null);
   const [timers, setTimers] = useState<TimerListItem[]>([]);
   const [timersLoaded, setTimersLoaded] = useState(false);
+  // 콘솔의 첫 화면을 골격 다음 한 번에 그리려고 타이머 상세·최근 기록·그래프의 첫 조회도 목록과 이어서 여기서 한다(이후 폴링·갱신은 TimerConsole)
+  const [consoleSnapshot, setConsoleSnapshot] = useState<ConsoleSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   // 404는 다시 시도해도 같으므로 일시적 오류와 구분한다
@@ -233,6 +236,8 @@ export default function ProjectDetailPage() {
   const [showOverlaySettings, setShowOverlaySettings] = useState(false);
   const [goals, setGoals] = useState<GoalResponse[] | null>(null);
   const [goalsError, setGoalsError] = useState(false);
+  // 목표가 많이 늦으면(타이머 쪽을 다 받고도 0.5초) 기다리지 않는다. 방송 중 시간 조작을 부가 정보 때문에 막지 않기 위해서다
+  const [goalsWaitOver, setGoalsWaitOver] = useState(false);
   const [showGoalForm, setShowGoalForm] = useState(false);
 
   const fetchProject = useCallback(async () => {
@@ -270,13 +275,22 @@ export default function ProjectDetailPage() {
   }, [projectId]);
   const refreshGoalsSilently = useCallback(() => fetchGoals({ silent: true }), [fetchGoals]);
 
-  // 타이머가 있는지와 그 ID만 쓴다. 남은 시간과 상태의 폴링은 TimerConsole이 한 곳에서 한다
+  // 타이머가 있는지와 그 ID, 그리고 콘솔이 처음 그릴 데이터 한 번. 남은 시간과 상태의 폴링은 TimerConsole이 한 곳에서 한다
   const fetchTimers = useCallback(async () => {
     try {
       const res = await fetch(`/api/projects/${projectId}/timers`);
       if (res.ok) {
         const json = (await res.json()) as ApiSuccessResponse<TimerListItem[]>;
-        setTimers(json.data);
+        let list = json.data;
+        let snapshot: ConsoleSnapshot | null = null;
+        if (list[0]) {
+          const loaded = await loadConsoleSnapshot(list[0].id);
+          // 목록을 받은 직후 다른 곳에서 삭제됐다. 보지도 못한 타이머라 알림 없이 '타이머 없음'으로 그린다
+          if (loaded === "removed") list = [];
+          else snapshot = loaded;
+        }
+        setConsoleSnapshot(snapshot);
+        setTimers(list);
       }
     } catch {
       // ignore
@@ -361,7 +375,15 @@ export default function ProjectDetailPage() {
     }
   }, [flowReady, ownsProject, hasTimer]);
 
-  if (loading) {
+  useEffect(() => {
+    if (!timersLoaded) return;
+    const id = setTimeout(() => setGoalsWaitOver(true), 500);
+    return () => clearTimeout(id);
+  }, [timersLoaded]);
+
+  // 화면 모양을 정하는 것(프로젝트, 소유자인지, 타이머와 콘솔 첫 데이터, 목표가 있는지)을 모두 받은 뒤 한 번에 그린다.
+  // 요청은 함께 떠나므로 기다림은 가장 늦은 하나만큼이고, 골격 → 본문 사이에 헤더 버튼·목표 영역이 뒤늦게 끼어들어 아래를 밀지 않는다
+  if (loading || !timersLoaded || !authChecked || (goals === null && !goalsError && !goalsWaitOver)) {
     return <ProjectDetailSkeleton />;
   }
 
@@ -460,7 +482,7 @@ export default function ProjectDetailPage() {
   );
 
   return (
-    <section>
+    <section className={FILL_FIRST_SCREEN}>
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
         <div className="min-w-0 flex-1 basis-64">
           <EditableText
@@ -522,12 +544,11 @@ export default function ProjectDetailPage() {
       </div>
 
       <div className="mt-6">
-        {!timersLoaded ? (
-          <div className="h-40" aria-busy="true" />
-        ) : timer ? (
+        {timer ? (
           <TimerConsole
             key={timer.id}
             timerId={timer.id}
+            initialSnapshot={consoleSnapshot?.timer.id === timer.id ? consoleSnapshot : null}
             isOwner={isOwner}
             onTimeChanged={refreshGoalsSilently}
             onTimerRemoved={handleTimerRemoved}

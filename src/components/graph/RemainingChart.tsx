@@ -62,9 +62,11 @@ export function RemainingChart({ points, className }: RemainingChartProps) {
   const { data, xAxis, yTicks, summary } = chart;
 
   // 그래프 내부는 축 눈금만 읽히고 Tab 정지점이 생기므로 접근성 레이어를 끄고, 요약을 그림 이름으로 준다.
+  // ResponsiveContainer는 크기를 재기 전 첫 렌더를 -1×-1로 시작해 'width(-1) and height(-1)' 경고를 남긴다.
+  // 높이는 상자(h-64)로 정해져 있으므로 처음 값으로 준다. 폭은 0이라 잴 때까지 아무것도 그리지 않는다
   return (
     <div className={cn("h-64 w-full", className)} role="img" aria-label={summary}>
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 0, height: 256 }}>
         <LineChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 0 }} accessibilityLayer={false}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-foreground)" opacity={0.1} />
           <XAxis

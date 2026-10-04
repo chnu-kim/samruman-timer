@@ -6,7 +6,6 @@ import { TimerControls, MODIFY_FAILED_QUICK_MESSAGE } from "@/components/timer/T
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Pagination } from "@/components/ui/Pagination";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { FormDialog } from "@/components/ui/FormDialog";
@@ -87,8 +86,56 @@ const ERROR_RETRY_INTERVAL_MS = 30_000;
 /** 폴링 한 번의 응답 대기 한도. 넘으면 실패 1회로 센다 */
 const POLL_TIMEOUT_MS = 10_000;
 
+/** 첫 화면에서 기록·그래프를 타이머 상세 뒤로 더 기다리는 한도. 넘으면 시간 카드를 먼저 그리고 콘솔이 다시 부른다 */
+const SNAPSHOT_EXTRA_WAIT_MS = 500;
+
+/** 콘솔이 첫 화면에 그리는 데이터. 상위 화면이 미리 받아 넘기면 골격 다음 한 번에 그린다(기록·그래프가 뒤늦게 채워지지 않게) */
+export interface ConsoleSnapshot {
+  timer: TimerDetailResponse;
+  /** 접힌 '최근 기록'의 첫 페이지. 받지 못했으면 null이고 콘솔이 다시 부른다 */
+  logs: TimerLogsResponse | null;
+  /** 잔여 시간 추이. 받지 못했으면 null이고 콘솔이 다시 부른다 */
+  graph: GraphResponse | null;
+}
+
+function recentLogsQuery() {
+  return new URLSearchParams({ page: "1", limit: String(RECENT_LOG_LIMIT) });
+}
+
+/**
+ * 콘솔 첫 화면 데이터를 함께 받는다. 세 요청은 함께 떠나 보통 같이 도착한다.
+ * 타이머가 없으면(404) "removed", 상세를 받지 못하면 null(콘솔이 직접 다시 부르고 실패하면 오류를 보인다).
+ * 기록·그래프가 상세보다 많이 늦으면 기다리지 않는다. 방송 중 주 조작(시간 카드)을 부가 정보 때문에 늦추지 않기 위해서다
+ */
+export async function loadConsoleSnapshot(timerId: string): Promise<ConsoleSnapshot | "removed" | null> {
+  const data = async <T,>(request: Promise<Response>): Promise<T | null> => {
+    try {
+      const res = await request;
+      return res.ok ? ((await res.json()) as ApiSuccessResponse<T>).data : null;
+    } catch {
+      return null;
+    }
+  };
+  const logs = data<TimerLogsResponse>(authFetch(`/api/timers/${timerId}/logs?${recentLogsQuery()}`));
+  const graph = data<GraphResponse>(authFetch(`/api/timers/${timerId}/graph?mode=remaining`));
+  let res: Response;
+  try {
+    res = await fetch(`/api/timers/${timerId}`);
+  } catch {
+    return null;
+  }
+  if (res.status === 404) return "removed";
+  if (!res.ok) return null;
+  const timer = ((await res.json()) as ApiSuccessResponse<TimerDetailResponse>).data;
+  const late = new Promise<null>((resolve) => setTimeout(() => resolve(null), SNAPSHOT_EXTRA_WAIT_MS));
+  const [firstLogs, firstGraph] = await Promise.all([Promise.race([logs, late]), Promise.race([graph, late])]);
+  return { timer, logs: firstLogs, graph: firstGraph };
+}
+
 interface TimerConsoleProps {
   timerId: string;
+  /** 상위 화면이 `loadConsoleSnapshot`으로 미리 받은 첫 화면 데이터. 있으면 그 부분은 다시 부르지 않고 바로 그린다. 없으면 직접 불러온다 */
+  initialSnapshot?: ConsoleSnapshot | null;
   isOwner: boolean;
   /** 시간 카드 옆(소유자가 아니면 카운트다운 아래)에 둘 영역. 프로젝트 화면은 목표를 넣는다 */
   aside?: ReactNode;
@@ -98,31 +145,36 @@ interface TimerConsoleProps {
   onTimerRemoved?: () => void;
 }
 
-export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRemoved }: TimerConsoleProps) {
+export function TimerConsole({ timerId, initialSnapshot, isOwner, aside, onTimeChanged, onTimerRemoved }: TimerConsoleProps) {
   const { toast } = useToast();
+  // 마운트 때의 값만 쓴다(상위가 나중에 넘기는 값으로 상태를 덮거나 다시 부르지 않는다)
+  const [snapshot] = useState(initialSnapshot ?? null);
 
-  const [timer, setTimer] = useState<TimerDetailResponse | null>(null);
+  const [timer, setTimer] = useState<TimerDetailResponse | null>(snapshot?.timer ?? null);
   // 시간 추가·차감(낙관적 반영 포함)·되돌리기로 스냅샷이 바뀐 횟수. 응답에 updatedAt이 없어 종료 예정 시각을 다시 잡는 신호로 쓴다
   const [modifySeq, setModifySeq] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!snapshot);
   const [error, setError] = useState(false);
 
   // 기록
   const [logsExpanded, setLogsExpanded] = useState(false);
   // null은 아직 받지 못한 상태다. 빈 배열(받았는데 0건)과 구분해 실패를 '기록이 없습니다'로 가리지 않는다
-  const [logs, setLogs] = useState<TimerLogResponse[] | null>(null);
+  const [logs, setLogs] = useState<TimerLogResponse[] | null>(snapshot?.logs?.logs ?? null);
   const [logsError, setLogsError] = useState(false);
   const [logPage, setLogPage] = useState(1);
-  const [logTotalPages, setLogTotalPages] = useState(1);
+  const [logTotalPages, setLogTotalPages] = useState(snapshot?.logs?.pagination.totalPages ?? 1);
   const [activeFilters, setActiveFilters] = useState<Set<ActionType>>(new Set());
   const [logsLoading, setLogsLoading] = useState(false);
   // 타이머 전체에 CREATE 외 기록이 없는지. 필터 없는 첫 페이지(최신순이라 CREATE뿐이면 그게 전부다)를 받을 때만 갱신해,
   // 펼친 기록의 페이지 이동·필터 결과에 따라 바뀌지 않게 한다. null은 아직 모른다
-  const [logsBaseEmpty, setLogsBaseEmpty] = useState<boolean | null>(null);
+  const [logsBaseEmpty, setLogsBaseEmpty] = useState<boolean | null>(
+    snapshot?.logs ? snapshot.logs.logs.every((log) => log.actionType === "CREATE") : null,
+  );
 
-  // 그래프(잔여 시간 추이. 누적 변경량은 통계 페이지에 있다)
-  const [graphData, setGraphData] = useState<GraphResponse | null>(null);
-  const [graphLoading, setGraphLoading] = useState(false);
+  // 그래프(잔여 시간 추이. 누적 변경량은 통계 페이지에 있다). 받은 것이 없으면 마운트하자마자 불러오므로 로딩으로 시작해
+  // 첫 화면부터 그래프 상자가 제 높이(h-64)를 갖는다(빈 상자 → 스피너로 커지며 아래를 밀지 않게)
+  const [graphData, setGraphData] = useState<GraphResponse | null>(snapshot?.graph ?? null);
+  const [graphLoading, setGraphLoading] = useState(!snapshot?.graph);
   const [graphError, setGraphError] = useState(false);
 
   // 추가/차감 방향. 세그먼트, 프리셋 라벨, 단축키가 이 상태 하나를 공유한다
@@ -174,10 +226,9 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
       setLogsError(true);
     };
     try {
-      const params = new URLSearchParams({
-        page: expanded ? String(page) : "1",
-        limit: String(expanded ? FULL_LOG_LIMIT : RECENT_LOG_LIMIT),
-      });
+      const params = expanded
+        ? new URLSearchParams({ page: String(page), limit: String(FULL_LOG_LIMIT) })
+        : recentLogsQuery();
       if (expanded && filters.size > 0) {
         params.set("actionType", Array.from(filters).join(","));
       }
@@ -226,21 +277,30 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
     }
   }, [timerId]);
 
+  // 상위가 넘긴 데이터가 있으면 그 부분의 첫 조회를 건너뛴다
   useEffect(() => {
+    if (snapshot) return;
     async function load() {
       await fetchTimer();
       setLoading(false);
     }
     load();
-  }, [fetchTimer]);
+  }, [snapshot, fetchTimer]);
 
+  // 조건(페이지·필터·펼침)이 바뀔 때 부른다. 마지막으로 부른 조건과 같으면 다시 부르지 않는다
+  // (넘겨받은 첫 기록과 같은 조건의 첫 실행, 개발 모드에서 effect가 두 번 도는 경우)
+  const logsQueryKeyRef = useRef<string | null>(snapshot?.logs ? "1||false" : null);
   useEffect(() => {
+    const key = `${logPage}|${Array.from(activeFilters).sort().join(",")}|${logsExpanded}`;
+    if (logsQueryKeyRef.current === key) return;
+    logsQueryKeyRef.current = key;
     fetchLogs(logPage, activeFilters, logsExpanded);
   }, [logPage, activeFilters, logsExpanded, fetchLogs]);
 
   useEffect(() => {
+    if (snapshot?.graph) return;
     fetchGraph();
-  }, [fetchGraph]);
+  }, [snapshot, fetchGraph]);
 
   // 폴링: 서버 동기화
   const pollInterval = timer?.status === "RUNNING" ? 5000 : 15000;
@@ -445,13 +505,10 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
     setActiveFilters(new Set());
   }
 
+  // 보통은 상위 화면이 상세를 넘겨 이 단계가 없다(골격은 상위의 ProjectDetailSkeleton 하나).
+  // 상위가 받지 못했을 때만 여기서 불러오며, 그동안 두 번째 골격을 그리지 않고 자리만 둔다
   if (loading) {
-    return (
-      <div className="space-y-6" aria-busy="true">
-        <Skeleton className="h-16 w-72" />
-        <Skeleton className="h-64 w-full rounded-xl" />
-      </div>
-    );
+    return <div aria-busy="true" />;
   }
 
   if (error || !timer) {
@@ -468,8 +525,11 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
   const showControlsHeader = !hideControlsHeading || shortcutsEnabled;
   // 기록이 아직 하나도 없다: 타이머 전체에 0건이거나 생성(CREATE) 행뿐이다(logsBaseEmpty).
   // 타이머는 만들 때 CREATE 기록이 항상 생기므로 0건만 보면 이 분기에 닿지 못한다. 시간을 한 번도 바꾸지 않았으면 '없음'으로 본다.
-  // 로딩 중·오류에는 해당하지 않고, 이미 펼친 뒤에는 숨기지 않는다(누른 '접기'가 사라지면 포커스를 잃고, 필터 결과 0건에도 칩이 있어야 풀 수 있다)
+  // 오류에는 해당하지 않고, 이미 펼친 뒤에는 숨기지 않는다(누른 '접기'가 사라지면 포커스를 잃고, 필터 결과 0건에도 칩이 있어야 풀 수 있다)
   const noLogsYet = logsBaseEmpty === true && !logsError && !logsExpanded;
+  // '전체 기록'은 기록이 있다고 확인된 뒤에 보인다. 판정 전(첫 조회 중)에 그렸다가 생성 기록뿐이라 지우면 깜빡인다.
+  // 버튼은 제목 줄(24px)을 키우지 않으므로 늦게 나타나도 아래가 밀리지 않는다
+  const showLogsToggle = logsExpanded || logsError || logsBaseEmpty === false;
 
   const displayStatus = countdownEnded ? "EXPIRED" : timer.status;
   const statusBadgeVariant = displayStatus === "SCHEDULED" ? "scheduled" : displayStatus === "RUNNING" ? "running" : "expired";
@@ -563,7 +623,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
             <h2 id="timer-logs-heading" className="text-base font-semibold">
               {logsExpanded ? "기록" : "최근 기록"}
             </h2>
-            {!noLogsYet && (
+            {showLogsToggle && (
               <Button
                 type="button"
                 variant="link"
@@ -613,7 +673,8 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
               </div>
             )}
 
-            {/* 실패면 오류 한 줄, 아직 받지 못했으면 자리만(스피너가 위에 뜬다). 빈 문구는 받은 결과가 0건일 때만 */}
+            {/* 실패면 오류 한 줄, 아직 받지 못했으면 자리만(스피너가 위에 뜬다). 빈 문구는 받은 결과가 0건일 때만.
+                접힌 목록의 자리는 최근 기록 5행(행 61px) 높이라, 받은 뒤 아래 그래프(좁은 화면)가 밀리지 않는다 */}
             {logsError ? (
               <ErrorState
                 compact
@@ -621,7 +682,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                 onRetry={() => fetchLogs(logPage, activeFilters, logsExpanded)}
               />
             ) : logs === null ? (
-              <div className="h-21" />
+              <div className={logsExpanded ? "h-21" : "h-[19.0625rem]"} />
             ) : logs.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">기록이 없습니다.</p>
             ) : (
