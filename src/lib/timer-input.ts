@@ -33,24 +33,28 @@ export type TimeFields = Record<keyof TimeParts, string>;
 
 export const EMPTY_TIME_FIELDS: TimeFields = { hours: "", minutes: "", seconds: "" };
 
-/** 입력칸 문자열을 0 이상의 정수로 읽는다. 빈 값·숫자가 아닌 값은 0 */
+/** 입력칸 문자열을 0 이상의 수로 읽는다. 빈 값·숫자가 아닌 값·음수는 0 */
 export function parseTimeField(raw: string): number {
   const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+  return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
-/** 입력칸 값의 총 초. 60 이상의 분·초는 normalizeTimeParts와 같은 규칙으로 센다 */
+/** 입력칸 값의 총 초(정수로 내림). normalizeTimeParts와 같은 규칙으로 센다 */
 export function timeFieldsToSeconds(fields: TimeFields): number {
-  return parseTimeField(fields.hours) * 3600 + parseTimeField(fields.minutes) * 60 + parseTimeField(fields.seconds);
+  return Math.floor(parseTimeField(fields.hours) * 3600 + parseTimeField(fields.minutes) * 60 + parseTimeField(fields.seconds));
 }
 
 /**
- * 한 칸을 바꾼 결과. 분·초가 60 이상이 되면 normalizeTimeParts로 윗자리로 올려 세 칸을 다시 쓰고
- * (0인 칸은 빈 칸), 그렇지 않으면 입력한 문자열을 그대로 둔다
+ * 한 칸을 바꾼 결과. 분·초가 60 이상이거나 정수가 아닌 값(1.5시간, 음수)이 들어오면
+ * normalizeTimeParts로 세 칸을 다시 써서(0인 칸은 빈 칸) 보이는 값과 적용될 값을 맞춘다.
+ * 그 밖에는 입력한 문자열을 그대로 둔다(빈 칸 유지)
  */
 export function changeTimeField(fields: TimeFields, field: keyof TimeParts, raw: string): TimeFields {
   const next = { ...fields, [field]: raw };
-  if (parseTimeField(next.minutes) < 60 && parseTimeField(next.seconds) < 60) return next;
+  const plain = (v: string) => v === "" || /^\d+$/.test(v);
+  if (plain(next.hours) && plain(next.minutes) && plain(next.seconds) && Number(next.minutes) < 60 && Number(next.seconds) < 60) {
+    return next;
+  }
   const normalized = normalizeTimeParts(parseTimeField(next.hours), parseTimeField(next.minutes), parseTimeField(next.seconds));
   const show = (n: number) => (n > 0 ? String(n) : "");
   return { hours: show(normalized.hours), minutes: show(normalized.minutes), seconds: show(normalized.seconds) };
