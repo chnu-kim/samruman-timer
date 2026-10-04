@@ -17,6 +17,7 @@ import { usePolling } from "@/hooks/usePolling";
 import { useCountdownEnded } from "@/hooks/useCountdownEnded";
 import { authFetch } from "@/lib/auth-fetch";
 import { hasExternalChange, type SyncedTimerSnapshot } from "@/lib/timer-sync";
+import { connectionLostAgo } from "@/lib/connection-status";
 import type {
   ApiSuccessResponse,
   ApiErrorResponse,
@@ -66,6 +67,24 @@ function formatSeconds(s: number): string {
   if (m > 0) parts.push(`${m}분`);
   if (sec > 0 || parts.length === 0) parts.push(`${sec}초`);
   return parts.join(" ");
+}
+
+/**
+ * 연결 끊김 배지. 경과 시간 문구만 1초마다 바뀌도록 따로 둔다(끊겼을 때만 마운트).
+ * 좁은 화면에서는 경과 문구를 빼서 '실행 중' 배지처럼 카운트다운 옆 한 줄에 남게 한다(아래 내용이 밀리지 않게)
+ */
+function ConnectionLostBadge({ lastSyncedAtMs, className }: { lastSyncedAtMs: number | null; className?: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const ago = connectionLostAgo(lastSyncedAtMs, now);
+  return (
+    <Badge variant="disconnected" className={cn("tabular-nums", className)}>
+      연결 끊김{ago && <span className="hidden sm:inline"> · {ago}</span>}
+    </Badge>
+  );
 }
 
 interface TimerConsoleProps {
@@ -200,46 +219,45 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
       : null;
   }, [timer]);
 
+  // 실패(네트워크 오류·5xx)는 잡지 않고 reject로 넘긴다. 화면은 마지막 값으로 로컬 카운트를 이어 가고,
+  // 연속 실패 횟수는 usePolling이 세어 연결 상태로 돌려준다
   const pollTimer = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/timers/${timerId}`);
-      if (res.status === 404) {
-        onTimerRemovedRef.current?.();
-        return;
-      }
-      if (!res.ok) return;
-      const json = (await res.json()) as ApiSuccessResponse<TimerDetailResponse>;
-      const serverData = json.data;
-      const synced = syncedRef.current;
-      const externalChange = !!synced && hasExternalChange(synced, serverData, Date.now());
+    const res = await fetch(`/api/timers/${timerId}`);
+    if (res.status === 404) {
+      onTimerRemovedRef.current?.();
+      return;
+    }
+    // 5xx 등은 서버 값을 받지 못한 것이라 실패로 알린다. 연속 실패가 쌓이면 배지가 '연결 끊김'으로 바뀐다
+    if (!res.ok) throw new Error(`poll ${res.status}`);
+    const json = (await res.json()) as ApiSuccessResponse<TimerDetailResponse>;
+    const serverData = json.data;
+    const synced = syncedRef.current;
+    const externalChange = !!synced && hasExternalChange(synced, serverData, Date.now());
 
-      setTimer((prev) => {
-        if (!prev) return prev;
-        if (prev.status !== serverData.status) {
-          return serverData;
-        }
-        if (prev.status === "RUNNING") {
-          const diff = Math.abs(prev.remainingSeconds - serverData.remainingSeconds);
-          if (diff >= 2) {
-            return { ...prev, remainingSeconds: serverData.remainingSeconds };
-          }
-        }
-        return prev;
-      });
-
-      // 상태 전이(만료 등)나 다른 기기의 조작이 있을 때만 기록·그래프·목표를 다시 불러온다.
-      // 펼친 기록의 2페이지 이후를 보고 있으면 목록이 밀리지 않게 기록은 건너뛴다
-      if (externalChange) {
-        if (logPage === 1) fetchLogs(1, activeFilters, logsExpanded, { silent: true });
-        fetchGraph({ silent: true });
-        onTimeChanged?.();
+    setTimer((prev) => {
+      if (!prev) return prev;
+      if (prev.status !== serverData.status) {
+        return serverData;
       }
-    } catch {
-      // 폴링 실패는 무시
+      if (prev.status === "RUNNING") {
+        const diff = Math.abs(prev.remainingSeconds - serverData.remainingSeconds);
+        if (diff >= 2) {
+          return { ...prev, remainingSeconds: serverData.remainingSeconds };
+        }
+      }
+      return prev;
+    });
+
+    // 상태 전이(만료 등)나 다른 기기의 조작이 있을 때만 기록·그래프·목표를 다시 불러온다.
+    // 펼친 기록의 2페이지 이후를 보고 있으면 목록이 밀리지 않게 기록은 건너뛴다
+    if (externalChange) {
+      if (logPage === 1) fetchLogs(1, activeFilters, logsExpanded, { silent: true });
+      fetchGraph({ silent: true });
+      onTimeChanged?.();
     }
   }, [timerId, logPage, activeFilters, logsExpanded, fetchLogs, fetchGraph, onTimeChanged]);
 
-  usePolling({
+  const connection = usePolling({
     fn: pollTimer,
     interval: pollInterval,
     enabled: !loading && !error && !!timer,
@@ -365,9 +383,14 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
           scheduledStartAt={timer.scheduledStartAt}
           size="large"
         />
-        <Badge variant={statusBadgeVariant} className="mt-2">
-          {statusLabel}
-        </Badge>
+        {/* 연결이 끊기면 서버 상태를 알 수 없으므로 상태 배지 자리를 연결 끊김으로 바꾼다. 숫자는 로컬 추정값으로 계속 흐른다 */}
+        {connection.disconnected ? (
+          <ConnectionLostBadge lastSyncedAtMs={connection.lastSuccessAtMs} className="mt-2" />
+        ) : (
+          <Badge variant={statusBadgeVariant} className="mt-2">
+            {statusLabel}
+          </Badge>
+        )}
       </div>
 
       {/* 시간 조작 + 곁 영역(목표). 방송 중 가장 자주 쓰는 두 가지를 첫 화면에 나란히 둔다 */}

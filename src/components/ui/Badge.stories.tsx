@@ -38,6 +38,10 @@ export const Reopen: Story = {
   args: { variant: "reopen", children: "Reopen" },
 };
 
+export const Disconnected: Story = {
+  args: { variant: "disconnected", children: "연결 끊김 · 12초 전 기준" },
+};
+
 export const AllVariants: Story = {
   args: { variant: "running", children: "Running" },
   render: () => (
@@ -49,6 +53,7 @@ export const AllVariants: Story = {
       <Badge variant="subtract">-05:00</Badge>
       <Badge variant="expire">Expire</Badge>
       <Badge variant="reopen">Reopen</Badge>
+      <Badge variant="disconnected">연결 끊김 · 12초 전 기준</Badge>
     </div>
   ),
 };
