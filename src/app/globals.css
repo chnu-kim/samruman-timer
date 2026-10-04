@@ -86,9 +86,12 @@ body {
   word-break: keep-all;
 }
 
-/* Tailwind 기본(currentColor 50%)은 라이트에서 4.5:1에 못 미친다. 보조 텍스트 토큰을 쓴다 */
-::placeholder {
-  color: var(--muted-foreground);
+/* Tailwind 기본(currentColor 50%)은 라이트에서 4.5:1에 못 미친다. 보조 텍스트 토큰을 쓴다.
+   preflight와 같은 base 층에 둬서 placeholder:text-* 유틸리티가 덮어쓸 수 있게 한다 */
+@layer base {
+  ::placeholder {
+    color: var(--muted-foreground);
+  }
 }
 
 @keyframes fade-in {

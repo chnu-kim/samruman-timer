@@ -20,6 +20,7 @@ import {
   formatTimestampShort,
 } from "@/lib/utils";
 import type { RemainingGraphPoint } from "@/types";
+import { chartTooltipStyle } from "./tooltip-style";
 
 interface RemainingChartProps {
   points: RemainingGraphPoint[];
@@ -87,15 +88,7 @@ export function RemainingChart({ points, className }: RemainingChartProps) {
           <Tooltip
             labelFormatter={(label) => formatTimestampShort(Number(label))}
             formatter={(value) => [formatHoursFromSeconds(Number(value)), "잔여 시간"]}
-            contentStyle={{
-              backgroundColor: "var(--color-background)",
-              border: "1px solid var(--color-border)",
-              borderRadius: "8px",
-              fontSize: "12px",
-              color: "var(--color-foreground)",
-              opacity: 0.9,
-            }}
-            itemStyle={{ color: "var(--color-foreground)" }}
+            {...chartTooltipStyle}
           />
           <Line
             type="stepAfter"

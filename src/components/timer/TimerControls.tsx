@@ -414,7 +414,6 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
               value={hours}
               onChange={(e) => changeTime("hours", Number(e.target.value))}
               className="w-full text-center"
-              placeholder="0"
               aria-label="시간"
             />
             <span className="text-sm text-muted-foreground">시</span>
@@ -425,7 +424,6 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
               value={minutes}
               onChange={(e) => changeTime("minutes", Number(e.target.value))}
               className="w-full text-center"
-              placeholder="0"
               aria-label="분"
             />
             <span className="text-sm text-muted-foreground">분</span>
@@ -436,7 +434,6 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
               value={seconds}
               onChange={(e) => changeTime("seconds", Number(e.target.value))}
               className="w-full text-center"
-              placeholder="0"
               aria-label="초"
             />
             <span className="text-sm text-muted-foreground">초</span>
