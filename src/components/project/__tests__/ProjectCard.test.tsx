@@ -66,9 +66,37 @@ describe("ProjectCard", () => {
     expect(screen.queryByText("삼루먼")).not.toBeInTheDocument();
   });
 
-  // C100: 설명이 없으면 모바일에서 빈 줄을 차지하지 않는다
-  it("설명이 없으면 빈 설명 줄은 sm 이상에서만 보인다", () => {
+  // C100·R10: 설명이 없으면 빈 문단을 남기지 않는다(그리드 높이는 위 영역의 sm 최소 높이로 맞춘다)
+  it("설명이 없으면 문단을 렌더하지 않는다", () => {
+    const { container, rerender } = render(<ProjectCard project={project} />);
+    expect(container.querySelector("p")).toBeNull();
+    rerender(<ProjectCard project={{ ...project, description: "설명" }} />);
+    expect(container.querySelector("p")).toHaveTextContent("설명");
+  });
+
+  // R10: 날짜만 '오늘'로 읽히지 않도록 '생성'을 붙이고, 항목 사이 '·'가 링크 설명에도 남는다
+  it("메타 줄은 '생성 {날짜}'이고 <time>에 원래 시각을 싣는다", () => {
+    const { container } = render(<ProjectCard project={project} showOwner={false} />);
+    const time = container.querySelector("time");
+    expect(time).toHaveAttribute("dateTime", project.createdAt);
+    expect(screen.getByRole("link", { name: "방송 프로젝트" })).toHaveAccessibleDescription(/^생성 /);
+  });
+
+  it("상태·소유자·생성일을 '·'로 구분한다", () => {
+    render(
+      <ProjectCard project={{ ...project, timerCount: 1, timerStatus: "RUNNING", remainingSeconds: 58 * 60 }} />,
+    );
+    // jsdom은 요소 경계의 공백을 잘라 '·' 양옆 공백이 빠진다(Chrome 접근성 트리에서는 '실행 중 · 58분 남음 · 삼루먼 · 생성 …')
+    expect(screen.getByRole("link", { name: "방송 프로젝트" })).toHaveAccessibleDescription(
+      /^실행 중 · 58분 남음 ?· ?삼루먼 ?· ?생성 /,
+    );
+  });
+
+  // R23: transition-all 대신 바뀌는 속성만 전환하고, 동작 줄이기 설정에서는 hover 이동이 없다
+  it("전환 속성을 좁히고 reduced motion에서 hover 이동을 끈다", () => {
     const { container } = render(<ProjectCard project={project} />);
-    expect(container.querySelector("p")).toHaveClass("hidden", "sm:block");
+    const article = container.querySelector("article")!;
+    expect(article.className).not.toContain("transition-all");
+    expect(article).toHaveClass("transition-[box-shadow,border-color,translate]", "motion-reduce:hover:translate-none");
   });
 });

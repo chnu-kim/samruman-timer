@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { render, screen, waitFor } from "@testing-library/react";
 import LoginPage from "@/app/(auth)/login/page";
+import { Header } from "@/components/layout/Header";
+import { resetMeCache } from "@/lib/session-me";
 import { SITE_SUMMARY, SITE_TAGLINE } from "@/lib/site";
 
 const replace = vi.fn();
@@ -8,7 +10,10 @@ let search = "";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace }),
   useSearchParams: () => new URLSearchParams(search),
+  usePathname: () => "/login",
 }));
+// 테마 토글은 ThemeProvider가 필요하고 이 테스트와 무관하다
+vi.mock("@/components/ui/ThemeToggle", () => ({ ThemeToggle: () => null }));
 
 function mockMe(status: number) {
   global.fetch = vi.fn(async () =>
@@ -19,6 +24,8 @@ function mockMe(status: number) {
 }
 
 afterEach(() => {
+  // 세션 확인 결과는 문서(페이지 로드) 단위로 캐시되므로 테스트마다 새 문서처럼 비운다
+  resetMeCache();
   replace.mockReset();
   search = "";
   vi.restoreAllMocks();
@@ -121,5 +128,21 @@ describe("로그인 상태에서 /login", () => {
     expect(replace).not.toHaveBeenCalled();
     expect(expired).not.toHaveBeenCalled();
     window.removeEventListener("session-expired", expired);
+  });
+});
+
+// R24: 헤더와 로그인 화면이 같은 첫 로드에 세션을 확인해도 /api/auth/me는 한 번만 부른다(로그아웃 상태 401 한 건)
+describe("세션 확인 한 번", () => {
+  it("헤더와 로그인 화면을 함께 그려도 요청은 1회다", async () => {
+    mockMe(401);
+    render(
+      <>
+        <Header />
+        <LoginPage />
+      </>,
+    );
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 20));
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 });

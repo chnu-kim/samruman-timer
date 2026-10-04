@@ -29,7 +29,7 @@
 - `src/app/api/` — API 라우트 (`auth`, `projects`, `timers`)
 - `src/app/projects/[id]/` — 조작 콘솔(프로젝트와 타이머가 1:1이라 타이머 조작도 여기서 한다. 본문은 `components/timer/TimerConsole`). `src/app/timers/[id]`는 이 화면으로 보낸다
 - `src/app/timers/[id]/overlay/` — OBS 브라우저 소스용 오버레이 페이지
-- `src/lib/` — 서버 로직 (`timer.ts` 잔여시간·상태전이, `auth.ts`, `chzzk.ts`, `db.ts`, `goal.ts`, `health.ts` 헬스체크의 기대 최신 마이그레이션). `auth-fetch.ts`, `session-expired.ts`, `timer-sync.ts`, `overlay-animation.ts`, `overlay-mode.ts`, `overlay-polling.ts`, `overlay-recovery.ts`, `pwa.ts`는 클라이언트용, `safe-redirect.ts`, `overlay-style.ts`, `site.ts`(사이트 절대 주소·SEO 메타 상수)는 서버·클라이언트 공용
+- `src/lib/` — 서버 로직 (`timer.ts` 잔여시간·상태전이, `auth.ts`, `chzzk.ts`, `db.ts`, `goal.ts`, `health.ts` 헬스체크의 기대 최신 마이그레이션). `auth-fetch.ts`, `session-expired.ts`, `session-me.ts`, `timer-sync.ts`, `overlay-animation.ts`, `overlay-mode.ts`, `overlay-polling.ts`, `overlay-recovery.ts`, `pwa.ts`는 클라이언트용, `safe-redirect.ts`, `overlay-style.ts`, `site.ts`(사이트 절대 주소·SEO 메타 상수)는 서버·클라이언트 공용
 - `src/hooks/` — 클라이언트 훅 (`usePolling`, `useKeyboardShortcuts` 등)
 - `src/components/{timer,project,goal,graph,stats,layout,providers,ui}/`
 - `migrations/NNNN_*.sql` — D1 스키마 변경 이력

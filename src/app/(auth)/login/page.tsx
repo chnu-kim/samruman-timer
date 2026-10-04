@@ -3,6 +3,7 @@
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SESSION_EXPIRED_PARAM, sanitizeNextPath } from "@/lib/safe-redirect";
+import { fetchMe } from "@/lib/session-me";
 import { SITE_SUMMARY, SITE_TAGLINE } from "@/lib/site";
 
 function LoginContent() {
@@ -17,15 +18,13 @@ function LoginContent() {
 
   // 이미 로그인한 사용자는 돌아갈 곳(next, 없으면 목록)으로 보낸다. 로그인 실패(?error=)로 온 경우는
   // 안내를 보여야 하고 되돌려 보내면 실패가 반복될 수 있어 머문다.
-  // authFetch를 쓰지 않는다: 401이면 세션 만료 이벤트가 다시 /login으로 보내 제자리를 돈다(Header와 같은 이유)
+  // 헤더도 같은 첫 로드에 세션을 확인하므로 fetchMe로 한 요청을 같이 쓴다(로그아웃 상태 401이 한 번만 난다)
   useEffect(() => {
     if (error) return;
     let cancelled = false;
-    fetch("/api/auth/me")
-      .then((res) => {
-        if (res.ok && !cancelled) router.replace(next ?? "/projects");
-      })
-      .catch(() => {});
+    fetchMe().then((me) => {
+      if (me && !cancelled) router.replace(next ?? "/projects");
+    });
     return () => {
       cancelled = true;
     };

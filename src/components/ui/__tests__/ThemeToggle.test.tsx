@@ -23,6 +23,16 @@ describe("ThemeToggle", () => {
     vi.unstubAllGlobals();
   });
 
+  // W37: 헤더 한 줄의 로그인·로그아웃과 같은 높이. 데스크톱 40, 터치 기기 44
+  it("데스크톱 40px, 터치 기기에서 44px이다", () => {
+    render(
+      <ThemeProvider>
+        <ThemeToggle />
+      </ThemeProvider>
+    );
+    expect(screen.getByRole("button")).toHaveClass("h-10", "w-10", "pointer-coarse:min-h-11", "pointer-coarse:min-w-11");
+  });
+
   it("OS 다크에서 누를 때마다 이름과 html 클래스가 함께 바뀐다", () => {
     render(
       <ThemeProvider>

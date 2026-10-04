@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { Header } from "../Header";
+import { resetMeCache } from "@/lib/session-me";
 
 // 테마 토글은 이 테스트와 무관하고 ThemeProvider·matchMedia가 필요하므로 대체한다
 vi.mock("@/components/ui/ThemeToggle", () => ({ ThemeToggle: () => null }));
@@ -70,6 +71,7 @@ describe("Header 로그인 링크", () => {
 // 오류 안내 없이 비로그인 화면(로그인 링크)으로 그린다. 세션 만료 이동도 일어나지 않는다
 describe("Header: /api/auth/me 500", () => {
   afterEach(() => {
+    resetMeCache();
     vi.unstubAllGlobals();
   });
 
@@ -89,5 +91,29 @@ describe("Header: /api/auth/me 500", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/auth/me");
     expect(expired).not.toHaveBeenCalled();
     window.removeEventListener("session-expired", expired);
+  });
+});
+
+// R10·R04·R21: 이니셜은 장식, 이름은 한 번만 읽힌다. 로그아웃은 테마 토글과 같은 높이이고 모바일 아이콘에도 이름이 보인다
+describe("Header 로그인 상태", () => {
+  const user = { id: "u1", chzzkUserId: "c1", nickname: "김차누", profileImageUrl: null };
+
+  it("이니셜은 aria-hidden이고 이름은 sr-only로 남는다(모바일)", () => {
+    const { container } = render(<Header initialUser={user} />);
+    const initial = Array.from(container.querySelectorAll("span")).find((el) => el.textContent === "김")!;
+    expect(initial).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getByText("김차누")).toHaveClass("sr-only", "sm:not-sr-only");
+  });
+
+  it("로그아웃은 title을 갖고 데스크톱 40·터치 44 높이다", () => {
+    render(<Header initialUser={user} />);
+    const button = screen.getByRole("button", { name: "로그아웃" });
+    expect(button).toHaveAttribute("title", "로그아웃");
+    expect(button).toHaveClass("h-10", "pointer-coarse:min-h-11");
+  });
+
+  it("로그인 링크도 같은 높이다", () => {
+    render(<Header initialUser={null} />);
+    expect(screen.getByRole("link", { name: "로그인" })).toHaveClass("h-10", "pointer-coarse:min-h-11");
   });
 });

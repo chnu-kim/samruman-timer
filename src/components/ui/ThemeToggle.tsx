@@ -13,7 +13,7 @@ export function ThemeToggle() {
   return (
     <button
       onClick={() => setTheme(nextTheme(theme))}
-      className="rounded-lg p-1.5 min-h-11 min-w-11 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-colors"
+      className="rounded-lg h-10 w-10 pointer-coarse:min-h-11 pointer-coarse:min-w-11 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-colors"
       aria-label={label}
       title={label}
     >
