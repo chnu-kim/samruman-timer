@@ -307,7 +307,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
         toast("시간 변경에 실패했습니다.", "error");
       }
     } else {
-      toast("시청자 닉네임을 입력하거나 기본 닉네임을 설정하면 숫자키로 즉시 적용됩니다", "info");
+      toast("시청자 닉네임을 입력하면 숫자키로 즉시 적용됩니다. 닉네임 입력 후 ‘기본 닉네임으로 설정’을 누르면 다음부터 입력 없이 적용됩니다", "info");
     }
     // handleModified가 읽는 기록 상태(필터, 펼침)가 바뀌면 다시 만들어 오래된 값으로 기록을 불러오지 않게 한다
   }, [isOwner, timer, toast, showModifiedToast, timerId, selectedAction, activeFilters, logsExpanded]);
@@ -323,8 +323,9 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
     onTimeChanged?.();
   }, [fetchTimer, fetchLogs, fetchGraph, onTimeChanged, logPage, activeFilters, logsExpanded]);
 
+  const shortcutsEnabled = isOwner && !!timer && timer.status !== "SCHEDULED";
   const { showHelp, setShowHelp } = useKeyboardShortcuts({
-    enabled: isOwner && !!timer && timer.status !== "SCHEDULED",
+    enabled: shortcutsEnabled,
     onPreset: handleKeyboardPreset,
     onToggleAction: handleToggleAction,
     onRefresh: handleRefresh,
@@ -399,7 +400,21 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
         <div className={cn("grid gap-5", isOwner && !!aside && "lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start")}>
           {isOwner && (
             <section aria-labelledby="timer-controls-heading" className="rounded-xl border border-accent/30 bg-accent-light/20 p-5">
-              <h2 id="timer-controls-heading" className="text-sm font-bold text-foreground">시간 조작</h2>
+              {/* 단축키가 있다는 사실을 '?'를 몰라도 알 수 있게, 도움말로 가는 진입점을 제목 줄에 하나만 둔다.
+                  키보드가 있는 포인터 기기에서만 보인다(터치 기기에서는 단축키를 쓸 수 없다) */}
+              <div className="flex items-center justify-between gap-3">
+                <h2 id="timer-controls-heading" className="text-sm font-bold text-foreground">시간 조작</h2>
+                {shortcutsEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => setShowHelp(true)}
+                    aria-haspopup="dialog"
+                    className="hidden pointer-fine:inline-flex -my-1 -mr-2 rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    단축키
+                  </button>
+                )}
+              </div>
               <TimerControls
                 timerId={timerId}
                 status={timer.status}
@@ -567,6 +582,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
             </div>
             <p className="mt-4 text-xs text-muted-foreground">
               입력 필드에 포커스가 없을 때만 동작합니다. 숫자키는 입력한 시청자 닉네임(비어 있으면 기본 닉네임)으로 즉시 적용됩니다.
+              기본 닉네임은 닉네임 입력 후 &lsquo;기본 닉네임으로 설정&rsquo;을 누르면 정해집니다.
             </p>
           </>
         )}

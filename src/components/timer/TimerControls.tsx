@@ -391,6 +391,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
             className="relative grid grid-cols-2 rounded-xl border border-border bg-muted p-1"
             role="radiogroup"
             aria-labelledby={actionGroupLabelId}
+            aria-keyshortcuts="X"
           >
             {/* 슬라이딩 인디케이터 */}
             <div
