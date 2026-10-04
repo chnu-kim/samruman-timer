@@ -144,8 +144,10 @@ export default function ProjectsPage() {
   const hideSearchControls =
     !!user && activeTab === "mine" && mineUnfilteredTotal === 0 && !searchQuery;
 
-  // 빈 목록에서는 본문의 '첫 프로젝트 만들기' 하나만 남긴다. 폼을 열면 헤더 버튼이 '취소'로 돌아와 닫을 수 있다
-  const hideHeaderCreate = hideSearchControls && !showForm;
+  // 빈 목록에서는 본문의 '첫 프로젝트 만들기' 하나만 남긴다. 폼을 열면 헤더 버튼이 '취소'로 돌아와 닫을 수 있다.
+  // 본문 버튼이 실제로 그려질 때만 숨긴다. 목록 요청이 로딩 중이거나 실패하면 본문 버튼이 없어 만들 길이 사라진다
+  const hideHeaderCreate =
+    hideSearchControls && !showForm && !loading && !error && projects.length === 0;
 
   if (!authChecked) {
     return (

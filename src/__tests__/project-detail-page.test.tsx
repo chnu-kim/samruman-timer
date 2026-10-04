@@ -162,6 +162,17 @@ describe("프로젝트 생성 직후 타이머 만들기 자동 열기 (C109)", 
     await screen.findByText("아직 타이머가 없습니다.");
     await new Promise((r) => setTimeout(r, 50));
     expect(screen.queryByRole("heading", { name: "새 타이머 만들기" })).not.toBeInTheDocument();
+    // 열지 않아도 플래그는 지운다. 남기면 '링크 복사'가 플래그 붙은 주소를 건넨다
+    await waitFor(() => expect(window.location.search).toBe(""));
+  });
+
+  it("타이머가 이미 있으면 플래그가 있어도 열지 않고 플래그만 지운다", async () => {
+    window.history.replaceState(null, "", "/projects/p1?new=timer");
+    stubApi({ timers: [timer], goals: [], me: owner });
+    render(<ProjectDetailPage />);
+    await screen.findByRole("heading", { name: "시간 조작" });
+    await waitFor(() => expect(window.location.search).toBe(""));
+    expect(screen.getByRole("heading", { name: "새 타이머 만들기", hidden: true }).closest("dialog")).not.toHaveAttribute("open");
   });
 });
 
@@ -323,6 +334,8 @@ describe("프로젝트 콘솔", () => {
     fireEvent.click(screen.getByRole("button", { name: "더보기" }));
     fireEvent.click(screen.getByRole("button", { name: "타이머 초기화(목표 유지)" }));
     const confirmTitle = await screen.findByRole("heading", { name: "타이머 초기화" });
+    // 새 타이머는 오버레이 주소가 달라진다. '초기화'를 같은 타이머 재시작으로 오해해 OBS 소스를 그대로 두지 않게 알린다
+    expect(within(confirmTitle.closest("dialog")!).getByText(/OBS 브라우저 소스에 새 주소를 다시 넣어야/)).toBeInTheDocument();
     // 삭제 뒤 목록을 다시 부르면 타이머가 없다
     global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

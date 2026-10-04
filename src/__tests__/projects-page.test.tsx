@@ -216,6 +216,24 @@ describe("빈 목록의 만들기 버튼 (C103)", () => {
     expect(await screen.findByRole("button", { name: /새 프로젝트/ })).toBeInTheDocument();
   });
 
+  it("개수는 0개지만 목록 요청이 실패하면 본문 버튼이 없으므로 헤더 버튼을 보인다", async () => {
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/api/auth/me")) {
+        return jsonResponse({ id: "u1", chzzkUserId: "c1", nickname: "삼루먼", profileImageUrl: null });
+      }
+      if (url.endsWith("?limit=1")) {
+        return jsonResponse({ projects: [], pagination: { page: 1, limit: 1, total: 0, totalPages: 0 } });
+      }
+      return new Response(null, { status: 500 });
+    }) as typeof fetch;
+    render(<ProjectsPage />);
+    await screen.findByText("프로젝트를 불러오는데 실패했습니다.");
+    await screen.findByRole("tab", { name: /내 프로젝트 \(0\)/ });
+    expect(screen.getByRole("button", { name: /새 프로젝트/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /첫 프로젝트 만들기/ })).not.toBeInTheDocument();
+  });
+
   it("내 프로젝트가 있으면 헤더 버튼을 보인다", async () => {
     stubMine(3);
     render(<ProjectsPage />);

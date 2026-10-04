@@ -200,6 +200,7 @@ export default function ProjectDetailPage() {
   // 404는 다시 시도해도 같으므로 일시적 오류와 구분한다
   const [notFound, setNotFound] = useState(false);
   const [user, setUser] = useState<MeResponse | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [formKey, setFormKey] = useState(0);
   const [deleting, setDeleting] = useState(false);
@@ -267,7 +268,8 @@ export default function ProjectDetailPage() {
           setUser(json.data);
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setAuthChecked(true));
   }, [projectId, fetchProject, fetchTimers, fetchGoals]);
 
   // ACTIVE 목표가 있으면 30초 간격으로도 맞춘다. 시간이 바뀐 직후의 갱신은 TimerConsole의 onTimeChanged가 한다
@@ -314,18 +316,20 @@ export default function ProjectDetailPage() {
   useDocumentTitle(project ? `${project.name} · ${APP_TITLE}` : null);
 
   // 목록에서 프로젝트를 막 만들고 넘어왔으면 타이머 만들기 창을 바로 연다(만들기 두 단계를 한 흐름으로).
-  // 소유자이고 타이머가 아직 없을 때만, 한 번만 연다
+  // 소유자이고 타이머가 아직 없을 때만, 한 번만 연다. 조건을 판정할 수 있게 되면(프로젝트·타이머·로그인 확인 끝)
+  // 열든 안 열든 플래그는 지운다. 남겨 두면 '링크 복사'가 플래그 붙은 주소를 시청자에게 건넨다
   const autoOpenedRef = useRef(false);
   const ownsProject = !!project && !!user && user.id === project.owner.id;
   const hasTimer = timers.length > 0;
+  const flowReady = !!project && timersLoaded && authChecked;
   useEffect(() => {
-    if (autoOpenedRef.current || !timersLoaded || !ownsProject || hasTimer) return;
+    if (autoOpenedRef.current || !flowReady) return;
     autoOpenedRef.current = true;
-    if (consumeNewTimerFlag()) {
+    if (consumeNewTimerFlag() && ownsProject && !hasTimer) {
       setFormKey((k) => k + 1);
       setShowForm(true);
     }
-  }, [timersLoaded, ownsProject, hasTimer]);
+  }, [flowReady, ownsProject, hasTimer]);
 
   if (loading) {
     return <ProjectDetailSkeleton />;
@@ -545,7 +549,7 @@ export default function ProjectDetailPage() {
       <ConfirmDialog
         open={showTimerDeleteDialog}
         title="타이머 초기화"
-        description="지금 타이머와 변경 기록이 지워지고 방송 화면의 오버레이가 사라집니다. 되돌릴 수 없으며 목표 기록은 남습니다."
+        description="지금 타이머와 변경 기록이 지워지고 방송 화면의 오버레이가 사라집니다. 되돌릴 수 없으며 목표 기록은 남습니다. 새 타이머는 오버레이 주소가 달라서 OBS 브라우저 소스에 새 주소를 다시 넣어야 합니다."
         confirmLabel="타이머 초기화"
         variant="danger"
         onConfirm={handleDeleteTimer}
