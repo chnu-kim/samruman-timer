@@ -171,6 +171,20 @@ export function formatDateTime(iso: string): string {
 }
 
 /**
+ * 종료 예정 시각. 오늘이면 '오후 1:33', 다른 날이면 '10. 6. 오후 1:33'(다른 해면 연도까지).
+ * 방송 화면·콘솔에서 한눈에 읽히도록 초는 빼고 12시간제로 쓴다. 0시는 '오전 12:05', 12시는 '오후 12:00'.
+ * toLocaleString은 엔진에 따라 '24:05'나 앞자리 0을 내므로 직접 맞춘다
+ */
+export function formatEndTime(date: Date, now: Date = new Date()): string {
+  const h = date.getHours();
+  const time = `${h < 12 ? "오전" : "오후"} ${h % 12 === 0 ? 12 : h % 12}:${String(date.getMinutes()).padStart(2, "0")}`;
+  const sameYear = date.getFullYear() === now.getFullYear();
+  if (sameYear && date.getMonth() === now.getMonth() && date.getDate() === now.getDate()) return time;
+  const day = `${date.getMonth() + 1}. ${date.getDate()}.`;
+  return sameYear ? `${day} ${time}` : `${date.getFullYear()}. ${day} ${time}`;
+}
+
+/**
  * 변경 기록 행의 시각. 오늘이면 'HH:mm'만, 오늘이 아니면 'MM. DD. HH:mm', 다른 해면 연도까지 붙인다.
  * 방송 중에는 대부분 오늘 기록이라 날짜·초를 매 행 반복하지 않는다(초까지의 전체 시각은 title로).
  * toLocaleString은 엔진에 따라 '오전'이나 '24:05'를 내므로 직접 맞춘다

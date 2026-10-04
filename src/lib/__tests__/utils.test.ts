@@ -8,6 +8,7 @@ import {
   formatTimestampShort,
   formatHourShort,
   formatLogTime,
+  formatEndTime,
   displayActorName,
   timeAxisTicks,
 } from "@/lib/utils";
@@ -156,5 +157,25 @@ describe("displayActorName", () => {
 
   it("사람이 남긴 로그는 행위 종류와 무관하게 이름을 유지한다", () => {
     expect(displayActorName({ actionType: "EXPIRE", actorName: "스트리머", actorUserId: "u1" })).toBe("스트리머");
+  });
+});
+
+describe("formatEndTime", () => {
+  // 로컬 시각 성분으로 만들어 실행 환경의 시간대와 무관하게 확인한다
+  const now = new Date(2026, 9, 4, 10, 0);
+
+  it("오늘이면 날짜·초 없이 12시간제 시각만 낸다", () => {
+    expect(formatEndTime(new Date(2026, 9, 4, 13, 33, 48), now)).toBe("오후 1:33");
+    expect(formatEndTime(new Date(2026, 9, 4, 9, 5), now)).toBe("오전 9:05");
+  });
+
+  it("0시는 오전 12시, 12시는 오후 12시로 쓴다", () => {
+    expect(formatEndTime(new Date(2026, 9, 4, 0, 5), now)).toBe("오전 12:05");
+    expect(formatEndTime(new Date(2026, 9, 4, 12, 0), now)).toBe("오후 12:00");
+  });
+
+  it("다른 날이면 앞자리 0 없는 월·일을 붙이고, 다른 해면 연도까지 붙인다", () => {
+    expect(formatEndTime(new Date(2026, 9, 6, 13, 33), now)).toBe("10. 6. 오후 1:33");
+    expect(formatEndTime(new Date(2027, 0, 2, 9, 0), now)).toBe("2027. 1. 2. 오전 9:00");
   });
 });

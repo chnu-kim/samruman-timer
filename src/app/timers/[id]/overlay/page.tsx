@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { useParams, useSearchParams } from "next/navigation";
 import { formatTime } from "@/components/timer/CountdownDisplay";
 import { detectTimerChange, isStaleResponse, type TimerSnapshot } from "@/lib/overlay-animation";
-import { formatDateTime } from "@/lib/utils";
+import { formatEndTime } from "@/lib/utils";
 import { isOverlayBackground, isOverlayColor } from "@/lib/overlay-style";
 import { applyOverlayMode } from "@/lib/overlay-mode";
 import { classifyFailedResponse, nextPollDelay, type PollOutcome } from "@/lib/overlay-polling";
@@ -212,6 +212,13 @@ export default function TimerOverlayPage() {
   const textShadow = shadow
     ? "0 2px 8px rgba(0,0,0,0.7), 0 0 2px rgba(0,0,0,0.5)"
     : "none";
+  // 제목·종료 예정 같은 보조 줄은 글자가 가늘어 밝은 방송 화면에서 번져 보이므로 짧은 그림자를 겹쳐 외곽선처럼 두른다
+  const subTextShadow = shadow
+    ? "0 0 3px rgba(0,0,0,0.9), 0 0 3px rgba(0,0,0,0.9), 0 2px 8px rgba(0,0,0,0.7)"
+    : "none";
+  // 숫자(카운트다운·변경량)만 고정폭 서체다. 한글 보조 줄까지 고정폭이면 글자 폭이 벌어져 카운트다운보다 길어진다
+  const monoFont = "var(--font-geist-mono), monospace";
+  const sansFont = "var(--font-noto-kr), sans-serif";
 
   const containerStyle: React.CSSProperties = {
     position: "fixed",
@@ -222,7 +229,7 @@ export default function TimerOverlayPage() {
     flexWrap: "wrap",
     alignContent: positionStyles[position].alignItems,
     zIndex: 9999,
-    fontFamily: "var(--font-geist-mono), monospace",
+    fontFamily: sansFont,
     ...positionStyles[position],
   };
 
@@ -266,11 +273,11 @@ export default function TimerOverlayPage() {
               style={{
                 color: textColor,
                 fontSize: `${titleFontSize}px`,
-                fontFamily: "var(--font-noto-kr), sans-serif",
+                fontFamily: sansFont,
                 fontWeight: 600,
                 lineHeight: 1.3,
                 whiteSpace: "nowrap",
-                textShadow,
+                textShadow: subTextShadow,
               }}
             >
               {timer.title}
@@ -293,6 +300,8 @@ export default function TimerOverlayPage() {
               style={{
                 color: textColor,
                 fontSize: `${fontSizePx}px`,
+                fontFamily: monoFont,
+                fontVariantNumeric: "tabular-nums",
                 fontWeight: 700,
                 lineHeight: 1,
                 whiteSpace: "nowrap",
@@ -330,6 +339,7 @@ export default function TimerOverlayPage() {
                     ? { right: "100%", marginRight: `${Math.round(fontSizePx * 0.25)}px` }
                     : { left: "100%", marginLeft: `${Math.round(fontSizePx * 0.25)}px` }),
                   fontSize: `${Math.round(fontSizePx * 0.4)}px`,
+                  fontFamily: monoFont,
                   fontWeight: 700,
                   lineHeight: 1,
                   color: floatingText.startsWith("+") ? "#22c55e" : "#ef4444",
@@ -351,7 +361,7 @@ export default function TimerOverlayPage() {
                 fontSize: `${labelFontSize}px`,
                 fontWeight: 600,
                 lineHeight: 1,
-                textShadow,
+                textShadow: subTextShadow,
                 animation: animation ? "pulse-expired 2s ease-in-out infinite" : undefined,
               }}
             >
@@ -365,7 +375,7 @@ export default function TimerOverlayPage() {
                 fontSize: `${labelFontSize}px`,
                 fontWeight: 600,
                 lineHeight: 1,
-                textShadow,
+                textShadow: subTextShadow,
               }}
             >
               시작 대기 중
@@ -373,21 +383,20 @@ export default function TimerOverlayPage() {
           )}
           {showEndDate && !isExpired && !isScheduled && timer.status === "RUNNING" && displayed > 0 && (
             <span
+              data-testid="overlay-end-time"
               style={{
                 color: textColor,
                 fontSize: `${labelFontSize}px`,
-                fontWeight: 500,
+                fontFamily: sansFont,
+                fontVariantNumeric: "tabular-nums",
+                fontWeight: 600,
                 lineHeight: 1,
-                opacity: 0.8,
-                textShadow,
+                whiteSpace: "nowrap",
+                textShadow: subTextShadow,
               }}
             >
-              종료 예정 · {formatDateTime(new Date(Date.now() + displayed * 1000).toISOString())}
-              {(() => {
-                const startedAt = timer.scheduledStartAt ?? timer.createdAt;
-                const elapsed = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000);
-                return elapsed > 0 ? ` (${formatTime(elapsed)} 경과)` : "";
-              })()}
+              {/* 생성·예약 시각부터 잰 경과는 만료 뒤 다시 시작한 타이머에서 틀리므로 붙이지 않는다(콘솔 CountdownDisplay와 같은 규칙) */}
+              종료 예정 {formatEndTime(new Date(Date.now() + displayed * 1000))}
             </span>
           )}
         </div>

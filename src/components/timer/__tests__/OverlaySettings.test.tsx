@@ -244,6 +244,19 @@ describe("OverlaySettings 미리보기 (UX-57·C063)", () => {
     expect(iframe.style.background).toMatch(/#3f3f46|rgb\(63, 63, 70\)/);
   });
 
+  it("투명 배경은 밝은 화면으로 바꿔 미리 볼 수 있고, 설정·URL에는 넣지 않는다 (R11)", async () => {
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    const iframe = await screen.findByTitle("오버레이 미리보기", {}, { timeout: 2000 });
+    const toggle = screen.getByRole("button", { name: "밝은 화면에서 보기" });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(iframe.style.background).toMatch(/#ffffff|rgb\(255, 255, 255\)/);
+    // 투명 배경은 URL에 bg를 싣지 않는다. 미리보기 배경이 URL로 새면 방송 화면이 흰색으로 덮인다
+    expect(iframe.getAttribute("src") ?? "").not.toContain("bg=");
+    expect(screen.getByRole("textbox", { name: "배경색 코드" })).toHaveValue("투명");
+  });
+
   it("1920×1080 방송 캔버스로 그려 16:9 상자 폭에 맞춰 축소한다", async () => {
     const width = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(640);
     render(<OverlaySettings timerId="abc" onClose={() => {}} />);

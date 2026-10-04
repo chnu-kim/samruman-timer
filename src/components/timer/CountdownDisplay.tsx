@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { cn, formatDateTime } from "@/lib/utils";
+import { cn, formatDateTime, formatEndTime } from "@/lib/utils";
 import type { TimerStatus } from "@/types";
 
 interface CountdownDisplayProps {
@@ -58,9 +58,10 @@ export function CountdownDisplay({
   const isUrgent = isRunning && displayed < 300; // 5분 미만
   const isCritical = isRunning && displayed < 60; // 1분 미만
 
-  // 생성 시각부터 잰 경과는 만료 후 다시 시작한 타이머에서 실제 진행 시간과 어긋나므로 종료 예정 시각만 보여 준다
+  // 생성 시각부터 잰 경과는 만료 후 다시 시작한 타이머에서 실제 진행 시간과 어긋나므로 종료 예정 시각만 보여 준다.
+  // 오버레이의 종료 예정 줄과 같은 포맷(formatEndTime)을 쓴다
   const endTimeText = isRunning
-    ? `종료 예정 · ${formatDateTime(new Date(Date.now() + displayed * 1000).toISOString())}`
+    ? `종료 예정 ${formatEndTime(new Date(Date.now() + displayed * 1000))}`
     : null;
 
   return (
