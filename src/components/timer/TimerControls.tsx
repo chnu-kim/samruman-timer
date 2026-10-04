@@ -47,6 +47,11 @@ interface TimerControlsProps {
    * 입력란으로 포커스를 옮긴다(안내 문구는 상위 토스트가 맡으므로 입력란 옆 alert는 띄우지 않는다)
    */
   nicknamePromptRef?: { current: (() => void) | null };
+  /**
+   * 화면이 마지막으로 받아들인 서버 updatedAt(TimerConsole이 받아들이는 즉시 갱신한다). 조작 직전 값을 롤백에 실어,
+   * 그 뒤 더 새 확정 값(다음 조작의 응답·다른 기기의 변경)이 반영됐으면 롤백이 그 값을 덮지 않게 한다
+   */
+  appliedUpdatedAtRef?: { readonly current: string | null };
   /** 카운트다운이 0에 닿아 만료로 보이는지. 폴링 전이라 status가 아직 RUNNING이어도 상위가 알려 준다 */
   expired?: boolean;
   /** 서버와 연결이 끊긴 상태. 버튼은 그대로 두고 안내 줄 문구만 바꾼다 */
@@ -133,7 +138,7 @@ function isInlineErrorVisible(anchor: HTMLElement | null): boolean {
   return rect.top >= 0 && rect.bottom <= visibleBottom;
 }
 
-export function TimerControls({ timerId, status, remainingSeconds, selectedAction, onActionChange, onModified, onTimerRemoved, quickActorRef, nicknamePromptRef, expired: expiredProp, disconnected, className }: TimerControlsProps) {
+export function TimerControls({ timerId, status, remainingSeconds, selectedAction, onActionChange, onModified, onTimerRemoved, quickActorRef, nicknamePromptRef, appliedUpdatedAtRef, expired: expiredProp, disconnected, className }: TimerControlsProps) {
   const { toast } = useToast();
   const showModifiedToast = useUndoableModifyToast(timerId, onModified);
   const [actorName, setActorName] = useState("");
@@ -295,6 +300,8 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
 
     const prevRemaining = remainingSeconds ?? 0;
     const optimisticRemaining = Math.max(0, prevRemaining + (action === "ADD" ? delta : -delta));
+    // 롤백이 되돌아갈 값의 기준 시각. 롤백 값에 updatedAt으로 실어, 그 사이 더 새 확정 값이 있으면 콘솔이 옛 값으로 보고 버린다
+    const baseUpdatedAt = appliedUpdatedAtRef?.current ?? undefined;
 
     // Optimistic UI: 즉시 갱신
     onModified?.({
@@ -331,11 +338,13 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
           id: timerId,
           remainingSeconds: prevRemaining,
           status: status ?? "RUNNING",
+          updatedAt: baseUpdatedAt,
           log: {} as TimerLogResponse,
         });
         restoreInputs();
         // 세션 만료는 그 안내(SessionExpiredHandler) 한 건만 띄운다. 여기서 또 알리면 그 안내를 덮는다.
-        // 그 밖의 401(로그아웃 상태 등)은 아래 4xx처럼 서버 문구로 알린다
+        // 쓰기 요청이라 401은 SESSION_EXPIRED든 UNAUTHORIZED(다른 탭에서 로그아웃 등)든 세션 만료로 판정된다(authFetch).
+        // 판정되지 않은 401(본문이 JSON이 아닌 응답)만 아래 4xx처럼 알린다
         if (isSessionExpired(res)) return;
         // 4xx는 서버가 이유를 알려 준다(만료된 타이머 차감 등, 다시 눌러도 안 된다). 5xx는 다시 시도하면 된다
         const json = (await res.json().catch(() => null)) as ApiErrorResponse | null;
@@ -356,6 +365,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
         id: timerId,
         remainingSeconds: prevRemaining,
         status: status ?? "RUNNING",
+        updatedAt: baseUpdatedAt,
         log: {} as TimerLogResponse,
       });
       restoreInputs();

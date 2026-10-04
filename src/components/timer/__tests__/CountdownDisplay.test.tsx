@@ -285,3 +285,33 @@ describe("CountdownDisplay 서브텍스트", () => {
     });
   });
 });
+
+// FIN: 353~376px에서만 숫자+배지가 한 줄을 넘어 배지가 아래로 내려갔다. 모바일은 폭과 관계없이 숫자가 한 줄을 홀로 쓰고
+// 배지는 보조 문구 앞 같은 줄, sm 이상은 숫자 옆에 배지·다음 줄에 보조 문구다(실제 배치는 Playwright로 320~640px 측정)
+describe("CountdownDisplay large 배지 자리", () => {
+  it.each([
+    ["RUNNING", 3600, /^종료 예정/],
+    ["SCHEDULED", 3600, /^시작 대기 중/],
+    ["EXPIRED", 0, /^만료됨$/],
+  ] as const)("%s: 모바일은 숫자 다음 줄에 배지와 보조 문구가 이어지고, sm부터 보조 문구만 다음 줄이다", (status, seconds, sub) => {
+    render(
+      <CountdownDisplay
+        remainingSeconds={seconds}
+        status={status}
+        scheduledStartAt="2026-10-10T00:00:00Z"
+        size="large"
+        aside={<span>배지</span>}
+      />,
+    );
+    const timer = screen.getByRole("timer");
+    expect(timer).toHaveClass("basis-full", "sm:basis-auto");
+    const badge = timer.nextElementSibling!;
+    expect(badge).toHaveTextContent("배지");
+    expect(badge).toHaveClass("mt-1", "sm:mt-2");
+    const subtext = badge.nextElementSibling!;
+    expect(subtext).toHaveTextContent(sub);
+    expect(subtext).toHaveClass("mt-1", "sm:basis-full");
+    expect(subtext.nextElementSibling).toBeNull();
+    expect(timer.parentElement).toHaveClass("flex", "flex-wrap");
+  });
+});

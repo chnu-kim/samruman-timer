@@ -140,14 +140,14 @@ export function ConsoleSkeleton({ shape, className, busy = false }: { shape: Con
   const { ownerOnly, showOwner } = shapeClasses(shape);
   return (
     <div className={cn("space-y-8", className)} aria-busy={busy || undefined}>
-      {/* 카운트다운(CountdownDisplay와 같은 구조): 숫자 + '실행 중' 배지가 한 줄에 안 들어가면 배지가 아래로 내려간다.
-          숫자 막대 폭은 실제 숫자 폭(높이의 4.6배, 실측 276/60)이라 줄바꿈이 본문과 같은 폭에서 일어난다. 아래는 종료 예정 줄(24px) */}
-      <div className="flex flex-col">
-        <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+      {/* 카운트다운(CountdownDisplay large와 같은 구조): 모바일은 숫자 한 줄, 그 아래 '실행 중' 배지와 종료 예정 줄(24px).
+          sm 이상은 숫자 옆에 배지, 아래에 종료 예정 줄. 숫자 막대 폭은 실제 숫자 폭(높이의 4.6배, 실측 276/60)이다 */}
+      <div className="flex flex-wrap items-center gap-x-2 sm:items-start sm:gap-x-4">
+        <div className="basis-full sm:basis-auto">
           <Skeleton className="h-[clamp(3rem,17vw,3.75rem)] w-[calc(clamp(3rem,17vw,3.75rem)*4.6)] sm:h-15 sm:w-69" />
-          <Skeleton className="mt-2 h-5 w-13 rounded-full" />
         </div>
-        <div className="mt-1 flex h-5 items-center">
+        <Skeleton className="mt-1 h-5 w-13 rounded-full sm:mt-2" />
+        <div className="mt-1 flex h-5 items-center sm:basis-full">
           <Skeleton className="h-3.5 w-28" />
         </div>
       </div>
@@ -186,10 +186,15 @@ export function ConsoleSkeleton({ shape, className, busy = false }: { shape: Con
               <Skeleton className="h-3.5 w-16" />
               <Skeleton className="h-3.5 w-12" />
             </div>
-            <div className="h-[5.5rem] space-y-3 pt-4">
-              <Skeleton className="h-4 w-3/4" />
-              <Skeleton className="h-2 w-full rounded-full" />
-              <Skeleton className="h-3 w-1/2" />
+            {/* 목표 한 행(GoalCard와 같은 구조, 90px): 위아래 16px, 제목 줄 20px, 8px 띄운 진행 막대 8px, 6px 띄운 수치 줄 16px */}
+            <div className="py-4">
+              <div className="flex h-5 items-center">
+                <Skeleton className="h-4 w-3/4" />
+              </div>
+              <Skeleton className="mt-2 h-2 w-full rounded-full" />
+              <div className="mt-1.5 flex h-4 items-center">
+                <Skeleton className="h-3 w-1/2" />
+              </div>
             </div>
           </div>
         </div>

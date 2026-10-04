@@ -99,6 +99,8 @@ describe("PATCH /api/projects/[id]", () => {
     });
     const res = await PATCH(req as never, makeParams() as never);
     expect(res.status).toBe(400);
+    // 화면(이름 편집)이 이 문구를 그대로 알리므로 필드 식별자 대신 사용자 문구다
+    expect((await res.json()).error.message).toBe("이름은 1~100자로 입력해 주세요");
   });
 
   it("name가 문자열이 아님 → 400", async () => {
@@ -117,6 +119,7 @@ describe("PATCH /api/projects/[id]", () => {
     });
     const res = await PATCH(req as never, makeParams() as never);
     expect(res.status).toBe(400);
+    expect((await res.json()).error.message).toBe("설명은 500자 이내로 입력해 주세요");
   });
 
   it("본문이 객체가 아님 → 400", async () => {

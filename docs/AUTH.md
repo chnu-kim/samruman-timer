@@ -275,7 +275,7 @@ Next 16 관례상 `proxy.ts`가 표준이지만 이 프로젝트는 `middleware.
 D1 장애를 401로 내면 "세션 만료"로 가려져 운영자가 장애를 알아채지 못한다. 그래서 500으로 낸다. 클라이언트에서 500은 이렇게 보인다.
 
 - 페이지 로드 때 refresh를 처음 일으키는 `GET /api/auth/me`는 Header·로그인 화면과 각 페이지(`projects`, `projects/[id]`)가 `authFetch`가 아닌 공용 `fetchMe()`(`src/lib/session-me.ts`, 안에서 `fetch`)로 부르고 `res.ok`만 본다. 같은 첫 로드의 요청은 하나를 같이 쓴다. 그래서 500이면 **오류 안내 없이 비로그인 화면**(헤더에 로그인 버튼, 소유자 전용 컨트롤 숨김)으로 그리고 로그인 화면으로 이동하지도 않는다. 새로고침하면 다시 시도한다
-- `authFetch`를 쓰는 요청(시간 증감 등)도 401 `SESSION_EXPIRED`에만 세션 만료 이벤트를 내므로, 500은 각 화면의 일반 오류 처리(토스트 등)를 탄다
+- `authFetch`를 쓰는 요청(시간 증감 등)도 401(`SESSION_EXPIRED`, 쓰기 요청의 `UNAUTHORIZED`)에만 세션 만료 이벤트를 내므로, 500은 각 화면의 일반 오류 처리(토스트 등)를 탄다
 - 401이던 시절에도 `/api/auth/me`는 `fetch`라 세션 만료 이동이 없었으므로, 이 화면 동작은 500으로 바꾸기 전과 같다
 
 ### 인증 헬퍼 (`lib/auth.ts`)
@@ -319,7 +319,7 @@ POST /api/auth/logout
 
 ## 세션 만료 클라이언트 처리
 
-- `authFetch()`(`src/lib/auth-fetch.ts`)는 `fetch`를 감싸 401 본문의 코드가 `SESSION_EXPIRED`일 때만 `fireSessionExpired()`를 호출한다. 본문은 복제본에서 읽어 호출부가 그대로 읽을 수 있고, 호출부는 `isSessionExpired(res)`로 판정을 물어 자기 안내를 생략한다. `UNAUTHORIZED`(refresh 쿠키 없음)는 쓰기 요청(GET 외)이면 같은 세션 만료로 보고(쓰기 버튼은 로그인한 소유자에게만 보여 로그인이 풀린 경우다), 조회면 일반 실패로 돌려준다
+- `authFetch()`(`src/lib/auth-fetch.ts`)는 `fetch`를 감싸 401 본문의 코드가 `SESSION_EXPIRED`이거나, 쓰기 요청의 `UNAUTHORIZED`일 때 `fireSessionExpired()`를 호출한다. 본문은 복제본에서 읽어 호출부가 그대로 읽을 수 있고, 호출부는 `isSessionExpired(res)`로 판정을 물어 자기 안내를 생략한다. `UNAUTHORIZED`(refresh 쿠키 없음)를 쓰기 요청(GET 외)에서만 세션 만료로 보는 것은 쓰기 버튼이 로그인한 소유자에게만 보여 그때는 로그인이 풀린 경우이기 때문이고, 조회면 일반 실패로 돌려준다
 - `fireSessionExpired()`(`src/lib/session-expired.ts`)는 페이지 수명 동안 한 번만 `window`에 `session-expired` 이벤트를 보낸다
 - `SessionExpiredHandler`(`src/components/providers/`)가 이벤트를 받아 토스트("세션이 만료되어 로그인 화면으로 이동합니다.")를 띄우고 1.5초 뒤 `sessionExpiredLoginUrl(현재 경로 + 쿼리)`(`/login?next=…&expired=1`)로 이동한다
 - `/api/auth/me` 조회(헤더, 로그인 화면, 프로젝트 페이지)는 `authFetch`가 아닌 `fetchMe()`를 써서 비로그인 401이 세션 만료로 처리되지 않는다
