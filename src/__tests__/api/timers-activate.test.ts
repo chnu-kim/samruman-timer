@@ -28,6 +28,17 @@ const SCHEDULED_ROW = {
   owner_user_id: "user-1",
 };
 
+const LAST_LOG_ROW = {
+  id: "d".repeat(32),
+  action_type: "ACTIVATE",
+  actor_name: "system",
+  actor_user_id: null,
+  delta_seconds: 0,
+  before_seconds: 3600,
+  after_seconds: 3600,
+  created_at: "2026-10-04T09:50:00.000Z",
+};
+
 function callPost(id = TIMER_ID, headers: Record<string, string> = { "x-user-id": "user-1", "x-user-nickname": encodeURIComponent("방송인") }) {
   const req = createPostRequest(`/api/timers/${id}/activate`, undefined, headers);
   return POST(req as never, { params: Promise.resolve({ id }) } as never);
@@ -89,12 +100,15 @@ describe("POST /api/timers/[id]/activate", () => {
     expect(db.batch).not.toHaveBeenCalled();
   });
 
-  it("이미 RUNNING → 409, 쓰기 없음", async () => {
-    db._stmt.first.mockResolvedValue({ ...SCHEDULED_ROW, status: "RUNNING", scheduled_start_at: null });
+  // 이미 시작됐으면 쓰지 않고 현재 상태 + 마지막 로그로 200. 화면이 곧바로 실행 중으로 바뀐다
+  it("이미 RUNNING → 200 현재 상태, 쓰기 없음", async () => {
+    db._stmt.first
+      .mockResolvedValueOnce({ ...SCHEDULED_ROW, status: "RUNNING", last_calculated_at: "2026-10-04T09:50:00.000Z" })
+      .mockResolvedValueOnce(LAST_LOG_ROW);
     const res = await callPost();
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(200);
     const body = await parseJson(res);
-    expect(body.error.code).toBe("CONFLICT");
+    expect(body.data).toMatchObject({ id: TIMER_ID, status: "RUNNING", remainingSeconds: 3000, log: { id: LAST_LOG_ROW.id, actionType: "ACTIVATE" } });
     expect(db.batch).not.toHaveBeenCalled();
   });
 
@@ -131,10 +145,15 @@ describe("POST /api/timers/[id]/activate", () => {
     expect(binds[updateIdx + 1].slice(1)).toEqual([TIMER_ID, "ACTIVATE", "방송인", "user-1", 0, 3600, 3600, nowStr]);
   });
 
-  it("예약 시각이 이미 지났으면 자동 활성화(시각 기준)가 이기고 → 409", async () => {
-    db._stmt.first.mockResolvedValue({ ...SCHEDULED_ROW, scheduled_start_at: "2026-10-04T09:59:59.000Z" });
+  it("예약 시각이 이미 지났으면 자동 활성화(시각 기준)가 이기고, 지금 시각으로 다시 시작하지 않는다", async () => {
+    db._stmt.first
+      .mockResolvedValueOnce({ ...SCHEDULED_ROW, scheduled_start_at: "2026-10-04T09:59:00.000Z" })
+      .mockResolvedValueOnce(LAST_LOG_ROW);
     const res = await callPost();
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(200);
+    const body = await parseJson(res);
+    // 예약 시각(1분 전)부터 흐른 잔여
+    expect(body.data).toMatchObject({ status: "RUNNING", remainingSeconds: 3540 });
     // 자동 활성화 한 번만 쓰고, 지금 시각 기준의 수동 활성화는 쓰지 않는다
     expect(db.batch).toHaveBeenCalledTimes(1);
     const { binds } = batchCalls(db);
@@ -142,13 +161,17 @@ describe("POST /api/timers/[id]/activate", () => {
     expect(logBind?.[3]).toBe("system");
   });
 
-  it("다른 요청이 먼저 시작했으면(CAS 실패) → 409", async () => {
+  it("다른 요청이 먼저 시작했으면(CAS 실패) → 200 다시 읽은 상태, 로그는 그 요청의 것", async () => {
     db.batch.mockResolvedValueOnce([{ meta: { changes: 0 } }]);
     db._stmt.first
       .mockResolvedValueOnce(SCHEDULED_ROW)
-      .mockResolvedValueOnce({ status: "RUNNING", base_remaining_seconds: 3600, last_calculated_at: NOW.toISOString(), updated_at: NOW.toISOString() });
+      .mockResolvedValueOnce({ status: "RUNNING", base_remaining_seconds: 3600, last_calculated_at: NOW.toISOString(), updated_at: NOW.toISOString() })
+      .mockResolvedValueOnce(LAST_LOG_ROW);
     const res = await callPost();
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(200);
+    const body = await parseJson(res);
+    expect(body.data).toMatchObject({ status: "RUNNING", remainingSeconds: 3600, log: { id: LAST_LOG_ROW.id } });
+    expect(db.batch).toHaveBeenCalledTimes(1);
   });
 
   it("그 사이 삭제됐으면(CAS 실패 후 행 없음) → 404", async () => {

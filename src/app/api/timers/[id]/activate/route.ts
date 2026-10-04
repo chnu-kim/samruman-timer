@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDB, withErrorHandler } from "@/lib/db";
-import { activateTimerNow, calculateRemaining, detectScheduledActivation, ALREADY_STARTED_MESSAGE, TimerStateError } from "@/lib/timer";
-import type { Timer, TimerModifyResponse } from "@/types";
+import { activateTimerNow, calculateRemaining, TimerStateError } from "@/lib/timer";
+import type { ActionType, Timer, TimerLogResponse, TimerModifyResponse } from "@/types";
 
 const ID_PATTERN = /^[0-9a-f]{32}$/;
 
-/** 예약 타이머를 예약 시각 전에 지금 시작한다. 응답은 시간 변경(modify)과 같은 형태다 */
+/**
+ * 예약 타이머를 예약 시각 전에 지금 시작한다. 응답은 시간 변경(modify)과 같은 형태다.
+ * 이미 시작된 타이머(예약 시각 경과로 자동 활성화, 다른 탭에서 먼저 시작)면 쓰지 않고 현재 상태와 마지막 로그로 200을 돌려준다.
+ * 요청자의 목적(타이머가 돌고 있음)은 이미 이뤄졌고, 화면이 그 응답으로 곧바로 실행 중 상태로 바뀌게 하기 위해서다
+ */
 export const POST = withErrorHandler(async (
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -81,20 +85,6 @@ export const POST = withErrorHandler(async (
     updatedAt: row.updated_at,
   };
 
-  // 예약 시각이 이미 지났다면 그 시각 기준의 자동 활성화가 맞다. 지금 시각으로 다시 시작하지 않는다
-  const checked = await detectScheduledActivation(db, timer);
-  if (checked.status !== "SCHEDULED") {
-    const status = checked.status === "DELETED" ? 404 : 409;
-    return NextResponse.json(
-      {
-        error: status === 404
-          ? { code: "NOT_FOUND", message: "타이머를 찾을 수 없습니다" }
-          : { code: "CONFLICT", message: ALREADY_STARTED_MESSAGE },
-      },
-      { status }
-    );
-  }
-
   const rawNickname = request.headers.get("x-user-nickname") ?? "unknown";
   let nickname: string;
   try {
@@ -105,7 +95,7 @@ export const POST = withErrorHandler(async (
 
   let result: Awaited<ReturnType<typeof activateTimerNow>>;
   try {
-    result = await activateTimerNow(db, checked, nickname, userId);
+    result = await activateTimerNow(db, timer, nickname, userId);
   } catch (err) {
     if (err instanceof TimerStateError) {
       return NextResponse.json(
@@ -116,11 +106,21 @@ export const POST = withErrorHandler(async (
     throw err;
   }
 
-  const { timer: activated, log } = result;
+  const { timer: current } = result;
+  const log: TimerLogResponse | null = result.log ?? (await latestLog(db, current.id));
+  if (!log) {
+    // 로그가 없는 타이머는 없다(생성 때 CREATE). 방어적으로만 둔다
+    return NextResponse.json(
+      { error: { code: "CONFLICT", message: "타이머 상태를 확인하지 못했습니다" } },
+      { status: 409 }
+    );
+  }
   const data: TimerModifyResponse = {
-    id: activated.id,
-    remainingSeconds: calculateRemaining(activated.baseRemainingSeconds, activated.lastCalculatedAt),
-    status: activated.status,
+    id: current.id,
+    remainingSeconds: current.status === "RUNNING"
+      ? calculateRemaining(current.baseRemainingSeconds, current.lastCalculatedAt)
+      : 0,
+    status: current.status,
     log: {
       id: log.id,
       actionType: log.actionType,
@@ -135,3 +135,33 @@ export const POST = withErrorHandler(async (
 
   return NextResponse.json({ data });
 });
+
+async function latestLog(db: D1Database, timerId: string): Promise<TimerLogResponse | null> {
+  const row = await db
+    .prepare(
+      `SELECT id, action_type, actor_name, actor_user_id, delta_seconds, before_seconds, after_seconds, created_at
+       FROM timer_logs WHERE timer_id = ? ORDER BY created_at DESC LIMIT 1`
+    )
+    .bind(timerId)
+    .first<{
+      id: string;
+      action_type: string;
+      actor_name: string;
+      actor_user_id: string | null;
+      delta_seconds: number;
+      before_seconds: number;
+      after_seconds: number;
+      created_at: string;
+    }>();
+  if (!row) return null;
+  return {
+    id: row.id,
+    actionType: row.action_type as ActionType,
+    actorName: row.actor_name,
+    actorUserId: row.actor_user_id,
+    deltaSeconds: row.delta_seconds,
+    beforeSeconds: row.before_seconds,
+    afterSeconds: row.after_seconds,
+    createdAt: row.created_at,
+  };
+}

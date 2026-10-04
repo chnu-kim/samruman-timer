@@ -80,14 +80,14 @@ if status === SCHEDULED && now >= scheduledStartAt:
 ### 지금 시작 (수동 ACTIVATE)
 소유자가 예약 시각 전에 시작한다 (`POST /api/timers/[id]/activate`, 구현 `activateTimerNow()`):
 ```
-먼저 위의 lazy 감지를 실행 (예약 시각이 지났으면 그 시각 기준 자동 활성화가 이기고 409)
+먼저 위의 lazy 감지를 실행 (예약 시각이 지났으면 그 시각 기준 자동 활성화가 이긴다. 지금으로 다시 시작하지 않는다)
 if status === SCHEDULED:
   status = RUNNING
   lastCalculatedAt = now
   scheduledStartAt = now   // 실제 시작 시각. 오버레이 '경과' 등 시작 시각을 읽는 곳이 어긋나지 않게
 ```
 - 로그: `ACTIVATE` (delta_seconds = 0, before_seconds = after_seconds = baseRemainingSeconds, created_at = now, actor_name = 소유자 닉네임, actor_user_id = 소유자)
-- 원래 예약 시각은 덮어쓴다. 상태 쓰기는 `STATE_GUARD` 조건이라 동시에 자동 활성화·삭제가 먼저 커밋되면 쓰지 않고 409·404로 끝난다
+- 원래 예약 시각은 덮어쓴다. 상태 쓰기는 `STATE_GUARD` 조건이라 동시에 자동 활성화·삭제가 먼저 커밋되면 쓰지 않는다. 이미 시작된 타이머는 현재 상태를 그대로 돌려주고(200), 삭제됐으면 404
 - 오버레이 주소(타이머 ID)는 그대로이므로 OBS 설정을 바꿀 필요가 없다
 
 ### 시간 추가 (ADD)

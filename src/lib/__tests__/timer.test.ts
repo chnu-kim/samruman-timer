@@ -156,15 +156,27 @@ describe("activateTimerNow", () => {
     expect(db.batch).toHaveBeenCalledTimes(1);
   });
 
-  it("SCHEDULED가 아니면(RUNNING·EXPIRED) 409, 쓰기 없음", async () => {
+  it("예약 시각이 지났으면 그 시각 기준 자동 활성화만 하고 지금으로 다시 시작하지 않는다", async () => {
+    const db = createMockDB();
+    const scheduledStartAt = new Date(Date.now() - 1_000).toISOString(); // 예약 시각 직후
+    const { timer, log } = await activateTimerNow(db, makeTimer({ scheduledStartAt }), "방송인", "user-1");
+    expect(log).toBeNull();
+    expect(timer.status).toBe("RUNNING");
+    expect(timer.lastCalculatedAt).toBe(scheduledStartAt);
+    expect(db.batch).toHaveBeenCalledTimes(1); // 자동 활성화 한 번
+  });
+
+  it("이미 RUNNING이면 쓰지 않고 현재 상태, EXPIRED도 그대로", async () => {
     for (const status of ["RUNNING", "EXPIRED"] as const) {
       const db = createMockDB();
-      await expect(activateTimerNow(db, makeTimer({ status }), "방송인", "user-1")).rejects.toMatchObject({ status: 409, code: "CONFLICT" });
+      const { timer, log } = await activateTimerNow(db, makeTimer({ status, lastCalculatedAt: new Date().toISOString() }), "방송인", "user-1");
+      expect(log).toBeNull();
+      expect(timer.status).toBe(status);
       expect(db.batch).not.toHaveBeenCalled();
     }
   });
 
-  it("CAS 실패 후 다시 읽은 상태가 삭제면 404, 시작됐으면 409", async () => {
+  it("CAS 실패 후 다시 읽은 상태가 삭제면 404, 시작됐으면 그 상태(log 없음)", async () => {
     const deleted = createMockDB();
     deleted.batch.mockResolvedValueOnce([{ meta: { changes: 0 } }]);
     const err = await activateTimerNow(deleted, makeTimer(), "방송인", "user-1").catch((e) => e);
@@ -173,8 +185,11 @@ describe("activateTimerNow", () => {
 
     const started = createMockDB();
     started.batch.mockResolvedValueOnce([{ meta: { changes: 0 } }]);
-    started._stmt.first.mockResolvedValueOnce({ status: "RUNNING", base_remaining_seconds: 3600, last_calculated_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z" });
-    await expect(activateTimerNow(started, makeTimer(), "방송인", "user-1")).rejects.toMatchObject({ status: 409 });
+    const startedAt = new Date().toISOString();
+    started._stmt.first.mockResolvedValueOnce({ status: "RUNNING", base_remaining_seconds: 3600, last_calculated_at: startedAt, updated_at: startedAt });
+    const result = await activateTimerNow(started, makeTimer(), "방송인", "user-1");
+    expect(result.log).toBeNull();
+    expect(result.timer.status).toBe("RUNNING");
   });
 });
 

@@ -31,7 +31,7 @@
 | 401 | `UNAUTHORIZED` | 인증 필요 |
 | 403 | `FORBIDDEN` | 권한 없음 |
 | 404 | `NOT_FOUND` | 리소스 없음 |
-| 409 | `CONFLICT` | 동시 변경과 계속 겹침 (`POST /api/timers/[id]/modify`), 이미 시작된 타이머 (`POST /api/timers/[id]/activate`) |
+| 409 | `CONFLICT` | 동시 변경과 계속 겹침 (`POST /api/timers/[id]/modify`) |
 | 500 | `INTERNAL_ERROR` | 서버 오류 |
 | 503 | `SERVICE_UNAVAILABLE` | 원격 D1 스키마가 코드보다 뒤처짐 (`GET /api/health`) |
 
@@ -515,15 +515,15 @@ CHZZK OAuth 콜백을 처리한다.
 - **인증**: 필요 (프로젝트 소유자만)
 - **요청 본문**: 없음
 - **동작**:
-  - 먼저 예약 활성화 감지를 실행한다. 예약 시각이 이미 지났으면 그 시각 기준으로 자동 활성화되고(`actor_name` = `'system'`) 이 요청은 `409`로 끝난다
+  - 먼저 예약 활성화 감지를 실행한다. 예약 시각이 이미 지났으면 그 시각 기준으로 자동 활성화된다(`actor_name` = `'system'`). 지금 시각으로 다시 시작하지 않는다
   - 아직 예약 상태면 `status = RUNNING`, `last_calculated_at = scheduled_start_at = now`로 바꾸고 `ACTIVATE` 로그를 남긴다(`actor_name` = 소유자 닉네임, `actor_user_id` = 소유자, delta 0, before = after = 잔여). 상태 쓰기는 `STATE_GUARD` 조건이라 다른 요청이 먼저 시작·삭제했으면 쓰지 않는다
+  - 이미 시작된 타이머(자동 활성화, 다른 탭에서 먼저 시작, `RUNNING`·`EXPIRED`)는 아무것도 쓰지 않고 현재 상태로 `200`을 준다. 요청의 목적(타이머가 돌고 있음)은 이미 이뤄졌고, 화면이 이 응답으로 곧바로 실행 중 상태로 바뀌게 하기 위해서다
 - **에러**:
   - `400`: 타이머 ID가 32자 hex가 아님
   - `401`: 인증 없음
   - `403`: 프로젝트 소유자 아님
   - `404`: 타이머 없음 또는 삭제됨 (처리 중 다른 요청이 삭제한 경우 포함)
-  - `409`: 이미 시작됨(`RUNNING`·`EXPIRED`, 예약 시각 경과로 자동 활성화된 경우 포함)
-- **응답**: `200 OK`. 형태는 `POST /api/timers/[id]/modify`와 같다(`log`는 이번 `ACTIVATE` 로그)
+- **응답**: `200 OK`. 형태는 `POST /api/timers/[id]/modify`와 같다(`log`는 이번 `ACTIVATE` 로그, 이미 시작된 타이머면 그 타이머의 마지막 로그)
 ```json
 {
   "data": {
