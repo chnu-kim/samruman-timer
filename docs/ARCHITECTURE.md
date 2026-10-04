@@ -201,7 +201,7 @@ open-next.config.ts                     — @opennextjs/cloudflare 설정 (기�
   → 302 → /api/auth/callback?code=xxx&state=yyy
   → 서버: state 검증 → 토큰 교환 → 사용자 정보 조회/생성
   → 서버: access JWT + refresh token 발급 → session, refresh httpOnly 쿠키 설정
-  → 302 → next 경로 또는 /  (실패 시 /login?error=auth_failed)
+  → 302 → next 경로 또는 /  (실패 시 /login?error=auth_failed[&next=경로], 동의 취소 시 /login[?next=경로])
 ```
 
 ## Cloudflare 배포

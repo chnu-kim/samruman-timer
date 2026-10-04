@@ -57,7 +57,7 @@ CHZZK OAuth 콜백을 처리한다.
   - `code` (string, 필수): Authorization code
   - `state` (string, 필수): CSRF state
 - **응답**: `302 Redirect` → `oauth_next` 쿠키의 경로(다시 검증), 없으면 `/` (세션 쿠키 설정, `oauth_next` 삭제)
-- **에러**: `code`·`state` 누락, state 불일치(state 쿠키 대조), 토큰 교환·사용자 조회 실패 시 `/login?error=auth_failed`로 리다이렉트(`oauth_next` 삭제)
+- **에러**: `state` 누락, state 불일치(state 쿠키 대조), 토큰 교환·사용자 조회 실패 시 `/login?error=auth_failed`로 리다이렉트. `code` 누락(동의 화면 취소 등)은 `error` 없이 `/login`으로. 어느 쪽이든 `oauth_next`를 다시 검증해 `&next=`로 싣고 쿠키는 삭제
 
 ### POST /api/auth/logout
 

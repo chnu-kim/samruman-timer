@@ -80,14 +80,15 @@ describe("GET /api/auth/callback", () => {
     expect(res.headers.get("Location")).toContain("/login?error=auth_failed");
   });
 
-  it("code 없음 → 에러 리다이렉트", async () => {
+  // C154: 동의 화면에서 취소하면 code 없이 돌아온다. 실패가 아니므로 오류 안내 없이 로그인 화면으로 보낸다
+  it("code 없음(취소) → 오류 없이 로그인 화면으로", async () => {
     const req = createCallbackReq(
       { state: "state-1" },
       { "__Host-oauth_state": "state-1" }
     );
     const res = await GET(req as never);
     expect(res.status).toBe(307);
-    expect(res.headers.get("Location")).toContain("/login?error=auth_failed");
+    expect(res.headers.get("Location")).toBe("http://localhost:3000/login");
   });
 
   it("정상 콜백 (신규 사용자) → DB insert + JWT 쿠키 + 리다이렉트", async () => {
@@ -328,20 +329,47 @@ describe("GET /api/auth/callback — next 리다이렉트", () => {
     expect(res.headers.get("Location")).toBe("http://localhost:3000/");
   });
 
-  it("state가 맞지 않으면 next를 쓰지 않고 oauth_next를 지운다", async () => {
+  // C154: 실패해도 돌아갈 경로를 잃지 않게 next를 로그인 화면 URL로 넘긴다. 그 경로로 바로 보내지는 않는다
+  it("state가 맞지 않으면 next로 이동하지 않고 로그인 화면 URL에 실어 보내며 oauth_next를 지운다", async () => {
     const req = createCallbackReq(
       { code: "valid-code", state: "state-1" },
-      { "__Host-oauth_state": "other", oauth_next: encodeURIComponent("/timers/abc") }
+      { "__Host-oauth_state": "other", oauth_next: encodeURIComponent("/timers/abc?tab=logs") }
     );
     const res = await GET(req as never);
-    expect(res.headers.get("Location")).toBe("http://localhost:3000/login?error=auth_failed");
+    expect(res.headers.get("Location")).toBe(
+      `http://localhost:3000/login?error=auth_failed&next=${encodeURIComponent("/timers/abc?tab=logs")}`
+    );
     expect(nextCookie(res)).toMatch(/Max-Age=0|Expires=Thu, 01 Jan 1970/i);
   });
 
-  it("토큰 교환이 실패해도 oauth_next를 지운다", async () => {
+  it("토큰 교환이 실패해도 next를 로그인 화면 URL로 넘기고 oauth_next를 지운다", async () => {
     vi.mocked(exchangeCode).mockRejectedValue(new Error("fail"));
     const res = await GET(successReq("/timers/abc") as never);
-    expect(res.headers.get("Location")).toContain("/login?error=auth_failed");
+    expect(res.headers.get("Location")).toBe(
+      `http://localhost:3000/login?error=auth_failed&next=${encodeURIComponent("/timers/abc")}`
+    );
     expect(nextCookie(res)).toMatch(/Max-Age=0|Expires=Thu, 01 Jan 1970/i);
   });
+
+  it("취소(code 없음)는 오류 없이 next만 로그인 화면 URL로 넘긴다", async () => {
+    const req = createCallbackReq(
+      { state: "state-1" },
+      { "__Host-oauth_state": "state-1", oauth_next: encodeURIComponent("/timers/abc") }
+    );
+    const res = await GET(req as never);
+    expect(res.headers.get("Location")).toBe(`http://localhost:3000/login?next=${encodeURIComponent("/timers/abc")}`);
+    expect(nextCookie(res)).toMatch(/Max-Age=0|Expires=Thu, 01 Jan 1970/i);
+  });
+
+  it.each(["//evil.com", "/login", "/api/auth/me"])(
+    "실패 때 쿠키의 next(%s)가 허용되지 않으면 URL에 싣지 않는다",
+    async (next) => {
+      const req = createCallbackReq(
+        { code: "valid-code", state: "state-1" },
+        { "__Host-oauth_state": "other", oauth_next: encodeURIComponent(next) }
+      );
+      const res = await GET(req as never);
+      expect(res.headers.get("Location")).toBe("http://localhost:3000/login?error=auth_failed");
+    }
+  );
 });
