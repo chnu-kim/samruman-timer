@@ -523,7 +523,7 @@ export default function ProjectDetailPage() {
       <ConfirmDialog
         open={showTimerDeleteDialog}
         title="타이머 삭제"
-        description="삭제하면 OBS 오버레이가 즉시 표시되지 않으며 되돌릴 수 없습니다. 목표 기록은 남습니다."
+        description="삭제하면 방송 화면의 오버레이가 사라지며 되돌릴 수 없습니다. 목표 기록은 남습니다."
         confirmLabel="삭제"
         variant="danger"
         onConfirm={handleDeleteTimer}
