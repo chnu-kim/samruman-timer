@@ -80,6 +80,9 @@ function ConnectionLostBadge({ lastSyncedAtMs, className }: { lastSyncedAtMs: nu
   );
 }
 
+/** 오류 상태인 기록·그래프를 폴링 성공 때 다시 불러오는 최소 간격(목표의 30초 재요청과 같다) */
+const ERROR_RETRY_INTERVAL_MS = 30_000;
+
 /** 폴링 한 번의 응답 대기 한도. 넘으면 실패 1회로 센다 */
 const POLL_TIMEOUT_MS = 10_000;
 
@@ -147,10 +150,18 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
   // silent: 폴링이 부르는 백그라운드 갱신. 로딩 표시 없이 기존 목록을 둔 채 새 데이터로 바꾸고, 실패해도 보이던 목록을 오류로 바꾸지 않는다.
   // 직접 부른 조회(첫 로드·필터·페이지·펼침·다시 시도)가 실패하면 다른 조건의 목록이 남지 않게 비우고 오류 줄을 띄운다.
   // 비-ok 응답과 예외는 같은 실패다. 401은 세션 만료 안내가 맡는다(이 GET은 공개라 보통 오지 않는다)
+  // 요청이 겹치면(폴링·조작·필터 변경) 가장 나중에 보낸 요청의 결과만 반영한다. 늦게 도착한 옛 조건의 응답이
+  // 새 조건의 오류·목록을 덮지 않게 하기 위해서다. 로딩 표시는 끝나지 않은 직접 조회가 남아 있는 동안 유지한다
+  const logsSeqRef = useRef(0);
+  const logsPendingRef = useRef(0);
   const fetchLogs = useCallback(async (page: number, filters: Set<ActionType>, expanded: boolean, { silent = false } = {}) => {
-    if (!silent) setLogsLoading(true);
+    const seq = ++logsSeqRef.current;
+    if (!silent) {
+      logsPendingRef.current += 1;
+      setLogsLoading(true);
+    }
     const fail = () => {
-      if (silent) return;
+      if (silent || seq !== logsSeqRef.current) return;
       setLogs(null);
       setLogsError(true);
     };
@@ -165,6 +176,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
       const res = await authFetch(`/api/timers/${timerId}/logs?${params}`);
       if (res.ok) {
         const json = (await res.json()) as ApiSuccessResponse<TimerLogsResponse>;
+        if (seq !== logsSeqRef.current) return;
         setLogs(json.data.logs);
         setLogTotalPages(json.data.pagination.totalPages);
         setLogsError(false);
@@ -174,7 +186,10 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
     } catch {
       fail();
     } finally {
-      if (!silent) setLogsLoading(false);
+      if (!silent) {
+        logsPendingRef.current -= 1;
+        if (logsPendingRef.current === 0) setLogsLoading(false);
+      }
     }
   }, [timerId]);
 
@@ -229,6 +244,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
 
   // 실패(네트워크 오류·5xx)는 잡지 않고 reject로 넘긴다. 화면은 마지막 값으로 로컬 카운트를 이어 가고,
   // 연속 실패 횟수는 usePolling이 세어 연결 상태로 돌려준다
+  const errorRetryAtRef = useRef(0);
   const pollTimer = useCallback(async () => {
     // 응답 없이 멈춘 요청(연결은 살아 있는데 패킷이 안 오는 경우)도 실패로 세도록 시간 제한을 둔다
     const controller = new AbortController();
@@ -272,9 +288,13 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
       onTimeChanged?.();
       return;
     }
-    // 기록·그래프가 오류 상태면 서버가 응답하는 지금 조용히 다시 불러온다. 성공하면 오류 줄이 사라진다
-    if (logsError) fetchLogs(logPage, activeFilters, logsExpanded, { silent: true });
-    if (graphError) fetchGraph({ silent: true });
+    // 기록·그래프가 오류 상태면 서버가 응답하는 지금 조용히 다시 불러온다. 성공하면 오류 줄이 사라진다.
+    // 계속 실패하는 엔드포인트를 폴링마다 두드리지 않게 목표와 같은 30초 간격으로만 한다
+    if ((logsError || graphError) && Date.now() - errorRetryAtRef.current >= ERROR_RETRY_INTERVAL_MS) {
+      errorRetryAtRef.current = Date.now();
+      if (logsError) fetchLogs(logPage, activeFilters, logsExpanded, { silent: true });
+      if (graphError) fetchGraph({ silent: true });
+    }
   }, [timerId, logPage, activeFilters, logsExpanded, logsError, graphError, fetchLogs, fetchGraph, onTimeChanged]);
 
   const connection = usePolling({
@@ -290,7 +310,8 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
     const wasDisconnected = wasDisconnectedRef.current;
     wasDisconnectedRef.current = connection.disconnected;
     if (!wasDisconnected || connection.disconnected) return;
-    fetchLogs(logPage, activeFilters, logsExpanded, { silent: true });
+    // 펼친 기록의 2페이지 이후를 보고 있으면 목록이 밀리지 않게 오류일 때만 다시 불러온다(폴링의 규칙과 같다)
+    if (logPage === 1 || logsError) fetchLogs(logPage, activeFilters, logsExpanded, { silent: true });
     fetchGraph({ silent: true });
     onTimeChanged?.();
     // 전이 시점에만 부른다. 나머지 값은 그 순간의 것을 읽으면 된다
@@ -305,7 +326,8 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
     );
     // optimistic 호출(log.id 없음)에서는 기록·그래프·목표 갱신 생략
     if (data.log?.id) {
-      fetchLogs(1, activeFilters, logsExpanded);
+      // silent: 갱신이 실패해도 방금까지 보이던 목록을 오류 줄로 바꾸지 않는다(오류 상태였다면 성공 시 풀린다)
+      fetchLogs(1, activeFilters, logsExpanded, { silent: true });
       setLogPage(1);
       fetchGraph();
       onTimeChanged?.();
@@ -598,7 +620,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                 <Spinner />
               </div>
             ) : graphError ? (
-              <ErrorState compact className="h-64 py-0" message="그래프를 불러오지 못했습니다." onRetry={() => fetchGraph()} />
+              <ErrorState compact className="h-64" message="그래프를 불러오지 못했습니다." onRetry={() => fetchGraph()} />
             ) : graphData?.mode === "remaining" ? (
               <RemainingChart points={graphData.points} />
             ) : null}
