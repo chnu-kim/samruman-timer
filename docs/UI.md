@@ -147,36 +147,41 @@ RootLayout (ThemeProvider, ToastProvider, SessionExpiredHandler)
 
 ## Recharts 그래프 설계
 
+### 공통 축·접근성
+
+- X축: 로그 발생 시각(ms)을 `type="number" scale="time"`으로 그린다. 기록 순번(category 축)으로 그리면 같은 분에 몰린 기록과 몇 시간 뒤 기록이 같은 간격이 되고, 눈금 라벨이 같은 값으로 되풀이된다. 눈금은 `buildTimeAxis`(`src/lib/utils.ts`)가 로컬 시각의 깔끔한 경계(5분·1시간·3시간·자정 등)에 최대 5개 두고, 라벨은 `HH:mm`이다. 눈금이 여러 날에 걸치면 첫 눈금과 날짜가 바뀌는 눈금에만 `MM. DD.`를 붙인다
+- Y축: `durationAxisTicks`가 0부터 정수 시간(1·2·3·4·5·6·10·12·…·25·50·100시간) 또는 분(1·2·5·10·15·30분) 간격으로 최대 4칸을 만들고, 라벨은 `4시간`·`30분`처럼 한국어 한 단위다
+- 접근성: Recharts `accessibilityLayer={false}`로 내부 Tab 정지점·눈금 나열 이름을 없애고, 감싸는 `role="img"`의 `aria-label`에 요약을 넣는다(잔여: 기록 수·마지막 기록·최고값, 누적: 누적 추가·차감)
+
 ### 잔여 시간 추이 (LineChart, 콘솔)
 
 ```tsx
-<LineChart data={points}>
-  <XAxis dataKey="timestamp" />
-  <YAxis label="잔여 시간 (시)" />
+<LineChart data={points} accessibilityLayer={false}>
+  <XAxis dataKey="t" type="number" scale="time" ticks={...} />
+  <YAxis ticks={durationAxisTicks(max)} />
   <Tooltip />
-  <Line type="stepAfter" dataKey="remainingSeconds" />
+  <Line type="stepAfter" dataKey="remainingSeconds" stroke="var(--color-accent)" />
 </LineChart>
 ```
 
-- X축: 시간 (로그 발생 시점)
-- Y축: 잔여 시간 (초 → 시간 단위 변환 표시)
-- stepAfter 보간: 이벤트 시점에 값이 변하고, 자연 감소는 직선으로 표현
-- 포인트: 각 로그 이벤트 시점
+- 점: 각 로그 이벤트 시점의 변경 후 잔여 시간(`after_seconds`)
+- stepAfter 보간: 이벤트 시점에 값이 바뀐다. 실행 중 자연 감소는 그리지 않는다(점 사이가 평평하다)
+- 선 색은 앱 강조색 토큰(`--color-accent`)
 
 ### 누적 변경량 (AreaChart, 통계 화면)
 
 ```tsx
-<AreaChart data={points}>
-  <XAxis dataKey="timestamp" />
-  <YAxis label="누적 (시)" />
+<AreaChart data={points} accessibilityLayer={false}>
+  <XAxis dataKey="t" type="number" scale="time" ticks={...} />
+  <YAxis ticks={durationAxisTicks(max)} />
   <Tooltip />
-  <Area type="monotone" dataKey="totalAdded" fill="green" />
-  <Area type="monotone" dataKey="totalSubtracted" fill="red" />
+  <Area type="stepAfter" dataKey="totalAdded" fill="green" />
+  <Area type="stepAfter" dataKey="totalSubtracted" fill="red" />
 </AreaChart>
 ```
 
 - 누적 추가량 (초록 영역)과 누적 차감량 (빨강 영역)을 겹쳐 표시
-- 시간에 따른 총 투입량 대비 차감량 시각화
+- 누적량은 이벤트 시점에만 바뀌므로 stepAfter로 그린다. 곡선(monotone)은 이벤트 사이에 없는 중간값을 그린다
 
 그래프 API(`/api/timers/[id]/graph`)는 `mode=frequency`(시간대별 이벤트 횟수)도 계속 지원하지만, 화면에서는 통계의 `HourlyActivityChart`가 같은 정보를 보여 주므로 쓰지 않는다.
 

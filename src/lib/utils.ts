@@ -9,20 +9,112 @@ export function formatHoursFromSeconds(seconds: number): string {
   return `${h}시간`;
 }
 
+const MINUTE = 60;
+const HOUR = 3600;
+
+// Y축 눈금 간격 후보(초). 1시간 미만은 15·30분처럼 분 단위로 떨어지고, 그 위는 정수 시간이다.
+const DURATION_TICK_STEPS = [
+  1, 2, 5, 10, 15, 30,
+].map((m) => m * MINUTE).concat(
+  [1, 2, 3, 4, 5, 6, 10, 12, 20, 24, 25, 50, 100].map((h) => h * HOUR)
+);
+
 /**
- * 그래프 Y축 눈금(초)을 읽을 수 있는 단위로 바꾼다.
- * 축 최댓값이 2시간 미만이면 분, 아니면 시간 단위이고, 소수 한 자리까지 쓴다.
- * 정수로 반올림하면 '1h, 1h, 0h'처럼 눈금 라벨이 겹친다.
+ * 그래프 Y축(초 단위 값)의 눈금을 0부터 깔끔한 간격으로 만든다.
+ * 간격은 최대 4칸이 되도록 고르고, 마지막 눈금이 축의 최댓값이 된다.
+ * 최댓값을 등분하면 '16.7h, 12.5h, 8.3h'처럼 바로 읽히지 않는 값이 나온다.
  */
-export function formatAxisSeconds(seconds: number, maxSeconds: number): string {
-  if (maxSeconds < 7200) {
-    return `${Number((seconds / 60).toFixed(1))}m`;
-  }
-  return `${Number((seconds / 3600).toFixed(1))}h`;
+export function durationAxisTicks(maxSeconds: number): number[] {
+  const max = Math.max(0, maxSeconds);
+  const step =
+    DURATION_TICK_STEPS.find((s) => Math.ceil(max / s) <= 4) ??
+    Math.ceil(max / 4 / (100 * HOUR)) * 100 * HOUR;
+  const count = Math.max(1, Math.ceil(max / step));
+  return Array.from({ length: count + 1 }, (_, i) => i * step);
 }
 
-export function formatTimestampShort(iso: string): string {
-  const d = new Date(iso);
+/**
+ * Y축 눈금 라벨. 간격이 1시간 이상이면 '4시간', 미만이면 '30분'·'90분'처럼 한 단위로 쓴다.
+ * '1시간 30분'처럼 두 단위를 쓰면 축 폭을 넘는다.
+ */
+export function formatDurationTick(seconds: number, ticks: number[]): string {
+  if (seconds === 0) return "0";
+  const step = ticks.length > 1 ? ticks[1] - ticks[0] : HOUR;
+  if (step >= HOUR) return `${Math.round(seconds / HOUR)}시간`;
+  return `${Math.round(seconds / MINUTE)}분`;
+}
+
+// X축(시각) 눈금 간격 후보(ms). 모두 하루를 나누어떨어지게 해서 로컬 자정에 맞춘다.
+const TIME_TICK_STEPS = [10, 30].map((s) => s * 1000).concat(
+  [1, 2, 5, 10, 15, 30].map((m) => m * MINUTE * 1000),
+  [1, 2, 3, 6, 12, 24].map((h) => h * HOUR * 1000)
+);
+const DAY_MS = 24 * HOUR * 1000;
+
+/**
+ * 시간축 눈금(ms)을 로컬 시각의 깔끔한 경계(5분, 1시간, 자정 등)에 맞춰 최대 maxCount개 만든다.
+ * 범위가 없으면(점 하나) 그 시각 하나만 돌려준다.
+ */
+export function timeAxisTicks(minMs: number, maxMs: number, maxCount = 5): number[] {
+  if (!(maxMs > minMs)) return [minMs];
+  const span = maxMs - minMs;
+  const step =
+    TIME_TICK_STEPS.find((s) => Math.floor(span / s) + 1 <= maxCount) ??
+    Math.ceil(span / (maxCount - 1) / DAY_MS) * DAY_MS;
+  const midnight = new Date(minMs);
+  midnight.setHours(0, 0, 0, 0);
+  const base = midnight.getTime();
+  const ticks: number[] = [];
+  for (let t = base + Math.ceil((minMs - base) / step) * step; t <= maxMs; t += step) {
+    ticks.push(t);
+  }
+  return ticks.length > 0 ? ticks : [minMs];
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/**
+ * 시간축 눈금 라벨. 'HH:mm'만 쓰고, 눈금이 여러 날에 걸치면 첫 눈금과 날짜가 바뀌는 눈금에만
+ * 'MM. DD.'를 붙인다. 초 단위 간격이면 'HH:mm:ss'.
+ * 눈금마다 날짜를 반복하던 'MM. DD. HH:mm' 형식은 같은 분에 몰린 기록에서 같은 라벨이 되풀이됐다.
+ */
+export function formatTimeTicks(ticks: number[]): string[] {
+  const dates = ticks.map((t) => new Date(t));
+  const withSeconds = dates.some((d) => d.getSeconds() !== 0);
+  const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  const multiDay = new Set(dates.map(dayKey)).size > 1;
+  return dates.map((d, i) => {
+    const time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}${withSeconds ? `:${pad2(d.getSeconds())}` : ""}`;
+    const showDate = multiDay && (i === 0 || dayKey(dates[i - 1]) !== dayKey(d));
+    return showDate ? `${pad2(d.getMonth() + 1)}. ${pad2(d.getDate())}. ${time}` : time;
+  });
+}
+
+/**
+ * 시각(ms) 목록으로 시간축의 범위·눈금·라벨을 만든다. 점이 하나뿐이면 앞뒤 5분을 둔다.
+ * 라벨은 눈금 값으로 찾는다(Recharts tickFormatter는 값을 넘긴다).
+ */
+export function buildTimeAxis(times: number[]): {
+  domain: [number, number];
+  ticks: number[];
+  label: (t: number) => string;
+} {
+  let min = Math.min(...times);
+  let max = Math.max(...times);
+  if (min === max) {
+    min -= 5 * MINUTE * 1000;
+    max += 5 * MINUTE * 1000;
+  }
+  const ticks = timeAxisTicks(min, max);
+  const labels = new Map(formatTimeTicks(ticks).map((l, i) => [ticks[i], l]));
+  return { domain: [min, max], ticks, label: (t) => labels.get(t) ?? "" };
+}
+
+/** ISO 문자열이나 ms 시각을 'MM. DD. HH:mm'으로. 그래프 툴팁 머리글에 쓴다. */
+export function formatTimestampShort(time: string | number): string {
+  const d = new Date(time);
   return d.toLocaleString("ko-KR", {
     month: "2-digit",
     day: "2-digit",
