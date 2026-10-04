@@ -258,6 +258,47 @@ describe("TimerControls", () => {
       expect((document.querySelector("[data-quick-bar]") as HTMLElement).classList.contains("hidden")).toBe(false);
     });
 
+    it("재시작 안내로 옮길 때 스크롤하지 않는다(preventScroll)", () => {
+      const { rerender } = render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3} initialAction="SUBTRACT" />);
+      act(() => screen.getByRole("radio", { name: "차감" }).focus());
+      const focusSpy = vi.spyOn(HTMLElement.prototype, "focus");
+      try {
+        rerender(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3} initialAction="SUBTRACT" expired />);
+        const notice = screen.getByText("시간을 추가하면 다시 시작됩니다");
+        expect(document.activeElement).toBe(notice);
+        const call = focusSpy.mock.contexts.findIndex((el) => el === notice);
+        expect(focusSpy.mock.calls[call]).toEqual([{ preventScroll: true }]);
+      } finally {
+        focusSpy.mockRestore();
+      }
+    });
+
+    // 빈 곳 클릭은 relatedTarget 없이 body로 포커스를 보낸다. 그 뒤 만료돼도 보던 위치에서 끌어오지 않는다
+    it("토글에서 빈 곳으로 포커스가 빠진(relatedTarget 없음) 뒤 만료되면 포커스를 옮기지 않는다", async () => {
+      const { rerender } = render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3} initialAction="SUBTRACT" />);
+      const radio = screen.getByRole("radio", { name: "차감" });
+      act(() => radio.focus());
+      act(() => radio.blur());
+      expect(document.activeElement).toBe(document.body);
+      await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+
+      rerender(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3} initialAction="SUBTRACT" expired />);
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    // 창 전환(OBS로 이동)은 relatedTarget 없이 blur가 오지만 activeElement는 radio로 남는다. 이때는 여전히 토글 안이다
+    it("창 전환으로 blur만 오고 activeElement가 radio면 만료 때 재시작 안내로 옮긴다", async () => {
+      const { rerender } = render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3} initialAction="SUBTRACT" />);
+      const radio = screen.getByRole("radio", { name: "차감" });
+      act(() => radio.focus());
+      fireEvent.blur(radio);
+      await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+      expect(document.activeElement).toBe(radio);
+
+      rerender(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3} initialAction="SUBTRACT" expired />);
+      expect(document.activeElement).toBe(screen.getByText("시간을 추가하면 다시 시작됩니다"));
+    });
+
     it("포커스가 토글 밖에 있으면 만료돼도 포커스를 옮기지 않는다", () => {
       const { rerender } = render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3} initialAction="SUBTRACT" />);
       const radio = screen.getByRole("radio", { name: "차감" });
@@ -954,6 +995,27 @@ describe("TimerControls", () => {
       fireEvent.change(input, { target: { value: "치즈냥" } });
       expect(screen.queryByText(NICKNAME_PROMPT_MESSAGE)).not.toBeInTheDocument();
       await act(async () => {});
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    // 바 안내와 폼 오류는 같은 뜻이라 한 줄만 남긴다(어느 순서로 눌러도)
+    it("바 탭 뒤 Enter로 제출해도, 제출 뒤 바를 눌러도 alert는 하나다", () => {
+      render(<Harness timerId={timerId} status="RUNNING" />);
+      fireEvent.click(quickBar().getByRole("button", { name: "+1시간" }));
+      fireEvent.submit(screen.getByLabelText("시청자 닉네임").closest("form")!);
+      expect(screen.getAllByRole("alert")).toHaveLength(1);
+      expect(screen.getByRole("alert")).toHaveTextContent(NICKNAME_PROMPT_MESSAGE);
+    });
+
+    it("닉네임 없이 제출한 뒤 바를 누르면 폼 오류가 내려가고 안내 한 줄만 남는다", () => {
+      render(<Harness timerId={timerId} status="RUNNING" />);
+      fireEvent.change(screen.getAllByLabelText("분")[0], { target: { value: "10" } });
+      fireEvent.submit(screen.getByLabelText("시청자 닉네임").closest("form")!);
+      expect(screen.getByRole("alert")).toHaveTextContent(NICKNAME_REQUIRED_MESSAGE);
+      // 값이 있으면 바는 제출 버튼 하나다. 닉네임이 없으니 입력란으로 안내한다
+      fireEvent.click(quickBar().getAllByRole("button")[0]);
+      expect(screen.getAllByRole("alert")).toHaveLength(1);
+      expect(screen.getByRole("alert")).toHaveTextContent(NICKNAME_PROMPT_MESSAGE);
       expect(mockFetch).not.toHaveBeenCalled();
     });
 

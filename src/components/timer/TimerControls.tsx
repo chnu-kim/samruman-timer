@@ -156,6 +156,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   const [typing, setTyping] = useState(false);
   // 추가/차감 토글에 포커스가 있는지. 만료로 토글이 사라질 때 포커스가 body로 떨어지지 않게 재시작 안내로 옮긴다
   const actionFocusedRef = useRef(false);
+  const actionWrapperRef = useRef<HTMLDivElement>(null);
   const restartNoticeRef = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
@@ -178,8 +179,23 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
     actionFocusedRef.current = false;
     const active = document.activeElement;
     if (active && active !== document.body && document.contains(active)) return;
-    restartNoticeRef.current?.focus();
+    // 사용자가 보던 위치(기록·그래프)로 화면이 끌려가지 않게 스크롤은 하지 않는다
+    restartNoticeRef.current?.focus({ preventScroll: true });
   }, [expired]);
+
+  // 토글을 떠난 blur. relatedTarget이 있으면 그 자리에서 판단하고, 없으면(빈 곳 클릭·창 전환·노드 제거) 다음 틱에 본다.
+  // 그때 토글이 아직 화면에 있고 포커스가 그 밖이면 실제로 떠난 것이다. 노드 제거로 생긴 blur는 같은 커밋의
+  // layout effect가 먼저 처리하고 토글이 사라져 있으므로 건드리지 않는다. 창 전환은 activeElement가 radio로 남아 유지된다
+  function handleActionBlur(e: React.FocusEvent<HTMLDivElement>) {
+    if (e.relatedTarget) {
+      if (!e.currentTarget.contains(e.relatedTarget as Node)) actionFocusedRef.current = false;
+      return;
+    }
+    setTimeout(() => {
+      const wrapper = actionWrapperRef.current;
+      if (wrapper && wrapper.isConnected && !wrapper.contains(document.activeElement)) actionFocusedRef.current = false;
+    }, 0);
+  }
   const action: ModifyAction = expired ? "ADD" : selectedAction;
   const actionLabel = action === "ADD" ? "추가" : "차감";
   // 즉시 적용(모바일 하단 바·숫자 단축키)이 기록할 닉네임. 표시와 제출이 어긋나지 않도록 한 곳에서 정한다
@@ -197,7 +213,11 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
    */
   function focusNickname(withAlert: boolean) {
     const input = actorInputRef.current;
-    if (withAlert) setNicknamePrompt(true);
+    if (withAlert) {
+      setNicknamePrompt(true);
+      // 같은 뜻의 폼 오류가 떠 있으면 내린다(입력란 아래 안내 한 줄만 남긴다)
+      setError((prev) => (prev === NICKNAME_REQUIRED_MESSAGE ? "" : prev));
+    }
     if (!input) return;
     input.focus();
     input.scrollIntoView?.({ block: "center" });
@@ -334,7 +354,8 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!actorName.trim()) {
-      setError(NICKNAME_REQUIRED_MESSAGE);
+      // 바가 띄운 입력란 안내가 이미 같은 말을 하고 있으면 폼 오류를 겹쳐 띄우지 않는다
+      if (!nicknamePrompt) setError(NICKNAME_REQUIRED_MESSAGE);
       return;
     }
     if (totalSeconds <= 0) {
@@ -513,8 +534,9 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
         {/* 추가/차감 토글. X 단축키는 포커스를 받는 라디오에 알려야 스크린리더가 읽는다. 만료면 추가만 되므로 숨긴다 */}
         {!expired && (
           <div
+            ref={actionWrapperRef}
             onFocus={() => { actionFocusedRef.current = true; }}
-            onBlur={(e) => { if (e.relatedTarget && !e.currentTarget.contains(e.relatedTarget as Node)) actionFocusedRef.current = false; }}
+            onBlur={handleActionBlur}
           >
             <span id={actionGroupLabelId} className="mb-1.5 block text-sm font-medium text-foreground">변경 유형</span>
             <SegmentedControl
