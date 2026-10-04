@@ -225,7 +225,7 @@
 - **근거**: [12-timer-overlay-settings--d-light.png](ux-review/12-timer-overlay-settings--d-light.png), [12-timer-overlay-settings--m-light.png](ux-review/12-timer-overlay-settings--m-light.png) · `src/components/timer/OverlaySettings.tsx:250, 468-544`
 
 #### UX-22. 오버레이 미리보기가 고정 높이 200px에 실제 크기로 렌더되어 1080p 출력과 비율이 다르다
-- **상태**: 해결(C063) — iframe을 1920x1080으로 그리고 `aspect-video` 상자 안에서 `transform: scale(상자폭/1920)`으로 줄인다. 상자 폭은 ResizeObserver로 잰다. 미리보기를 URL 바로 아래로 올리고, 세로 여유가 있는 데스크톱(폭 768px·높이 800px 이상)에서는 sticky로 붙였다. 200px·우하단 설정도 잘리지 않고 위치가 보인다.
+- **상태**: 해결(C063) — iframe을 1920x1080으로 그리고 `aspect-video` 상자 안에서 `transform: scale(상자폭/1920)`으로 줄인다. 상자 폭은 ResizeObserver로 잰다. 미리보기를 URL 바로 아래로 올리고, 세로 여유가 있는 데스크톱(폭 768px·높이 896px 이상)에서는 sticky로 붙였다. 200px·우하단 설정도 잘리지 않고 위치가 보인다.
 - **심각도**: minor · **영역**: 오버레이
 - **관찰**: 620x198 iframe이 축소 없이 1:1로 그린다. 96px이면 미리보기를 거의 다 채우지만 실제 1080p 화면에서는 높이의 약 9%다. 200px이면 숫자가 928px로 넘쳐 잘린다.
 - **이유**: 크기와 위치를 고르는 유일한 도구가 비율을 왜곡한다.

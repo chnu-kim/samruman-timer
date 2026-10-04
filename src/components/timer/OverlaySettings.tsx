@@ -142,10 +142,11 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
   }, [timerId]);
 
   const titleDirty = savedTitle !== null && title.trim() !== savedTitle;
-  const isDirty = useMemo(
-    () => titleDirty || (savedConfig !== null && JSON.stringify(config) !== JSON.stringify(savedConfig)),
-    [config, savedConfig, titleDirty],
+  const configDirty = useMemo(
+    () => savedConfig !== null && JSON.stringify(config) !== JSON.stringify(savedConfig),
+    [config, savedConfig],
   );
+  const isDirty = titleDirty || configDirty;
 
   const handleClose = useCallback(() => {
     if (isDirty) {
@@ -196,41 +197,50 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
 
   // 오버레이는 URL 파라미터만 읽는다. 바뀐 URL이 방송에 반영되는 길은 복사해서 OBS에 다시 붙여넣는 것뿐이므로
   // 하단 주 버튼 하나가 저장과 복사를 같이 한다. 제목은 오버레이가 폴링으로 다시 읽어 URL과 무관하다
-  const configDirty = savedConfig !== null && JSON.stringify(config) !== JSON.stringify(savedConfig);
   const titleOnly = titleDirty && !configDirty;
 
-  // 저장할 것이 없으면 true. 실패하면 이유를 담아 throw한다
-  const save = useCallback(async (trimmedTitle: string) => {
-    if (titleDirty) {
-      const titleRes = await authFetch(`/api/timers/${timerId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: trimmedTitle }),
-      });
-      if (!titleRes.ok) {
-        const json = await titleRes.json().catch(() => null) as { error?: { message?: string } } | null;
-        throw new Error(json?.error?.message ?? "제목을 저장하지 못했습니다");
-      }
-      setSavedTitle(trimmedTitle);
-      setTitle(trimmedTitle);
+  // 제목과 설정은 서로 무관한 요청이라 함께 보내고, 하나가 실패해도 다른 하나는 저장한다.
+  // 실패가 있으면 첫 실패 사유를, 모두 성공하면 null을 돌려준다
+  const save = useCallback(async (trimmedTitle: string | null): Promise<string | null> => {
+    const failMessage = async (res: Response, fallback: string) => {
+      const json = await res.json().catch(() => null) as { error?: { message?: string } } | null;
+      return json?.error?.message ?? fallback;
+    };
+    const tasks: Promise<void>[] = [];
+    if (trimmedTitle !== null) {
+      tasks.push((async () => {
+        const res = await authFetch(`/api/timers/${timerId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: trimmedTitle }),
+        });
+        if (!res.ok) throw new Error(await failMessage(res, "제목을 저장하지 못했습니다"));
+        setSavedTitle(trimmedTitle);
+        setTitle(trimmedTitle);
+      })());
     }
     if (configDirty) {
-      const res = await authFetch(`/api/timers/${timerId}/overlay-settings`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(config),
-      });
-      if (!res.ok) {
-        const json = await res.json().catch(() => null) as { error?: { message?: string } } | null;
-        throw new Error(json?.error?.message ?? "설정을 저장하지 못했습니다");
-      }
-      setSavedConfig({ ...config });
+      const snapshot = { ...config };
+      tasks.push((async () => {
+        const res = await authFetch(`/api/timers/${timerId}/overlay-settings`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(snapshot),
+        });
+        if (!res.ok) throw new Error(await failMessage(res, "설정을 저장하지 못했습니다"));
+        setSavedConfig(snapshot);
+      })());
     }
-  }, [timerId, config, configDirty, titleDirty]);
+    const failed = (await Promise.allSettled(tasks)).find((r) => r.status === "rejected");
+    if (!failed) return null;
+    return failed.reason instanceof Error ? failed.reason.message : "저장하지 못했습니다";
+  }, [timerId, config, configDirty]);
 
   const handlePrimary = useCallback(async () => {
     const trimmedTitle = title.trim();
-    if (titleDirty && !trimmedTitle) {
+    // 빈 제목은 저장하지 않는다. 다만 URL과는 무관하므로 복사·설정 저장까지 막지는 않는다
+    const titleInvalid = titleDirty && !trimmedTitle;
+    if (titleOnly && titleInvalid) {
       toast("표시할 제목을 입력해주세요", "error");
       return;
     }
@@ -239,15 +249,16 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
       ? null
       : navigator.clipboard?.writeText(overlayUrl) ?? Promise.reject(new Error("clipboard unavailable"));
     copying?.catch(() => {});
-    const needsSave = isDirty;
-    if (needsSave) setSaving(true);
+    const titleToSave = titleDirty && !titleInvalid ? trimmedTitle : null;
+    const needsSave = configDirty || titleToSave !== null;
     let saveError: string | null = null;
-    try {
-      if (needsSave) await save(trimmedTitle);
-    } catch (e) {
-      saveError = e instanceof Error ? e.message : "저장하지 못했습니다";
-    } finally {
-      if (needsSave) setSaving(false);
+    if (needsSave) {
+      setSaving(true);
+      try {
+        saveError = await save(titleToSave);
+      } finally {
+        setSaving(false);
+      }
     }
 
     if (copying === null) {
@@ -257,18 +268,20 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
       return;
     }
     const copied = await copying.then(() => true, () => false);
-    // 복사와 저장은 따로 알린다. 실패를 성공으로 알리면 클립보드에 남아 있던 이전 URL을 OBS에 붙여 넣게 된다
+    // 복사와 저장은 따로 알린다. 실패를 성공으로 알리면 클립보드에 남아 있던 이전 URL을 OBS에 붙여 넣게 된다.
+    // 모바일 390px에서 넘치지 않게 문구는 짧게 둔다
     if (copied && !saveError) {
       toast("URL을 복사했습니다. OBS에 붙여넣으세요", "success");
     } else if (copied) {
-      toast(`URL은 복사했지만 저장하지 못했습니다: ${saveError}`, "error");
+      toast("URL은 복사했지만 저장하지 못했습니다", "error");
     } else if (needsSave && !saveError) {
-      toast("저장했지만 URL을 복사하지 못했습니다. 위 주소를 직접 선택해 복사해 주세요", "error");
+      toast("저장했지만 복사하지 못했습니다. 주소를 직접 복사해 주세요", "error");
     } else {
-      toast("URL을 복사하지 못했습니다. 위 주소를 직접 선택해 복사해 주세요", "error");
-      if (saveError) toast(saveError, "error");
+      toast("URL을 복사하지 못했습니다. 주소를 직접 복사해 주세요", "error");
+      if (saveError) toast("변경 사항도 저장하지 못했습니다", "error");
     }
-  }, [title, titleDirty, titleOnly, overlayUrl, isDirty, save, toast]);
+    if (titleInvalid) toast("제목이 비어 있어 제목은 저장하지 않았습니다", "error");
+  }, [title, titleDirty, titleOnly, configDirty, overlayUrl, save, toast]);
 
   const applyPreset = useCallback((preset: (typeof PRESETS)[number]) => {
     setColorDraft(null);
@@ -317,7 +330,8 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
           </div>
         ) : <>
         {/* 스크롤 가능 콘텐츠 */}
-        <div className="flex-1 overflow-y-auto p-6 pt-5">
+        {/* 미리보기가 붙어 있을 때 Tab으로 이동한 컨트롤이 그 아래로 숨지 않게 그 높이만큼 scroll-padding을 둔다 */}
+        <div className="flex-1 overflow-y-auto p-6 pt-5 [@media(min-width:48rem)_and_(min-height:56rem)]:scroll-pt-[25rem]">
         {/* URL — 무엇이 복사되는지 확인하는 자리. 복사는 하단 주 버튼이 저장과 함께 한다 */}
         <div className="mb-4">
           <span className="text-sm font-medium text-foreground">OBS 브라우저 소스 URL</span>
@@ -331,8 +345,8 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
         </div>
 
         {/* 미리보기 — 1920×1080 방송 화면을 그대로 그린 뒤 축소해 크기·위치를 실제 비율로 보여 준다.
-            세로 여유가 있는 데스크톱에서는 아래 설정을 바꾸는 동안에도 보이게 붙여 둔다 */}
-        <div className="mb-5 bg-background pb-1 [@media(min-width:48rem)_and_(min-height:50rem)]:sticky [@media(min-width:48rem)_and_(min-height:50rem)]:top-0 [@media(min-width:48rem)_and_(min-height:50rem)]:z-10">
+            세로 여유가 있는 데스크톱(높이 896px 이상)에서는 아래 설정을 바꾸는 동안에도 보이게 붙여 둔다 */}
+        <div className="mb-5 bg-background pb-1 [@media(min-width:48rem)_and_(min-height:56rem)]:sticky [@media(min-width:48rem)_and_(min-height:56rem)]:top-0 [@media(min-width:48rem)_and_(min-height:56rem)]:z-10">
           <span className="text-sm font-medium text-foreground">미리보기</span>
           <OverlayPreview src={iframeSrc} background={config.bg === "transparent" ? "#3f3f46" : config.bg} />
         </div>
@@ -547,7 +561,12 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
             <input
               type="checkbox"
               checked={config.showTitle}
-              onChange={(e) => setConfig((prev) => ({ ...prev, showTitle: e.target.checked }))}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setConfig((prev) => ({ ...prev, showTitle: checked }));
+                // 입력란이 사라지면 고친 제목도 보이지 않으므로, 숨은 값을 저장하지 않게 되돌린다
+                if (!checked && savedTitle !== null) setTitle(savedTitle);
+              }}
               className="w-4 h-4 accent-accent rounded"
             />
             <span className="text-sm">타이틀 표시</span>
@@ -596,7 +615,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
               isDirty ? "opacity-100" : "opacity-0 pointer-events-none",
             )}
           >
-            {titleOnly ? "저장하지 않은 변경 사항이 있습니다" : "복사하면 변경 사항도 저장됩니다"}
+            {!isDirty ? "" : titleOnly ? "저장하지 않은 변경 사항이 있습니다" : "복사하면 변경 사항도 저장됩니다"}
           </span>
           <div className="flex items-center gap-2 ml-auto">
             <Button
@@ -607,6 +626,8 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                 isDirty ? "opacity-100" : "opacity-0 pointer-events-none",
               )}
               tabIndex={isDirty ? 0 : -1}
+              // 저장 중에 되돌리면 응답이 저장값을 덮어써 화면과 서버가 어긋난다
+              disabled={saving}
               onClick={() => {
                 if (savedConfig) {
                   setColorDraft(null);

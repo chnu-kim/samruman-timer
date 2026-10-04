@@ -92,7 +92,7 @@ describe("OverlaySettings 저장을 포함한 URL 복사 (UX-11·C069)", () => {
     fireEvent.click(screen.getByRole("button", { name: "URL 복사" }));
 
     await waitFor(() => {
-      expect(mockToast).toHaveBeenCalledWith(expect.stringContaining("저장했지만 URL을 복사하지 못했습니다"), "error");
+      expect(mockToast).toHaveBeenCalledWith(expect.stringContaining("저장했지만 복사하지 못했습니다"), "error");
     });
     expect(mockToast).not.toHaveBeenCalledWith(expect.anything(), "success");
   });
@@ -118,7 +118,7 @@ describe("OverlaySettings 저장을 포함한 URL 복사 (UX-11·C069)", () => {
     fireEvent.click(screen.getByRole("button", { name: "URL 복사" }));
 
     await waitFor(() => {
-      expect(mockToast).toHaveBeenCalledWith("URL은 복사했지만 저장하지 못했습니다: 서버 오류", "error");
+      expect(mockToast).toHaveBeenCalledWith("URL은 복사했지만 저장하지 못했습니다", "error");
     });
     expect(mockToast).not.toHaveBeenCalledWith(expect.anything(), "success");
     expect(screen.getByRole("button", { name: "변경 취소" })).toHaveAttribute("tabindex", "0");
@@ -311,6 +311,51 @@ describe("OverlaySettings 표시할 제목", () => {
     expect(calls.some((c) => c.init?.method === "PATCH" || c.init?.method === "PUT")).toBe(false);
   });
 
+  it("제목이 비어 있어도 URL 복사와 설정 저장은 막지 않고, 제목만 저장하지 않았다고 알린다", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    fireEvent.change(await screen.findByLabelText("표시할 제목"), { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: "게이밍 네온" }));
+    fireEvent.click(screen.getByRole("button", { name: "URL 복사" }));
+
+    await waitFor(() => expect(mockToast).toHaveBeenCalledWith("제목이 비어 있어 제목은 저장하지 않았습니다", "error"));
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(calls.some((c) => c.init?.method === "PUT")).toBe(true);
+    expect(calls.some((c) => c.init?.method === "PATCH")).toBe(false);
+  });
+
+  it("제목 저장이 실패해도 설정은 저장한다", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const base = vi.mocked(fetch).getMockImplementation()!;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        calls.push({ url: String(input), init });
+        return { ok: false, status: 400, json: async () => ({ error: { code: "BAD_REQUEST", message: "제목 오류" } }) };
+      }
+      return base(input, init);
+    }));
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    fireEvent.change(await screen.findByLabelText("표시할 제목"), { target: { value: "새 제목" } });
+    fireEvent.click(screen.getByRole("button", { name: "게이밍 네온" }));
+    fireEvent.click(screen.getByRole("button", { name: "URL 복사" }));
+
+    await waitFor(() => expect(mockToast).toHaveBeenCalledWith("URL은 복사했지만 저장하지 못했습니다", "error"));
+    expect(calls.some((c) => c.init?.method === "PUT")).toBe(true);
+    // 설정은 저장됐고 제목만 남아 있으므로 주 버튼은 '제목 저장'이 된다
+    expect(screen.getByRole("button", { name: "제목 저장" })).toBeInTheDocument();
+  });
+
+  it("타이틀 표시를 끄면 고친 제목을 되돌려 숨은 값을 저장하지 않는다", async () => {
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    fireEvent.change(await screen.findByLabelText("표시할 제목"), { target: { value: "숨을 제목" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "타이틀 표시" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "타이틀 표시" }));
+    expect(screen.getByLabelText("표시할 제목")).toHaveValue("본방 타이머");
+    expect(screen.getByRole("status")).toHaveTextContent("");
+  });
+
   it("타이틀 표시를 끄면 제목 입력란을 숨긴다", async () => {
     render(<OverlaySettings timerId="abc" onClose={() => {}} />);
     await screen.findByLabelText("표시할 제목");
@@ -439,7 +484,7 @@ describe("OverlaySettings 현재 상태 표시 (C036·C038·C026·C070)", () => 
 
   it("저장 안 한 변경 경고는 라이트에서 amber-700을 쓴다", async () => {
     render(<OverlaySettings timerId="abc" onClose={() => {}} />);
-    await screen.findByRole("button", { name: "URL 복사" });
+    fireEvent.click(await screen.findByRole("button", { name: "게이밍 네온" }));
     expect(screen.getByText("복사하면 변경 사항도 저장됩니다")).toHaveClass("text-amber-700");
   });
 });
