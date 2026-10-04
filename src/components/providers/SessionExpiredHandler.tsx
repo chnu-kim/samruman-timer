@@ -10,7 +10,7 @@ export function SessionExpiredHandler() {
 
   useEffect(() => {
     return onSessionExpired(() => {
-      toast("세션이 만료되었습니다. 다시 로그인해 주세요.", "error");
+      toast("세션이 만료되었습니다. 다시 로그인해주세요.", "error");
       // 다시 로그인한 뒤 보던 화면으로 돌아오도록 현재 경로를 next로 넘긴다
       const loginUrl = loginUrlWithNext(window.location.pathname + window.location.search);
       setTimeout(() => {
