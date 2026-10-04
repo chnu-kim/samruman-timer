@@ -335,6 +335,10 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
     );
     // optimistic 호출(log.id 없음)에서는 기록·그래프·목표 갱신 생략
     if (data.log?.id) {
+      // 서버가 새 ADD/SUBTRACT 기록을 만들었으므로 '생성 기록뿐'이라는 판정을 먼저 푼다. 아래 silent 갱신이 실패하거나
+      // 건너뛰어져도 '전체 기록'이 계속 숨지 않게 한다(폴링은 같은 서버 상태라 복구해 주지 않는다).
+      // 되돌리기로 다시 CREATE뿐이 되면 이어지는 성공한 조회가 다시 판정한다
+      setLogsBaseEmpty(false);
       // silent: 갱신이 실패해도 방금까지 보이던 목록을 오류 줄로 바꾸지 않는다(오류 상태였다면 성공 시 풀린다)
       fetchLogs(1, activeFilters, logsExpanded, { silent: true });
       setLogPage(1);

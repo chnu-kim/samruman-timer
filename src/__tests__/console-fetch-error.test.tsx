@@ -198,6 +198,37 @@ describe("콘솔 조회 실패 표시 (W31)", () => {
     expect(within(logSection()).queryByRole("button", { name: "전체 기록" })).not.toBeInTheDocument();
   });
 
+  it("생성 기록뿐인 상태에서 시간 변경에 성공하면 이어지는 기록 갱신이 실패해도 '전체 기록'을 보인다", async () => {
+    const create = { id: "l0", actionType: "CREATE", actorName: "tester", actorUserId: "u1", deltaSeconds: 0, beforeSeconds: 0, afterSeconds: 3600, createdAt: "2026-01-01T00:00:00.000Z" };
+    const added = { id: "l9", actionType: "ADD", actorName: "시청자", actorUserId: null, deltaSeconds: 3600, beforeSeconds: 0, afterSeconds: 3600, createdAt: "2026-01-02T00:00:00.000Z" };
+    let logsCalls = 0;
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/api/auth/me")) return jsonResponse(owner);
+      if (url === "/api/projects/p1/timers") return jsonResponse([timer]);
+      if (url === "/api/projects/p1/goals") return jsonResponse([]);
+      if (url === "/api/timers/t1/modify") return jsonResponse({ id: "t1", remainingSeconds: 3600, status: "RUNNING", log: added });
+      if (url.startsWith("/api/timers/t1/logs")) {
+        // 첫 조회만 CREATE뿐으로 성공하고, modify 뒤의 silent 갱신부터는 실패한다
+        if (++logsCalls > 1) return new Response(JSON.stringify({ error: { code: "INTERNAL_ERROR", message: "서버 오류" } }), { status: 500 });
+        return jsonResponse({ logs: [create], pagination: { page: 1, limit: 5, total: 1, totalPages: 1 } });
+      }
+      if (url.startsWith("/api/timers/t1/graph")) return jsonResponse({ mode: "remaining", points: [] });
+      if (url === "/api/timers/t1") return jsonResponse(timerDetail);
+      return jsonResponse(project);
+    }) as typeof fetch;
+    render(<ProjectDetailPage />);
+    await screen.findByRole("heading", { name: "최근 기록" });
+    await waitFor(() => expect(screen.getAllByText(/tester/).length).toBeGreaterThan(0));
+    expect(within(logSection()).queryByRole("button", { name: "전체 기록" })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "시청자" } });
+    fireEvent.keyDown(window, { key: "1", code: "Digit1" });
+
+    await waitFor(() => expect(logsCalls).toBeGreaterThan(1));
+    expect(await within(logSection()).findByRole("button", { name: "전체 기록" })).toBeInTheDocument();
+  });
+
   it("펼친 기록의 마지막 페이지가 CREATE 한 건뿐이어도 '접기'와 필터 칩을 그대로 둔다", async () => {
     const create = { id: "l0", actionType: "CREATE", actorName: "tester", actorUserId: "u1", deltaSeconds: 0, beforeSeconds: 0, afterSeconds: 3600, createdAt: "2026-01-01T00:00:00.000Z" };
     global.fetch = vi.fn(async (input: RequestInfo | URL) => {
