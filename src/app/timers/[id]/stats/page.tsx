@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { StatsCardGrid } from "@/components/stats/StatsCardGrid";
@@ -30,19 +30,52 @@ export default function TimerStatsPage() {
   const [cumulative, setCumulative] = useState<CumulativeGraphPoint[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
+  // 다시 시도해도 결과가 같은 안내(권한 없음·찾을 수 없음). 재시도 대신 돌아갈 곳을 준다
+  const [notice, setNotice] = useState<{ title: string; message: string; action: { href: string; label: string } } | null>(null);
+
+  // 같은 화면에서 id가 바뀌면 늦게 도착한 이전 요청이 새 결과를 덮어쓰지 않도록 가장 최근 요청만 반영한다
+  const requestSeq = useRef(0);
 
   const fetchData = useCallback(async () => {
+    const seq = ++requestSeq.current;
+    const stale = () => seq !== requestSeq.current;
+    // 이전 타이머의 데이터·안내·오류가 새 주소에 남지 않게 지우고 다시 로딩 상태로 둔다
+    setLoading(true);
+    setNotice(null);
+    setError(false);
+    setTimer(null);
+    setStats(null);
+    setCumulative(null);
     try {
       const [timerRes, statsRes, cumulativeRes] = await Promise.all([
         fetch(`/api/timers/${timerId}`),
         fetch(`/api/timers/${timerId}/stats`),
         fetch(`/api/timers/${timerId}/graph?mode=cumulative`).catch(() => null),
       ]);
+      if (stale()) return;
 
       if (statsRes.status === 401 || statsRes.status === 403) {
-        setError(true);
-        setErrorMessage("프로젝트 소유자만 통계를 볼 수 있습니다.");
+        // 타이머 조회는 공개라 소유자가 아니어도 프로젝트로 돌려보낼 수 있다
+        const projectId = timerRes.ok
+          ? ((await timerRes.json()) as ApiSuccessResponse<TimerDetailResponse>).data.projectId
+          : null;
+        if (stale()) return;
+        setNotice({
+          title: "통계를 볼 수 없습니다",
+          message: "프로젝트 소유자만 통계를 볼 수 있습니다.",
+          action: projectId
+            ? { href: `/projects/${projectId}`, label: "프로젝트로 돌아가기" }
+            : { href: "/projects", label: "프로젝트 목록으로" },
+        });
+        return;
+      }
+
+      if (statsRes.status === 404) {
+        setNotice({
+          title: "타이머를 찾을 수 없습니다",
+          message: "삭제되었거나 주소가 잘못되었습니다.",
+          action: { href: "/projects", label: "프로젝트 목록으로" },
+        });
         return;
       }
 
@@ -53,17 +86,16 @@ export default function TimerStatsPage() {
 
       const timerJson = (await timerRes.json()) as ApiSuccessResponse<TimerDetailResponse>;
       const statsJson = (await statsRes.json()) as ApiSuccessResponse<TimerStatsResponse>;
+      const graphJson = cumulativeRes?.ok ? ((await cumulativeRes.json()) as ApiSuccessResponse<GraphResponse>) : null;
+      if (stale()) return;
 
       setTimer(timerJson.data);
       setStats(statsJson.data);
-      if (cumulativeRes?.ok) {
-        const graphJson = (await cumulativeRes.json()) as ApiSuccessResponse<GraphResponse>;
-        if (graphJson.data.mode === "cumulative") setCumulative(graphJson.data.points);
-      }
+      if (graphJson?.data.mode === "cumulative") setCumulative(graphJson.data.points);
     } catch {
-      setError(true);
+      if (!stale()) setError(true);
     } finally {
-      setLoading(false);
+      if (!stale()) setLoading(false);
     }
   }, [timerId]);
 
@@ -81,11 +113,15 @@ export default function TimerStatsPage() {
     );
   }
 
+  if (notice) {
+    return <ErrorState tone="neutral" {...notice} />;
+  }
+
   if (error || !timer || !stats) {
     return (
       <ErrorState
-        message={errorMessage || "통계 데이터를 불러오는데 실패했습니다."}
-        onRetry={errorMessage ? undefined : () => {
+        message="통계 데이터를 불러오는데 실패했습니다."
+        onRetry={() => {
           setError(false);
           setLoading(true);
           fetchData();
