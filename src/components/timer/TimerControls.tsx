@@ -36,6 +36,10 @@ const PRESETS = [
   { label: "10시간", seconds: 36000 },
 ];
 
+// 바 제출 버튼은 제출 직후 같은 자리가 즉시 적용 프리셋(+5시간)으로 바뀐다.
+// 확인하려고 한 번 더 누른 탭이 프리셋으로 새지 않게 그동안 프리셋을 잠근다
+const BAR_SUBMIT_COOLDOWN_MS = 800;
+
 const RECENT_ACTORS_KEY = "recentActors";
 const DEFAULT_ACTOR_KEY = "defaultActorName";
 const MAX_RECENT_ACTORS = 10;
@@ -93,6 +97,9 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   // 추가/차감 radio: 표준 radio 패턴처럼 선택된 항목만 탭 정지이고 화살표 키로 선택과 포커스를 옮긴다
   const addRadioRef = useRef<HTMLSpanElement>(null);
   const subtractRadioRef = useRef<HTMLSpanElement>(null);
+  const [barCooldown, setBarCooldown] = useState(false);
+  const barCooldownTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(barCooldownTimerRef.current), []);
   const actionGroupLabelId = useId();
   const submitHintId = useId();
 
@@ -224,6 +231,9 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
       setError("시간은 1초 이상이어야 합니다.");
       return;
     }
+    setBarCooldown(true);
+    clearTimeout(barCooldownTimerRef.current);
+    barCooldownTimerRef.current = setTimeout(() => setBarCooldown(false), BAR_SUBMIT_COOLDOWN_MS);
     await submitModify(selectedAction, totalSeconds, actorName.trim());
   }
 
@@ -529,7 +539,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
             <button
               key={item.key}
               type={barSubmits ? "submit" : "button"}
-              disabled={!barActor}
+              disabled={!barActor || (!barSubmits && barCooldown)}
               onClick={barSubmits ? undefined : () => handleQuickApply(item.seconds)}
               className={cn(
                 "rounded-lg py-3 min-h-[48px] text-sm font-bold transition-colors disabled:opacity-50",

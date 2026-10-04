@@ -795,6 +795,34 @@ describe("TimerControls", () => {
       expect(quickBar().getAllByRole("button").map((b) => b.textContent)).toEqual(["+1시간", "+5시간", "+10시간"]);
     });
 
+    it("바 제출 직후 같은 자리에 나타난 프리셋은 잠깐 잠겨 두 번 탭이 +5시간으로 새지 않는다", async () => {
+      vi.useFakeTimers();
+      try {
+        mockFetch.mockResolvedValue({
+          ok: true,
+          json: async () => ({ data: { id: timerId, remainingSeconds: 4200, status: "RUNNING", log: { id: "l1", actionType: "ADD", actorName: "시청자A", deltaSeconds: 600 } } }),
+        });
+        render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3600} />);
+        fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "시청자A" } });
+        fireEvent.change(screen.getAllByLabelText("분")[0], { target: { value: "10" } });
+
+        fireEvent.click(quickBar().getByRole("button", { name: "시간 추가 (10분)" }));
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+        const five = quickBar().getByRole("button", { name: "+5시간" });
+        expect(five).toBeDisabled();
+        fireEvent.click(five);
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+
+        await act(async () => { vi.advanceTimersByTime(800); });
+        expect(quickBar().getByRole("button", { name: "+5시간" })).toBeEnabled();
+        fireEvent.click(quickBar().getByRole("button", { name: "+5시간" }));
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+        expect(JSON.parse(mockFetch.mock.calls[1][1].body).deltaSeconds).toBe(18000);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("값이 있을 때 입력란 닉네임이 비면 기본 닉네임이 있어도 바 제출은 비활성이다(폼 제출은 입력란 닉네임이 필요)", () => {
       localStorageMock.setItem("defaultActorName", "기본냥");
       render(<Harness timerId={timerId} status="RUNNING" />);
