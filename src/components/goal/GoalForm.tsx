@@ -1,11 +1,17 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useId } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
 import type { ApiSuccessResponse, ApiErrorResponse, GoalResponse } from "@/types";
+
+const GOAL_TYPE_OPTIONS = [
+  { value: "DURATION", label: "방송 시간 목표" },
+  { value: "DEADLINE", label: "데드라인 목표" },
+] as const;
 
 const selectClass =
   "appearance-none border border-border rounded-lg px-3 py-2 bg-background text-foreground text-center outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors cursor-pointer";
@@ -53,13 +59,13 @@ function SelectField({ value, options, onChange, suffix, label, pad = 0, width =
 interface GoalFormProps {
   projectId: string;
   onSuccess?: () => void;
-  onCancel?: () => void;
 }
 
-export function GoalForm({ projectId, onSuccess, onCancel }: GoalFormProps) {
+export function GoalForm({ projectId, onSuccess }: GoalFormProps) {
   const { toast } = useToast();
   const [title, setTitle] = useState("");
   const [goalType, setGoalType] = useState<"DURATION" | "DEADLINE">("DURATION");
+  const goalTypeLabelId = useId();
   const [hours, setHours] = useState(0);
   const [minutes, setMinutes] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -198,29 +204,13 @@ export function GoalForm({ projectId, onSuccess, onCancel }: GoalFormProps) {
       />
 
       <div>
-        <label className="text-sm font-medium text-foreground">목표 유형</label>
-        <div className="mt-1.5 flex gap-1" role="radiogroup" aria-label="목표 유형 선택">
-          <Button
-            type="button"
-            variant={goalType === "DURATION" ? "primary" : "secondary"}
-            size="sm"
-            role="radio"
-            aria-checked={goalType === "DURATION"}
-            onClick={() => changeGoalType("DURATION")}
-          >
-            방송 시간 목표
-          </Button>
-          <Button
-            type="button"
-            variant={goalType === "DEADLINE" ? "primary" : "secondary"}
-            size="sm"
-            role="radio"
-            aria-checked={goalType === "DEADLINE"}
-            onClick={() => changeGoalType("DEADLINE")}
-          >
-            데드라인 목표
-          </Button>
-        </div>
+        <span id={goalTypeLabelId} className="mb-1.5 block text-sm font-medium text-foreground">목표 유형</span>
+        <SegmentedControl
+          options={GOAL_TYPE_OPTIONS}
+          value={goalType}
+          onChange={changeGoalType}
+          ariaLabelledBy={goalTypeLabelId}
+        />
       </div>
 
       {goalType === "DURATION" && (
@@ -309,12 +299,8 @@ export function GoalForm({ projectId, onSuccess, onCancel }: GoalFormProps) {
 
       {error && <p className="text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>}
 
-      <div className="flex justify-end gap-2 pt-2">
-        {onCancel && (
-          <Button type="button" variant="secondary" size="sm" onClick={onCancel} disabled={loading}>
-            취소
-          </Button>
-        )}
+      {/* 다이얼로그 푸터: 주 동작 하나를 오른쪽에. 닫기(X)가 있어 취소 버튼은 두지 않는다 */}
+      <div className="flex justify-end pt-2">
         <Button type="submit" size="sm" disabled={loading || !title.trim()}>
           {loading ? "생성 중..." : "목표 만들기"}
         </Button>

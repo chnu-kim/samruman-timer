@@ -516,7 +516,6 @@ export default function ProjectDetailPage() {
           projectId={projectId}
           defaultTitle={project.name}
           onSuccess={handleCreateSuccess}
-          onCancel={() => setShowForm(false)}
         />
       </FormDialog>
 

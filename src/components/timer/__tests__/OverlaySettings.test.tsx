@@ -451,6 +451,10 @@ describe("OverlaySettings 현재 상태 표시 (C036·C038·C026·C070)", () => 
     const neon = screen.getByRole("button", { name: "게이밍 네온" });
     expect(basic).toHaveAttribute("aria-pressed", "true");
     expect(neon).toHaveAttribute("aria-pressed", "false");
+    // C004: 프리셋은 즉시 적용 버튼이라 세그먼트처럼 칠하지 않고, 현재 값과 같은 것에만 체크 표시를 둔다
+    expect(basic.querySelector("svg")).not.toBeNull();
+    expect(neon.querySelector("svg")).toBeNull();
+    expect(basic.className).not.toMatch(/bg-accent/);
 
     fireEvent.click(neon);
     expect(basic).toHaveAttribute("aria-pressed", "false");

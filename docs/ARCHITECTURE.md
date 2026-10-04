@@ -111,6 +111,7 @@ src/
       EditableText.tsx                  — 인라인 편집 텍스트
       ConfirmDialog.tsx                 — 확인 다이얼로그
       FormDialog.tsx                    — 폼 다이얼로그
+      SegmentedControl.tsx              — 단일 선택 세그먼트 (radio group)
 
   hooks/
     useKeyboardShortcuts.ts             — 키보드 단축키 훅

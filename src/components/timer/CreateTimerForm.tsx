@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useId } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
 import { authFetch } from "@/lib/auth-fetch";
@@ -80,19 +81,24 @@ function SelectField({ value, options, onChange, suffix, label, pad = 0, width =
   );
 }
 
+const START_MODE_OPTIONS = [
+  { value: "now", label: "즉시 시작" },
+  { value: "scheduled", label: "예약 시작" },
+] as const;
+
 interface CreateTimerFormProps {
   projectId: string;
   /** 제목 기본값. 프로젝트 화면은 프로젝트 이름을 넘긴다 */
   defaultTitle?: string;
   onSuccess?: (id: string) => void;
-  onCancel?: () => void;
 }
 
-export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess, onCancel }: CreateTimerFormProps) {
+export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess }: CreateTimerFormProps) {
   const { toast } = useToast();
   const [title, setTitle] = useState(defaultTitle);
   const titleHintId = useId();
   const timeHintId = useId();
+  const startModeLabelId = useId();
   const [hours, setHours] = useState(0);
   const [minutes, setMinutes] = useState(0);
   const [seconds, setSeconds] = useState(0);
@@ -320,29 +326,13 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess, onCan
 
       {/* 시작 방식 */}
       <div>
-        <label className="text-sm font-medium text-foreground">시작 방식</label>
-        <div className="mt-1.5 flex gap-1" role="radiogroup" aria-label="시작 방식 선택">
-          <Button
-            type="button"
-            variant={!useScheduled ? "primary" : "secondary"}
-            size="sm"
-            role="radio"
-            aria-checked={!useScheduled}
-            onClick={() => handleToggleScheduled(false)}
-          >
-            즉시 시작
-          </Button>
-          <Button
-            type="button"
-            variant={useScheduled ? "primary" : "secondary"}
-            size="sm"
-            role="radio"
-            aria-checked={useScheduled}
-            onClick={() => handleToggleScheduled(true)}
-          >
-            예약 시작
-          </Button>
-        </div>
+        <span id={startModeLabelId} className="mb-1.5 block text-sm font-medium text-foreground">시작 방식</span>
+        <SegmentedControl
+          options={START_MODE_OPTIONS}
+          value={useScheduled ? "scheduled" : "now"}
+          onChange={(mode) => handleToggleScheduled(mode === "scheduled")}
+          ariaLabelledBy={startModeLabelId}
+        />
 
         {/* 예약 패널 */}
         {useScheduled && (
@@ -430,18 +420,14 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess, onCan
       </div>
 
       {error && <p className="text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>}
-      <div className="flex gap-2">
-        {onCancel && (
-          <Button type="button" variant="secondary" onClick={onCancel} className="flex-1">
-            취소
-          </Button>
-        )}
+      {/* 다이얼로그 푸터: 주 동작 하나를 오른쪽에. 닫기(X)가 있어 취소 버튼은 두지 않는다 */}
+      <div className="flex justify-end pt-2">
         <Button
           type="submit"
+          size="sm"
           disabled={loading || !title.trim() || initialSeconds <= 0}
           aria-describedby={initialSeconds <= 0 ? timeHintId : undefined}
-          // 320px 모달에서 라벨이 '만들/기'로 꺾여 버튼 높이를 넘지 않게 한 줄로 두고 취소 버튼이 줄어든다
-          className="flex-1 whitespace-nowrap"
+          className="whitespace-nowrap"
         >
           {loading ? "생성 중..." : "타이머 만들기"}
         </Button>
