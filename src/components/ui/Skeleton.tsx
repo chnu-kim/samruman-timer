@@ -7,7 +7,12 @@ interface SkeletonProps {
 export function Skeleton({ className }: SkeletonProps) {
   return (
     <div
-      className={cn("animate-pulse rounded bg-foreground/10", className)}
+      className={cn(
+        "animate-pulse bg-foreground/10",
+        // cn은 이어 붙이기만 해서 rounded-card가 rounded-control에 CSS 순서로 진다. 호출부가 모서리를 정하면 기본값을 뺀다
+        !/(^|\s)rounded-/.test(className ?? "") && "rounded-control",
+        className,
+      )}
       aria-hidden="true"
     />
   );

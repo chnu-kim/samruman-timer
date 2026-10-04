@@ -98,7 +98,7 @@ export function EditableText({
           disabled={saving}
           placeholder={placeholder}
           className={cn(
-            "min-w-0 w-full flex-1 rounded-md border border-border-input bg-background px-2 py-1 text-foreground",
+            "min-w-0 w-full flex-1 rounded-control border border-border-input bg-background px-2 py-1 text-foreground",
             Tag === "h1" && "text-2xl font-bold",
             Tag === "p" && "text-base",
             className,
@@ -112,7 +112,7 @@ export function EditableText({
             handleSave();
           }}
           disabled={saving}
-          className="inline-flex items-center justify-center pointer-coarse:min-h-11 pointer-coarse:min-w-11 rounded p-1 text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
+          className="inline-flex items-center justify-center pointer-coarse:min-h-11 pointer-coarse:min-w-11 rounded-control p-1 text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
           aria-label="저장"
         >
           <CheckIcon className="w-4 h-4" />
@@ -125,7 +125,7 @@ export function EditableText({
             handleCancel();
           }}
           disabled={saving}
-          className="inline-flex items-center justify-center pointer-coarse:min-h-11 pointer-coarse:min-w-11 rounded p-1 text-muted-foreground hover:bg-foreground/10 transition-colors"
+          className="inline-flex items-center justify-center pointer-coarse:min-h-11 pointer-coarse:min-w-11 rounded-control p-1 text-muted-foreground hover:bg-foreground/10 transition-colors"
           aria-label="취소"
         >
           <XIcon className="w-4 h-4" />
@@ -148,7 +148,7 @@ export function EditableText({
         ref={editButtonRef}
         type="button"
         onClick={() => setEditing(true)}
-        className="relative pointer-coarse:before:absolute pointer-coarse:before:-inset-[11px] mt-1 rounded p-1 text-muted-foreground opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:bg-foreground/10 transition-[opacity,background-color]"
+        className="relative pointer-coarse:before:absolute pointer-coarse:before:-inset-[11px] mt-1 rounded-control p-1 text-muted-foreground opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:bg-foreground/10 transition-[opacity,background-color]"
         aria-label={Tag === "h1" ? "제목 편집" : "설명 편집"}
       >
         <PencilIcon className="w-3.5 h-3.5" />

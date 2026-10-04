@@ -170,7 +170,6 @@ export default function ProjectsPage() {
         {user && !hideHeaderCreate && (
           <Button
             variant={showForm ? "secondary" : "primary"}
-            size="sm"
             onClick={() => setShowForm(!showForm)}
           >
             {showForm ? (
@@ -205,7 +204,7 @@ export default function ProjectsPage() {
             tabIndex={activeTab === "mine" ? 0 : -1}
             onClick={() => setActiveTab("mine")}
             onKeyDown={handleTabKeyDown}
-            className={`px-4 py-2 pointer-coarse:min-h-11 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            className={`h-10 px-4 pointer-coarse:min-h-11 text-sm font-medium transition-colors border-b-2 -mb-px ${
               activeTab === "mine"
                 ? "border-accent text-accent"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -221,7 +220,7 @@ export default function ProjectsPage() {
             tabIndex={activeTab === "others" ? 0 : -1}
             onClick={() => setActiveTab("others")}
             onKeyDown={handleTabKeyDown}
-            className={`px-4 py-2 pointer-coarse:min-h-11 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            className={`h-10 px-4 pointer-coarse:min-h-11 text-sm font-medium transition-colors border-b-2 -mb-px ${
               activeTab === "others"
                 ? "border-accent text-accent"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -243,14 +242,14 @@ export default function ProjectsPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="프로젝트 검색…"
               aria-label="프로젝트 검색"
-              className="w-full rounded-lg border border-border-input bg-background pl-9 pr-3 py-2 text-sm transition-colors"
+              className="h-10 pointer-coarse:min-h-11 w-full rounded-control border border-border-input bg-background pl-9 pr-3 text-sm transition-colors"
             />
           </div>
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortBy)}
             aria-label="정렬 기준"
-            className="shrink-0 rounded-lg border border-border-input bg-background px-3 py-2 text-sm"
+            className="h-10 pointer-coarse:min-h-11 shrink-0 rounded-control border border-border-input bg-background px-3 text-sm"
           >
             <option value="latest">최신순</option>
             <option value="name">이름순</option>
@@ -282,7 +281,6 @@ export default function ProjectsPage() {
               <p className="mt-4 text-muted-foreground">아직 프로젝트가 없습니다.</p>
               {user && !showForm && activeTab === "mine" && (
                 <Button
-                  size="sm"
                   className="mt-4"
                   onClick={() => setShowForm(true)}
                 >

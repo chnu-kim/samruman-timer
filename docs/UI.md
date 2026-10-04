@@ -249,6 +249,17 @@ RootLayout (ThemeProvider, ToastProvider, SessionExpiredHandler)
 - 320px 폭까지 가로 스크롤이 없어야 한다(WCAG 1.4.10). 시·분·초처럼 한 줄에 여러 칸을 두는 입력은 고정 폭(`w-20`) 대신 줄 폭을 나눠 쓴다(`[&>div]:flex-1 [&>div]:min-w-0` + 입력 `w-full`, `Input`이 div로 감싸여 있어서). 숫자 칸에는 `inputMode="numeric"`.
 - 모바일 하단 고정 바의 높이는 `globals.css`의 `--quick-bar-h` 하나로 두고, body 하단 여백과 `scroll-padding-bottom`이 같이 쓴다. 그래서 Tab으로 포커스가 간 요소가 바 뒤에 숨지 않는다(WCAG 2.4.11). 바 높이를 바꾸면 이 변수만 고친다.
 
+## 컨트롤 크기·모서리
+
+- `Button` 크기는 역할로 고른다. `md`(기본값, 데스크톱 40px·터치 44px)는 주 CTA·다이얼로그 제출·헤더 액션, `sm`(32px·터치 44px)은 표·밀집 영역·칩, `lg`(48px)는 시간 추가 제출 하나다. 페이지네이션·확인 다이얼로그 버튼도 `md`다
+- 텍스트 액션('다시 시도' 등)은 `variant="link"` 하나다. 인디고 14px, 밑줄은 hover에만, 누르는 높이는 크기와 상관없이 44px
+- 입력·select는 데스크톱 40px(`h-10`, Button `md`와 같은 줄 리듬), 터치 44px(`pointer-coarse:min-h-11`). 공용 `Input`, 목록 검색·정렬, 폼의 `selectClass`가 같은 규칙이다
+- 비활성 버튼은 `opacity`로 흐리지 않고 중립 토큰(`bg-muted text-muted-foreground border-border`, ghost·link는 글자색만)으로 칠해 라이트·다크에서 같은 모양이다. 비활성 이유는 버튼 아래 힌트 문구로 알린다. 저장·생성 요청 중에 잠깐 막는 버튼은 `aria-busy`를 함께 넘겨 변형 색을 유지하고(hover만 빠지고 `cursor-wait`) '쓸 수 없음'과 구분한다
+- `sm`이 남은 곳은 `touch-target.test.tsx`가 개수로 고정한다(위임된 '새 목표'·다이얼로그 제출·헤더 로그아웃이 `md`로 바뀌면 줄인다)
+- 모서리는 세 단계다. 컨트롤(버튼·입력·select·메뉴 항목) `rounded-control`(8px), 카드·다이얼로그 `rounded-card`(12px), pill `rounded-full`. 토큰은 `globals.css`의 `--radius-control`·`--radius-card`이고, `rounded`·`rounded-sm`·`rounded-md`(4·6px)와 `rounded-2xl` 이상은 쓰지 않는다(`radius-tokens.test.ts`가 방향 지정·임의값·CSS `@apply`까지 확인한다). 기존 `rounded-lg`·`rounded-xl`은 같은 값이라 손대는 파일부터 토큰으로 옮긴다
+- `<Link>`가 버튼 모양이어야 하면 `buttonClassName({ variant, size })`를 쓴다(손으로 옮긴 클래스는 크기 규칙에서 어긋난다). 링크에는 `:disabled`가 없어 비활성 상태는 받지 않는다. 갈 수 없는 곳이면 링크를 렌더하지 않는다
+- `cn`은 클래스를 이어 붙이기만 한다(tailwind-merge 없음). 같은 속성을 `className`으로 덮어쓰면 인자 순서가 아니라 Tailwind CSS 순서로 갈린다(예: `rounded-card`는 `rounded-control`에 진다). Button의 크기·색·모서리는 className이 아니라 `variant`·`size`로 바꾼다
+
 ## 접근성 고려사항
 
 - 시맨틱 HTML 사용 (button, nav, main, section)

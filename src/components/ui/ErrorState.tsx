@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClassName } from "@/components/ui/Button";
 import { AlertCircleIcon } from "@/components/ui/Icons";
 import { cn } from "@/lib/utils";
 
@@ -67,16 +67,13 @@ export function ErrorState({
       {title && <h1 className="mt-4 text-lg font-semibold text-foreground">{title}</h1>}
       {message && <p className={cn(title ? "mt-1" : "mt-4", "text-muted-foreground")}>{message}</p>}
       {onRetry && (
-        <Button variant="secondary" size="sm" className="mt-4" onClick={onRetry}>
+        <Button variant="link" className="mt-3" onClick={onRetry}>
           다시 시도
         </Button>
       )}
       {action && (
-        // Button은 <button>이라 링크용으로 같은 secondary·sm 모양을 옮겨 쓴다
-        <Link
-          href={action.href}
-          className="mt-4 inline-flex h-8 pointer-coarse:min-h-11 items-center justify-center rounded-lg border border-border px-3 text-sm font-medium text-foreground transition-colors hover:bg-foreground/5"
-        >
+        // Button은 <button>이라 링크에는 같은 secondary·md 모양의 클래스를 입힌다
+        <Link href={action.href} className={buttonClassName({ variant: "secondary", className: "mt-4" })}>
           {action.label}
         </Link>
       )}

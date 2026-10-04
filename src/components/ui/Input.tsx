@@ -22,7 +22,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           id={id}
           className={cn(
-            "border rounded-lg px-3 py-2 bg-background text-foreground",
+            // 데스크톱은 Button md와 같은 40px, 터치 기기에서는 44px
+            "h-10 pointer-coarse:min-h-11 border rounded-control px-3 bg-background text-foreground",
             "transition-colors",
             error ? "border-red-500" : "border-border-input",
             className,

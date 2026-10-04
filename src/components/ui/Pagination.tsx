@@ -14,7 +14,6 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
     <div className="flex items-center justify-center gap-4">
       <Button
         variant="ghost"
-        size="sm"
         disabled={page <= 1}
         onClick={() => onPageChange(page - 1)}
         aria-label="이전 페이지"
@@ -27,7 +26,6 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
       </span>
       <Button
         variant="ghost"
-        size="sm"
         disabled={page >= totalPages}
         onClick={() => onPageChange(page + 1)}
         aria-label="다음 페이지"

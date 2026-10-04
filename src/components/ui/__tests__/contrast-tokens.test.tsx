@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { Input } from "../Input";
+import { Button } from "../Button";
 import { EditableText } from "../EditableText";
 import { ToastProvider } from "../Toast";
 import { CreateTimerForm } from "@/components/timer/CreateTimerForm";
@@ -165,5 +166,31 @@ describe("글자 대비", () => {
   ])("%s 툴팁은 공용 스타일을 쓴다", (file) => {
     const src = readFileSync(resolve(__dirname, "../..", file), "utf8");
     expect(src).toMatch(/<Tooltip\b(?:(?!\/>)[\s\S])*\{\.\.\.chartTooltipStyle\}/);
+  });
+});
+
+// R18(W33): 비활성 버튼을 opacity로 흐리면 라이트·다크에서 다른 색이 된다. 변형과 상관없이 중립 토큰으로 칠한다
+describe("비활성 버튼", () => {
+  it.each(["primary", "secondary", "danger"] as const)("%s 비활성은 opacity 없이 bg-muted·text-muted-foreground다", (variant) => {
+    render(<Button variant={variant} disabled>비활성 {variant}</Button>);
+    const el = screen.getByRole("button", { name: `비활성 ${variant}` });
+    expect(el).toHaveClass("bg-muted", "text-muted-foreground", "border-border");
+    expect(el.className).not.toMatch(/opacity-/);
+    // 변형 색·hover가 남으면 CSS 순서에 따라 비활성 배경을 덮는다
+    expect(el.className).not.toMatch(/bg-accent|bg-red-|hover:bg-/);
+  });
+
+  // 저장·생성 요청 중에 잠깐 막힌 버튼은 '쓸 수 없음'으로 보이지 않게 변형 색을 유지한다(hover만 뺀다)
+  it("처리 중(aria-busy) 비활성은 변형 색을 유지하고 cursor-wait다", () => {
+    render(<Button disabled aria-busy>저장 중…</Button>);
+    const el = screen.getByRole("button", { name: "저장 중…" });
+    expect(el).toHaveClass("bg-accent", "cursor-wait");
+    expect(el).not.toHaveClass("bg-muted");
+    expect(el.className).not.toMatch(/hover:/);
+  });
+
+  it.each(themes)("%s: 비활성 글자(--muted-foreground)는 --muted 배경에서 4.5:1 이상", (selector) => {
+    const body = block(selector);
+    expect(contrast(token(body, "muted-foreground"), token(body, "muted"))).toBeGreaterThanOrEqual(4.5);
   });
 });

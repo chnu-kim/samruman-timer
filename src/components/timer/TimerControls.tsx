@@ -324,7 +324,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
         <p className="text-sm text-muted-foreground">
           시작 시각까지 기다리거나 지금 시작할 수 있습니다. 시작을 늦추려면 타이머를 삭제한 뒤 다시 만드세요.
         </p>
-        <Button type="button" onClick={() => setConfirmActivate(true)} disabled={activating} className="pointer-coarse:min-h-11">
+        <Button type="button" onClick={() => setConfirmActivate(true)} disabled={activating} aria-busy={activating}>
           지금 시작
         </Button>
         {activateError && <p className="text-sm text-red-600 dark:text-red-400" role="alert">{activateError}</p>}
@@ -443,7 +443,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
                 key={preset.label}
                 type="button"
                 onClick={() => addPreset(preset.seconds)}
-                className="rounded-md border border-border px-3 py-2 min-h-[48px] min-w-[48px] text-sm font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground disabled:opacity-50"
+                className="rounded-control border border-border px-3 py-2 min-h-[48px] min-w-[48px] text-sm font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground disabled:bg-muted disabled:hover:border-border disabled:hover:text-muted-foreground disabled:cursor-not-allowed"
               >
                 +{preset.label}
               </button>

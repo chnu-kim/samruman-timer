@@ -60,7 +60,7 @@ export function ConfirmDialog({
       }}
       aria-modal="true"
       aria-labelledby={titleId}
-      className="m-auto rounded-xl border border-border bg-background text-foreground p-0 shadow-dialog backdrop:bg-black/50 max-w-sm w-full"
+      className="m-auto rounded-card border border-border bg-background text-foreground p-0 shadow-dialog backdrop:bg-black/50 max-w-sm w-full"
       style={{ animation: open ? "fade-in 0.15s ease-out" : undefined }}
     >
       <div className="p-6">
@@ -69,12 +69,11 @@ export function ConfirmDialog({
           <p className="mt-2 text-sm text-muted-foreground">{description}</p>
         )}
         <div className="mt-6 flex justify-end gap-2 max-md:gap-3">
-          <Button variant="secondary" size="sm" onClick={onCancel}>
+          <Button variant="secondary" onClick={onCancel}>
             {cancelLabel}
           </Button>
           <Button
             variant={variant === "danger" ? "danger" : "primary"}
-            size="sm"
             onClick={onConfirm}
           >
             {confirmLabel}
