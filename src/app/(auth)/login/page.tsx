@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { rememberSignedIn } from "@/lib/auth-hint";
 import { SESSION_EXPIRED_PARAM, sanitizeNextPath } from "@/lib/safe-redirect";
 import { fetchMe } from "@/lib/session-me";
 import { SITE_SUMMARY, SITE_TAGLINE } from "@/lib/site";
@@ -54,6 +55,9 @@ function LoginContent() {
       {/* API 라우트로 전체 이동해야 하므로 <a>를 두고, 공용 Button primary와 같은 색·포커스 스타일을 쓴다 */}
       <a
         href={loginHref}
+        // 로그인 흐름(OAuth → callback → 돌아갈 화면)의 첫 로드가 로그아웃 골격을 그려 로그인 사용자에게 이동이 생기지 않게,
+        // 이동 직전에 힌트를 미리 남긴다. 실패해 /login으로 돌아오면 헤더 fetchMe의 401이 다시 지운다
+        onClick={() => rememberSignedIn(true)}
         className="flex w-full items-center justify-center text-center rounded-lg bg-accent px-4 h-12 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover"
       >
         CHZZK로 로그인

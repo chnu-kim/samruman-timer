@@ -140,10 +140,16 @@ export function ConsoleSkeleton({ shape, className, busy = false }: { shape: Con
   const { ownerOnly, showOwner } = shapeClasses(shape);
   return (
     <div className={cn("space-y-8", className)} aria-busy={busy || undefined}>
-      {/* 카운트다운(숫자 clamp(48~60px)·sm 60px + 종료 예정 줄 24px)과 상태 배지 */}
-      <div className="flex h-[calc(clamp(3rem,17vw,3.75rem)+1.5rem)] items-start gap-4 sm:h-21">
-        <Skeleton className="h-[clamp(3rem,17vw,3.75rem)] w-[min(18rem,70vw)] sm:h-15 sm:w-72" />
-        <Skeleton className="mt-2 h-6 w-16 rounded-full" />
+      {/* 카운트다운(CountdownDisplay와 같은 구조): 숫자 + '실행 중' 배지가 한 줄에 안 들어가면 배지가 아래로 내려간다.
+          숫자 막대 폭은 실제 숫자 폭(높이의 4.6배, 실측 276/60)이라 줄바꿈이 본문과 같은 폭에서 일어난다. 아래는 종료 예정 줄(24px) */}
+      <div className="flex flex-col">
+        <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+          <Skeleton className="h-[clamp(3rem,17vw,3.75rem)] w-[calc(clamp(3rem,17vw,3.75rem)*4.6)] sm:h-15 sm:w-69" />
+          <Skeleton className="mt-2 h-5 w-13 rounded-full" />
+        </div>
+        <div className="mt-1 flex h-5 items-center">
+          <Skeleton className="h-3.5 w-28" />
+        </div>
       </div>
 
       {showOwner && (
