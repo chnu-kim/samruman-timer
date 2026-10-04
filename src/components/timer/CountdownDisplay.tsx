@@ -1,12 +1,17 @@
 "use client";
 
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useMemo, type ReactNode } from "react";
 import { cn, formatDateTime, formatEndTime } from "@/lib/utils";
 import type { TimerStatus } from "@/types";
 
 interface CountdownDisplayProps {
   remainingSeconds: number;
   status: TimerStatus;
+  /**
+   * 타이머 스냅샷이 실제로 바뀌었음을 알리는 값(updatedAt, 낙관적 반영 횟수 등). 종료 예정 시각은 이 값이나 status가
+   * 바뀔 때만 다시 잡는다. 없으면 remainingSeconds가 바뀔 때마다 잡는다
+   */
+  snapshotKey?: string | number;
   scheduledStartAt?: string | null;
   size?: "compact" | "large";
   className?: string;
@@ -33,12 +38,22 @@ export function formatTime(totalSeconds: number): string {
 export function CountdownDisplay({
   remainingSeconds,
   status,
+  snapshotKey,
   scheduledStartAt,
   size = "compact",
   className,
   aside,
 }: CountdownDisplayProps) {
   const [displayed, setDisplayed] = useState(remainingSeconds);
+  // 종료 예정 시각은 타이머 스냅샷이 실제로 바뀔 때(snapshotKey·status 변화)만 잡는다. 1초 틱이나 폴링 응답마다
+  // '지금 + 남은 초'로 다시 재면 서버 초 내림·응답 지연 때문에 분 경계에서 두 값을 오간다(오버레이도 같은 기준)
+  const endAtKey = snapshotKey ?? remainingSeconds;
+  const endAtMs = useMemo(
+    () => (status === "RUNNING" ? Date.now() + remainingSeconds * 1000 : null),
+    // remainingSeconds는 의도적으로 뺀다: 같은 스냅샷에서 값만 흔들리는 폴링 응답은 다시 재지 않는다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [endAtKey, status],
+  );
 
   useEffect(() => {
     setDisplayed(remainingSeconds);
@@ -66,8 +81,8 @@ export function CountdownDisplay({
 
   // 생성 시각부터 잰 경과는 만료 후 다시 시작한 타이머에서 실제 진행 시간과 어긋나므로 종료 예정 시각만 보여 준다.
   // 오버레이의 종료 예정 줄과 같은 포맷(formatEndTime)을 쓴다
-  const endTimeText = isRunning
-    ? `종료 예정 ${formatEndTime(new Date(Date.now() + displayed * 1000))}`
+  const endTimeText = isRunning && endAtMs !== null
+    ? `종료 예정 ${formatEndTime(new Date(endAtMs))}`
     : null;
 
   return (

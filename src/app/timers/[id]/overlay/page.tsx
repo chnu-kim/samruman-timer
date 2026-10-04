@@ -52,6 +52,8 @@ export default function TimerOverlayPage() {
   const animation = searchParams.get("animation") !== "false";
   const [timer, setTimer] = useState<TimerDetailResponse | null>(null);
   const [displayed, setDisplayed] = useState(0);
+  // 종료 예정 시각(ms). 렌더마다 '지금 + 남은 초'로 재면 내림 오차로 분 경계에서 두 값을 오가므로 응답을 받을 때 정한다
+  const [endAtMs, setEndAtMs] = useState<number | null>(null);
   const [mounted, setMounted] = useState(false);
   const [animClass, setAnimClass] = useState<string | null>(null);
   const [floatingText, setFloatingText] = useState<string | null>(null);
@@ -146,6 +148,12 @@ export default function TimerOverlayPage() {
       }
     }
 
+    // 폴링마다 다시 재면 서버 잔여시간의 초 내림·응답 지연만큼 흔들려 분 경계에서 바뀌었다 돌아온다.
+    // 시간이 바뀌었거나(updatedAt) 상태가 바뀐 스냅샷, 처음 받은 값에서만 다시 잡는다
+    const prevSnapshot = prevTimerRef.current;
+    if (!prevSnapshot || prevSnapshot.updatedAt !== data.updatedAt || prevSnapshot.status !== data.status) {
+      setEndAtMs(now + data.remainingSeconds * 1000);
+    }
     prevTimerRef.current = { remainingSeconds: data.remainingSeconds, updatedAt: data.updatedAt, fetchedAt: now, status: data.status };
     setTimer(data);
     setDisplayed(data.remainingSeconds);
@@ -381,7 +389,7 @@ export default function TimerOverlayPage() {
               시작 대기 중
             </span>
           )}
-          {showEndDate && !isExpired && !isScheduled && timer.status === "RUNNING" && displayed > 0 && (
+          {showEndDate && !isExpired && !isScheduled && timer.status === "RUNNING" && displayed > 0 && endAtMs !== null && (
             <span
               data-testid="overlay-end-time"
               style={{
@@ -396,7 +404,7 @@ export default function TimerOverlayPage() {
               }}
             >
               {/* 생성·예약 시각부터 잰 경과는 만료 뒤 다시 시작한 타이머에서 틀리므로 붙이지 않는다(콘솔 CountdownDisplay와 같은 규칙) */}
-              종료 예정 {formatEndTime(new Date(Date.now() + displayed * 1000))}
+              종료 예정 {formatEndTime(new Date(endAtMs))}
             </span>
           )}
         </div>

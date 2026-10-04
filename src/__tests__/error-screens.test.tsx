@@ -2,6 +2,7 @@
 import { render, screen, within } from "@testing-library/react";
 import NotFound from "@/app/not-found";
 import ProjectDetailPage from "@/app/projects/[id]/page";
+import { resetMeCache } from "@/lib/session-me";
 import TimerStatsPage from "@/app/timers/[id]/stats/page";
 import { ErrorState } from "@/components/ui/ErrorState";
 
@@ -40,6 +41,8 @@ function stubFetch(handler: (url: string) => Response) {
 }
 
 afterEach(() => {
+  // fetchMe는 확정 결과를 잠깐 같이 쓰므로 테스트마다 비워 이전 테스트의 로그인 상태가 남지 않게 한다
+  resetMeCache();
   vi.restoreAllMocks();
   sessionExpired.fire.mockClear();
   route.id = "x1";
@@ -233,6 +236,21 @@ describe("오류 화면", () => {
     expect(within(retry.parentElement!).queryByRole("link")).not.toBeInTheDocument();
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("통계");
+    const links = screen.getAllByRole("link");
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAccessibleName("프로젝트로 돌아가기");
+    expect(links[0]).toHaveAttribute("href", "/projects/p9");
+  });
+
+  // Codex P3: 통계 요청만 네트워크 오류로 끊겨도 받아 둔 타이머 응답(돌아갈 프로젝트)을 버리지 않는다
+  it("통계 요청만 네트워크 오류여도 프로젝트로 돌아가는 링크를 남긴다", async () => {
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/timers/x1") return jsonResponse({ id: "x1", projectId: "p9" });
+      throw new TypeError("Failed to fetch");
+    }) as typeof fetch;
+    render(<TimerStatsPage />);
+    await screen.findByRole("button", { name: "다시 시도" });
     const links = screen.getAllByRole("link");
     expect(links).toHaveLength(1);
     expect(links[0]).toHaveAccessibleName("프로젝트로 돌아가기");

@@ -69,7 +69,7 @@ GET /api/auth/login
 
 #### 세션 만료 후 재로그인
 
-refresh까지 실패해 `authFetch()`가 세션 만료를 알리면 `SessionExpiredHandler`가 '세션이 만료되어 로그인 화면으로 이동합니다.' 토스트를 띄우고 1.5초 뒤 현재 경로를 실어 `/login?next=<경로>&expired=1`로 보낸다(`sessionExpiredLoginUrl`). 토스트가 하나라 뒤에 뜬 실패 토스트가 이 안내를 덮어쓰므로, 시간 조작 경로(확인 버튼·하단 바·숫자 단축키·되돌리기·지금 시작)는 401에 따로 알리지 않는다. 프로젝트·타이머 삭제, 오버레이 설정 저장 등 다른 `authFetch` 호출부는 아직 401에도 자기 실패 토스트를 띄워 이 안내를 덮어쓴다. 로그인 화면은 `expired=1`이 있고 `error`가 없을 때만 '세션이 만료되어 다시 로그인합니다.' 한 줄을 보인다. 헤더 '로그인'도 `next`를 싣기 때문에 `next`만으로는 만료인지 알 수 없어 표시를 따로 둔다. 로그인 화면은 같은 규칙으로 검증한 `next`를 `/api/auth/login?next=`로 넘긴다. 비로그인 상태에서 헤더의 '로그인'을 누르면 같은 방식으로 누른 시점의 현재 경로를 실어 `/login?next=<경로>`로 보낸다(헤더는 레이아웃에 있어 다시 렌더되지 않으므로 클릭 시점에 계산한다). 경로가 허용되지 않거나 수정자 키를 누른 클릭이면 그냥 `/login`으로 간다.
+refresh까지 실패해 `authFetch()`가 세션 만료를 알리면 `SessionExpiredHandler`가 '세션이 만료되어 로그인 화면으로 이동합니다.' 토스트를 띄우고 1.5초 뒤 현재 경로를 실어 `/login?next=<경로>&expired=1`로 보낸다(`sessionExpiredLoginUrl`). 토스트가 하나라 뒤에 뜬 실패 토스트가 이 안내를 덮어쓰므로, `authFetch`가 세션 만료로 판정한 응답(`isSessionExpired(res)`)에는 호출부가 따로 알리지 않는다(시간 조작 경로의 확인 버튼·하단 바·숫자 단축키·되돌리기·지금 시작, 기록·그래프 조회, 목표 조회·만들기, 타이머 만들기, 프로젝트·타이머 삭제). 오버레이 설정 저장, 프로젝트 이름·설명 수정은 아직 자기 실패 안내를 띄운다. 세션 만료가 아닌 401(`UNAUTHORIZED`)은 일반 실패처럼 서버 문구로 알린다. 로그인 화면은 `expired=1`이 있고 `error`가 없을 때만 '세션이 만료되어 다시 로그인합니다.' 한 줄을 보인다. 헤더 '로그인'도 `next`를 싣기 때문에 `next`만으로는 만료인지 알 수 없어 표시를 따로 둔다. 로그인 화면은 같은 규칙으로 검증한 `next`를 `/api/auth/login?next=`로 넘긴다. 비로그인 상태에서 헤더의 '로그인'을 누르면 같은 방식으로 누른 시점의 현재 경로를 실어 `/login?next=<경로>`로 보낸다(헤더는 레이아웃에 있어 다시 렌더되지 않으므로 클릭 시점에 계산한다). 경로가 허용되지 않거나 수정자 키를 누른 클릭이면 그냥 `/login`으로 간다.
 
 ### 2단계: 콜백 처리 (`/api/auth/callback`)
 
@@ -274,8 +274,8 @@ Next 16 관례상 `proxy.ts`가 표준이지만 이 프로젝트는 `middleware.
 
 D1 장애를 401로 내면 "세션 만료"로 가려져 운영자가 장애를 알아채지 못한다. 그래서 500으로 낸다. 클라이언트에서 500은 이렇게 보인다.
 
-- 페이지 로드 때 refresh를 처음 일으키는 `GET /api/auth/me`는 Header와 각 페이지(`projects`, `projects/[id]`, `timers/[id]`)가 `authFetch`가 아닌 `fetch`로 부르고 `res.ok`만 본다. 그래서 500이면 **오류 안내 없이 비로그인 화면**(헤더에 로그인 버튼, 소유자 전용 컨트롤 숨김)으로 그리고 로그인 화면으로 이동하지도 않는다. 새로고침하면 다시 시도한다
-- `authFetch`를 쓰는 요청(시간 증감 등)도 401에만 세션 만료 이벤트를 내므로, 500은 각 화면의 일반 오류 처리(토스트 등)를 탄다
+- 페이지 로드 때 refresh를 처음 일으키는 `GET /api/auth/me`는 Header·로그인 화면과 각 페이지(`projects`, `projects/[id]`)가 `authFetch`가 아닌 공용 `fetchMe()`(`src/lib/session-me.ts`, 안에서 `fetch`)로 부르고 `res.ok`만 본다. 같은 첫 로드의 요청은 하나를 같이 쓴다. 그래서 500이면 **오류 안내 없이 비로그인 화면**(헤더에 로그인 버튼, 소유자 전용 컨트롤 숨김)으로 그리고 로그인 화면으로 이동하지도 않는다. 새로고침하면 다시 시도한다
+- `authFetch`를 쓰는 요청(시간 증감 등)도 401 `SESSION_EXPIRED`에만 세션 만료 이벤트를 내므로, 500은 각 화면의 일반 오류 처리(토스트 등)를 탄다
 - 401이던 시절에도 `/api/auth/me`는 `fetch`라 세션 만료 이동이 없었으므로, 이 화면 동작은 500으로 바꾸기 전과 같다
 
 ### 인증 헬퍼 (`lib/auth.ts`)
@@ -319,9 +319,9 @@ POST /api/auth/logout
 
 ## 세션 만료 클라이언트 처리
 
-- `authFetch()`(`src/lib/auth-fetch.ts`)는 `fetch`를 감싸 401이면 `fireSessionExpired()`를 호출한다
+- `authFetch()`(`src/lib/auth-fetch.ts`)는 `fetch`를 감싸 401 본문의 코드가 `SESSION_EXPIRED`일 때만 `fireSessionExpired()`를 호출한다. 본문은 복제본에서 읽어 호출부가 그대로 읽을 수 있고, 호출부는 `isSessionExpired(res)`로 판정을 물어 자기 안내를 생략한다. 그 밖의 401(`UNAUTHORIZED`: 다른 탭에서 로그아웃해 refresh 쿠키가 없는 경우 등)은 일반 실패로 돌려준다
 - `fireSessionExpired()`(`src/lib/session-expired.ts`)는 페이지 수명 동안 한 번만 `window`에 `session-expired` 이벤트를 보낸다
 - `SessionExpiredHandler`(`src/components/providers/`)가 이벤트를 받아 토스트("세션이 만료되어 로그인 화면으로 이동합니다.")를 띄우고 1.5초 뒤 `sessionExpiredLoginUrl(현재 경로 + 쿼리)`(`/login?next=…&expired=1`)로 이동한다
-- `/api/auth/me` 조회(헤더, 프로젝트·타이머 페이지)는 `authFetch`가 아닌 `fetch`를 써서 비로그인 401이 세션 만료로 처리되지 않는다
-- 미들웨어는 `refresh` 쿠키가 없으면 401 `UNAUTHORIZED`, 있는데 갱신이 거부되면 401 `SESSION_EXPIRED`를 낸다. 로그아웃 상태로도 열 수 있는 화면이 첫 로드부터 보호 API를 부를 때는 이 코드로 나눈다. 통계 화면(`/timers/[id]/stats`)은 `fetch`로 부르고 `SESSION_EXPIRED`일 때만 `fireSessionExpired()`를 직접 부르며, `UNAUTHORIZED`면 '로그인이 필요합니다' 안내만 보인다. `authFetch`는 코드와 무관하게 모든 401을 세션 만료로 본다(로그인한 사용자만 부르는 경로에서 쓴다)
+- `/api/auth/me` 조회(헤더, 로그인 화면, 프로젝트 페이지)는 `authFetch`가 아닌 `fetchMe()`를 써서 비로그인 401이 세션 만료로 처리되지 않는다
+- 미들웨어는 `refresh` 쿠키가 없으면 401 `UNAUTHORIZED`, 있는데 갱신이 거부되면 401 `SESSION_EXPIRED`를 낸다. 로그아웃 상태로도 열 수 있는 화면이 첫 로드부터 보호 API를 부를 때는 이 코드로 나눈다. 통계 화면(`/timers/[id]/stats`)은 `fetch`로 부르고 `SESSION_EXPIRED`일 때만 `fireSessionExpired()`를 직접 부르며, `UNAUTHORIZED`면 '로그인이 필요합니다' 안내만 보인다. `authFetch`도 같은 코드로 나눠 `SESSION_EXPIRED`만 세션 만료로 본다
 - refresh 도중 서버 오류로 미들웨어가 500을 내면 `authFetch`는 이벤트를 보내지 않는다. 호출한 화면의 오류 처리가 그대로 동작한다 (`SessionExpiredHandler.test.tsx`)

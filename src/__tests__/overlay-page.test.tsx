@@ -176,6 +176,75 @@ describe("오버레이 URL 오류 (UX-56)", () => {
   });
 });
 
+// 5a 이월: 종료 예정 줄을 렌더마다 '지금 + 남은 초'로 재면 폴링 값의 초 내림·응답 지연 때문에 분 경계에서 바뀌었다 돌아왔다.
+// 시간이 바뀐 응답(updatedAt)이나 상태가 바뀐 응답에서만 다시 잡는다
+describe("오버레이 종료 예정 시각 고정", () => {
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    search = "";
+  });
+
+  function stubSequence(responses: { remainingSeconds: number; updatedAt: string }[]) {
+    let i = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        const r = responses[Math.min(i++, responses.length - 1)];
+        return {
+          ok: true,
+          json: async () => ({
+            data: {
+              id: "abc",
+              projectId: "p1",
+              title: "테스트 타이머",
+              description: null,
+              remainingSeconds: r.remainingSeconds,
+              status: "RUNNING",
+              scheduledStartAt: null,
+              createdBy: { id: "u1", nickname: "스트리머" },
+              projectOwnerId: "u1",
+              createdAt: "2026-01-01T00:00:00.000Z",
+              updatedAt: r.updatedAt,
+            },
+          }),
+        };
+      }),
+    );
+  }
+
+  it("같은 updatedAt의 폴링 값이 1초 흔들려도 종료 예정 시각이 분 경계에서 바뀌지 않고, 시간이 바뀌면 다시 잡는다", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 9, 4, 12, 0, 0, 900));
+    search = "showEndDate=true";
+    const t0 = "2026-10-04T02:00:00.000Z";
+    stubSequence([
+      // 종료 = 12:33:59.9
+      { remainingSeconds: 2039, updatedAt: t0 },
+      // 5초 뒤 응답. 응답 지연으로 1초 크게 보이면 '지금 + 남은 초'는 12:34:00.9가 된다
+      { remainingSeconds: 2035, updatedAt: t0 },
+      // 다른 곳에서 1시간 추가
+      { remainingSeconds: 2029 + 3600, updatedAt: "2026-10-04T03:00:10.000Z" },
+    ]);
+    render(<TimerOverlayPage />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByTestId("overlay-end-time").textContent).toBe("종료 예정 오후 12:33");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(screen.getByTestId("overlay-end-time").textContent).toBe("종료 예정 오후 12:33");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(screen.getByTestId("overlay-end-time").textContent).toBe("종료 예정 오후 1:33");
+  });
+});
+
 describe("오버레이 색상 쿼리 검증 (보안 감사 F03)", () => {
   afterEach(() => {
     cleanup();

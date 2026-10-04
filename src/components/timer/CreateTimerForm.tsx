@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/Badge";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
-import { authFetch } from "@/lib/auth-fetch";
+import { useHasPassed } from "@/hooks/useHasPassed";
+import { authFetch, isSessionExpired } from "@/lib/auth-fetch";
 import { changeTimeField, EMPTY_TIME_FIELDS, timeFieldsToSeconds, type TimeFields, type TimeParts } from "@/lib/timer-input";
 import type { ApiSuccessResponse, ApiErrorResponse, TimerCreateResponse } from "@/types";
 
@@ -133,6 +134,10 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess }: Cre
     [],
   );
 
+  // 고른 예약 시각이 지났는지. 창을 연 채 그 시각이 지나면 그 순간 버튼을 막고 안내를 바꾼다
+  const scheduledMs = scheduledStartAt ? new Date(scheduledStartAt).getTime() : NaN;
+  const isPast = useHasPassed(Number.isNaN(scheduledMs) ? null : scheduledMs);
+
   const updateRelativeTime = useCallback(() => {
     if (!scheduledStartAt) {
       setRelativeTimeText("");
@@ -146,12 +151,13 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess }: Cre
     setRelativeTimeText(formatRelativeTime(targetMs));
   }, [scheduledStartAt]);
 
+  // isPast가 바뀌는 순간(예약 시각 경과)에도 다시 써서 '지난 시각' 배지와 '약 1분 이내' 문구가 어긋나지 않게 한다
   useEffect(() => {
     updateRelativeTime();
     if (!scheduledStartAt) return;
     const interval = setInterval(updateRelativeTime, 30_000);
     return () => clearInterval(interval);
-  }, [scheduledStartAt, updateRelativeTime]);
+  }, [scheduledStartAt, updateRelativeTime, isPast]);
 
   function handleToggleScheduled(scheduled: boolean) {
     setUseScheduled(scheduled);
@@ -193,11 +199,6 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess }: Cre
   const maxDay = daysInMonth(schedYear, schedMonth);
   const clampedDay = Math.min(schedDay, maxDay);
 
-  const isPast = useMemo(() => {
-    if (!scheduledStartAt) return false;
-    return new Date(scheduledStartAt).getTime() <= Date.now();
-  }, [scheduledStartAt]);
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -237,6 +238,8 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess }: Cre
       });
 
       if (!res.ok) {
+        // 세션 만료는 그 안내가 따로 뜬다
+        if (isSessionExpired(res)) return;
         const json = (await res.json()) as ApiErrorResponse;
         setError(json.error.message);
         return;
@@ -254,12 +257,13 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess }: Cre
 
   const scheduledDate = scheduledStartAt ? new Date(scheduledStartAt) : null;
 
-  // 만들기 버튼이 비활성인 이유. 기본값을 채우지 않고 막기만 하며, 새 목표와 같은 자리(버튼 아래)에 한 줄로 알린다
-  const noTitle = !title.trim();
-  const submitHint =
-    initialSeconds <= 0
-      ? noTitle ? "제목과 초기 시간을 입력하면 만들 수 있습니다." : "초기 시간을 입력하면 만들 수 있습니다."
-      : noTitle ? "제목을 입력하면 만들 수 있습니다." : "";
+  // 만들기 버튼이 비활성인 이유. 기본값을 채우지 않고 막기만 하며, 새 목표와 같은 자리(버튼 아래)에 한 줄로 알린다.
+  // 예약 시각이 지났으면 새 목표의 기한과 같은 꼴('…고르면 만들 수 있습니다')로 덧붙인다
+  const missing = [!title.trim() && "제목", initialSeconds <= 0 && "초기 시간"].filter(Boolean).join("과 ");
+  const schedulePast = useScheduled && isPast;
+  const submitHint = schedulePast
+    ? missing ? `${missing}을 입력하고 지금 이후의 시각을 고르면 만들 수 있습니다.` : "지금 이후의 시각을 고르면 만들 수 있습니다."
+    : missing ? `${missing}을 입력하면 만들 수 있습니다.` : "";
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">

@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect, useId } from "react";
+import { useState, useMemo, useId } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
+import { useHasPassed } from "@/hooks/useHasPassed";
+import { authFetch, isSessionExpired } from "@/lib/auth-fetch";
 import { changeTimeField, EMPTY_TIME_FIELDS, timeFieldsToSeconds, type TimeFields } from "@/lib/timer-input";
 import type { ApiSuccessResponse, ApiErrorResponse, GoalResponse } from "@/types";
 
@@ -82,23 +84,6 @@ export function GoalForm({ projectId, onSuccess }: GoalFormProps) {
   const [schedDay, setSchedDay] = useState(init.getDate());
   const [schedHour, setSchedHour] = useState(18);
   const [schedMinute, setSchedMinute] = useState(0);
-  const [deadlineDatetime, setDeadlineDatetime] = useState("");
-
-  const syncDatetime = useCallback(
-    (y: number, mo: number, d: number, h: number, mi: number) => {
-      const maxDay = daysInMonth(y, mo);
-      const clampedDay = Math.min(d, maxDay);
-      const date = new Date(y, mo - 1, clampedDay, h, mi, 0, 0);
-      setDeadlineDatetime(date.toISOString());
-    },
-    [],
-  );
-
-  useEffect(() => {
-    if (goalType === "DEADLINE") {
-      syncDatetime(schedYear, schedMonth, schedDay, schedHour, schedMinute);
-    }
-  }, [goalType, schedYear, schedMonth, schedDay, schedHour, schedMinute, syncDatetime]);
 
   function updateField(field: "year" | "month" | "day" | "hour" | "minute", value: number) {
     switch (field) {
@@ -119,10 +104,11 @@ export function GoalForm({ projectId, onSuccess }: GoalFormProps) {
   const maxDay = daysInMonth(schedYear, schedMonth);
   const clampedDay = Math.min(schedDay, maxDay);
 
-  const deadlinePast = useMemo(
-    () => deadlineDatetime !== "" && new Date(deadlineDatetime).getTime() <= Date.now(),
-    [deadlineDatetime],
-  );
+  // 고른 값에서 바로 계산한다. effect로 채우면 '데드라인 목표'로 처음 바꾼 프레임에 값이 비어 비활성 안내가 깜빡인다
+  const deadlineMs = new Date(schedYear, schedMonth - 1, clampedDay, schedHour, schedMinute, 0, 0).getTime();
+  const deadlineDatetime = new Date(deadlineMs).toISOString();
+  // 대화상자를 연 채 기한이 지나면 그 순간 버튼을 막는다(지날 때만 타이머를 둔다)
+  const deadlinePast = useHasPassed(goalType === "DEADLINE" ? deadlineMs : null);
 
   // 만들 수 없는 이유. 타이머 만들기와 같은 규칙으로 버튼을 비활성으로 두고 그 아래 한 줄로 알린다
   // (제출 뒤 오류는 상한 초과·서버 오류용으로만 남는다)
@@ -130,7 +116,7 @@ export function GoalForm({ projectId, onSuccess }: GoalFormProps) {
     const noTitle = !title.trim();
     if (goalType === "DURATION") {
       if (targetSeconds <= 0) return noTitle ? "제목과 목표 시간을 입력하면 만들 수 있습니다." : "목표 시간을 입력하면 만들 수 있습니다.";
-    } else if (!deadlineDatetime || deadlinePast) {
+    } else if (deadlinePast) {
       return noTitle ? "제목을 입력하고 지금 이후의 날짜를 고르면 만들 수 있습니다." : "지금 이후의 날짜를 고르면 만들 수 있습니다.";
     }
     return noTitle ? "제목을 입력하면 만들 수 있습니다." : "";
@@ -157,12 +143,14 @@ export function GoalForm({ projectId, onSuccess }: GoalFormProps) {
 
       setLoading(true);
       try {
-        const res = await fetch(`/api/projects/${projectId}/goals`, {
+        const res = await authFetch(`/api/projects/${projectId}/goals`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ type: "DURATION", title: title.trim(), targetSeconds }),
         });
         if (!res.ok) {
+          // 세션 만료는 그 안내가 따로 뜬다
+          if (isSessionExpired(res)) return;
           const json = (await res.json()) as ApiErrorResponse;
           setError(json.error.message);
           return;
@@ -179,23 +167,20 @@ export function GoalForm({ projectId, onSuccess }: GoalFormProps) {
     }
 
     // DEADLINE
-    if (!deadlineDatetime) {
-      setError("목표 날짜/시간을 설정해 주세요.");
-      return;
-    }
-    if (new Date(deadlineDatetime).getTime() <= Date.now()) {
+    if (deadlineMs <= Date.now()) {
       setError("목표 날짜/시간은 미래여야 합니다.");
       return;
     }
 
     setLoading(true);
     try {
-      const res = await fetch(`/api/projects/${projectId}/goals`, {
+      const res = await authFetch(`/api/projects/${projectId}/goals`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "DEADLINE", title: title.trim(), targetDatetime: deadlineDatetime }),
       });
       if (!res.ok) {
+        if (isSessionExpired(res)) return;
         const json = (await res.json()) as ApiErrorResponse;
         setError(json.error.message);
         return;

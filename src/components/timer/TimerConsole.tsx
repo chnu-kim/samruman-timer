@@ -17,7 +17,7 @@ import { useKeyboardShortcuts, SHORTCUT_HELP } from "@/hooks/useKeyboardShortcut
 import { usePolling } from "@/hooks/usePolling";
 import { useCountdownEnded } from "@/hooks/useCountdownEnded";
 import { useUndoableModifyToast } from "@/hooks/useUndoableModifyToast";
-import { authFetch } from "@/lib/auth-fetch";
+import { authFetch, isSessionExpired } from "@/lib/auth-fetch";
 import { hasExternalChange, type SyncedTimerSnapshot } from "@/lib/timer-sync";
 import { connectionLostAgo } from "@/lib/connection-status";
 import type {
@@ -102,6 +102,8 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
   const { toast } = useToast();
 
   const [timer, setTimer] = useState<TimerDetailResponse | null>(null);
+  // 시간 추가·차감(낙관적 반영 포함)·되돌리기로 스냅샷이 바뀐 횟수. 응답에 updatedAt이 없어 종료 예정 시각을 다시 잡는 신호로 쓴다
+  const [modifySeq, setModifySeq] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -153,7 +155,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
 
   // silent: 폴링이 부르는 백그라운드 갱신. 로딩 표시 없이 기존 목록을 둔 채 새 데이터로 바꾸고, 실패해도 보이던 목록을 오류로 바꾸지 않는다.
   // 직접 부른 조회(첫 로드·필터·페이지·펼침·다시 시도)가 실패하면 다른 조건의 목록이 남지 않게 비우고 오류 줄을 띄운다.
-  // 비-ok 응답과 예외는 같은 실패다. 401은 세션 만료 안내가 맡는다(이 GET은 공개라 보통 오지 않는다)
+  // 비-ok 응답과 예외는 같은 실패다. 세션 만료는 그 안내가 맡는다(이 GET은 공개라 보통 오지 않는다)
   // 요청이 겹치면(폴링·조작·필터 변경) 가장 나중에 보낸 요청의 결과만 반영한다. 늦게 도착한 옛 조건의 응답이
   // 새 조건의 오류·목록을 덮지 않게 하기 위해서다. 로딩 표시는 끝나지 않은 직접 조회가 남아 있는 동안 유지한다
   const logsSeqRef = useRef(0);
@@ -189,7 +191,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
         }
         setLogTotalPages(json.data.pagination.totalPages);
         setLogsError(false);
-      } else if (res.status !== 401) {
+      } else if (!isSessionExpired(res)) {
         fail();
       }
     } catch {
@@ -214,7 +216,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
         const json = (await res.json()) as ApiSuccessResponse<GraphResponse>;
         setGraphData(json.data);
         setGraphError(false);
-      } else if (!silent && res.status !== 401) {
+      } else if (!silent && !isSessionExpired(res)) {
         setGraphError(true);
       }
     } catch {
@@ -282,8 +284,9 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
       }
       if (prev.status === "RUNNING") {
         const diff = Math.abs(prev.remainingSeconds - serverData.remainingSeconds);
-        if (diff >= 2) {
-          return { ...prev, remainingSeconds: serverData.remainingSeconds };
+        // updatedAt이 바뀌었으면(다른 기기의 시간 조작) 작은 차이여도 스냅샷을 받아 종료 예정 시각을 다시 잡게 한다
+        if (diff >= 2 || prev.updatedAt !== serverData.updatedAt) {
+          return { ...prev, remainingSeconds: serverData.remainingSeconds, updatedAt: serverData.updatedAt };
         }
       }
       return prev;
@@ -328,6 +331,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
   }, [connection.disconnected]);
 
   function handleModified(data: TimerModifyResponse) {
+    setModifySeq((n) => n + 1);
     setTimer((prev) =>
       prev
         ? { ...prev, remainingSeconds: data.remainingSeconds, status: data.status }
@@ -382,8 +386,8 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
           const json = (await res.json()) as ApiSuccessResponse<TimerModifyResponse>;
           handleModified(json.data);
           showModifiedToast(json.data.log);
-        } else if (res.status !== 401) {
-          // 401은 세션 만료 안내가 따로 뜬다. 4xx는 서버가 이유를 알려 주고, 5xx는 다시 누르면 된다
+        } else if (!isSessionExpired(res)) {
+          // 세션 만료는 그 안내가 따로 뜬다. 4xx는 서버가 이유를 알려 주고, 5xx는 다시 누르면 된다
           const json = (await res.json().catch(() => null)) as ApiErrorResponse | null;
           toast(res.status < 500 && json?.error?.message ? json.error.message : MODIFY_FAILED_QUICK_MESSAGE, "error");
         }
@@ -478,6 +482,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
       <CountdownDisplay
         remainingSeconds={timer.remainingSeconds}
         status={timer.status}
+        snapshotKey={`${timer.updatedAt}:${modifySeq}`}
         scheduledStartAt={timer.scheduledStartAt}
         size="large"
         aside={

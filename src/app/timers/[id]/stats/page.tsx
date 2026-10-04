@@ -67,21 +67,26 @@ export default function TimerStatsPage() {
     setTimer(null);
     setStats(null);
     setCumulative(null);
+    // 오류 화면도 돌아갈 프로젝트를 가리키도록 타이머 응답에서 알아낸 값을 try 밖에 둔다
+    let projectId: string | null = null;
     try {
+      // 요청마다 네트워크 실패를 따로 받는다. 통계 요청만 실패해도 타이머 응답(돌아갈 프로젝트)을 버리지 않기 위해서다
       const [timerRes, statsRes, cumulativeRes] = await Promise.all([
-        fetch(`/api/timers/${timerId}`),
-        fetch(`/api/timers/${timerId}/stats`),
+        fetch(`/api/timers/${timerId}`).catch(() => null),
+        fetch(`/api/timers/${timerId}/stats`).catch(() => null),
         fetch(`/api/timers/${timerId}/graph?mode=cumulative`).catch(() => null),
       ]);
       if (stale()) return;
 
       // 타이머 조회는 공개라 로그인·소유와 무관하게 돌아갈 프로젝트를 알 수 있다
-      const timerJson = timerRes.ok ? ((await timerRes.json()) as ApiSuccessResponse<TimerDetailResponse>) : null;
-      const projectId = timerJson?.data.projectId ?? null;
+      const timerJson = timerRes?.ok
+        ? ((await timerRes.json().catch(() => null)) as ApiSuccessResponse<TimerDetailResponse> | null)
+        : null;
+      projectId = timerJson?.data.projectId ?? null;
       if (stale()) return;
 
       // 401은 미들웨어가 라우트의 404 판별보다 먼저 내므로 없는 id여도 로그인 안내가 먼저다
-      if (statsRes.status === 401) {
+      if (statsRes?.status === 401) {
         const body = (await statsRes.json().catch(() => null)) as ApiErrorResponse | null;
         if (stale()) return;
         // refresh 쿠키가 있었는데 거부됐으면 세션 만료다. 로그인 화면으로 보내는 흐름은 SessionExpiredHandler가 맡고,
@@ -96,7 +101,7 @@ export default function TimerStatsPage() {
         return;
       }
 
-      if (statsRes.status === 403) {
+      if (statsRes?.status === 403) {
         setNotice({
           title: "통계를 볼 수 없습니다",
           message: "프로젝트 소유자만 통계를 볼 수 있습니다.",
@@ -106,7 +111,7 @@ export default function TimerStatsPage() {
         return;
       }
 
-      if (statsRes.status === 404) {
+      if (statsRes?.status === 404) {
         setNotice({
           title: "타이머를 찾을 수 없습니다",
           message: "삭제되었거나 주소가 잘못되었습니다.",
@@ -116,7 +121,7 @@ export default function TimerStatsPage() {
         return;
       }
 
-      if (!timerJson || !statsRes.ok) {
+      if (!timerJson || !statsRes?.ok) {
         setErrorProjectId(projectId);
         setError(true);
         return;
@@ -130,7 +135,9 @@ export default function TimerStatsPage() {
       setStats(statsJson.data);
       if (graphJson?.data.mode === "cumulative") setCumulative(graphJson.data.points);
     } catch {
-      if (!stale()) setError(true);
+      if (stale()) return;
+      setErrorProjectId(projectId);
+      setError(true);
     } finally {
       if (!stale()) setLoading(false);
     }

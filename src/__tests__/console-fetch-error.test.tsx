@@ -3,6 +3,7 @@
 // 섹션마다 '불러오지 못했습니다 · 다시 시도' 한 줄을 보이며, 복구되면 저절로 실제 데이터로 바뀐다
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import ProjectDetailPage from "@/app/projects/[id]/page";
+import { resetMeCache } from "@/lib/session-me";
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "p1" }),
@@ -105,6 +106,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // fetchMe는 확정 결과를 잠깐 같이 쓰므로 테스트마다 비워 이전 테스트의 로그인 상태가 남지 않게 한다
+  resetMeCache();
   vi.restoreAllMocks();
 });
 

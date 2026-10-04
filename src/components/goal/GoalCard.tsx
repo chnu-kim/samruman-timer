@@ -7,6 +7,7 @@ import { MoreMenu, type MoreMenuItem } from "@/components/ui/MoreMenu";
 import { GoalProgressBar } from "./GoalProgressBar";
 import { formatDuration } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
+import { authFetch, isSessionExpired } from "@/lib/auth-fetch";
 import type { GoalResponse } from "@/types";
 
 interface GoalCardProps {
@@ -75,13 +76,13 @@ export function GoalCard({ goal, projectId, isOwner, onUpdate, compact = false }
     setShowCancelDialog(false);
     setCancelling(true);
     try {
-      const res = await fetch(`/api/projects/${projectId}/goals/${goal.id}`, {
+      const res = await authFetch(`/api/projects/${projectId}/goals/${goal.id}`, {
         method: "PATCH",
       });
       if (res.ok) {
         toast("목표가 취소되었습니다", "success");
         onUpdate?.();
-      } else {
+      } else if (!isSessionExpired(res)) {
         toast("목표 취소에 실패했습니다", "error");
       }
     } catch {
@@ -95,13 +96,13 @@ export function GoalCard({ goal, projectId, isOwner, onUpdate, compact = false }
     setShowDeleteDialog(false);
     setDeleting(true);
     try {
-      const res = await fetch(`/api/projects/${projectId}/goals/${goal.id}`, {
+      const res = await authFetch(`/api/projects/${projectId}/goals/${goal.id}`, {
         method: "DELETE",
       });
       if (res.ok) {
         toast("목표가 삭제되었습니다", "success");
         onUpdate?.();
-      } else {
+      } else if (!isSessionExpired(res)) {
         toast("목표 삭제에 실패했습니다", "error");
       }
     } catch {

@@ -44,6 +44,12 @@ export function timeFieldsToSeconds(fields: TimeFields): number {
   return Math.floor(parseTimeField(fields.hours) * 3600 + parseTimeField(fields.minutes) * 60 + parseTimeField(fields.seconds));
 }
 
+/** 시·분·초를 입력칸 값으로. 0인 칸은 빈 칸(placeholder '0')으로 둔다 */
+export function timePartsToFields(parts: TimeParts): TimeFields {
+  const show = (n: number) => (n > 0 ? String(n) : "");
+  return { hours: show(parts.hours), minutes: show(parts.minutes), seconds: show(parts.seconds) };
+}
+
 /**
  * 한 칸을 바꾼 결과. 분·초가 60 이상이거나 정수가 아닌 값(1.5시간, 음수)이 들어오면
  * normalizeTimeParts로 세 칸을 다시 써서(0인 칸은 빈 칸) 보이는 값과 적용될 값을 맞춘다.
@@ -55,9 +61,7 @@ export function changeTimeField(fields: TimeFields, field: keyof TimeParts, raw:
   if (plain(next.hours) && plain(next.minutes) && plain(next.seconds) && Number(next.minutes) < 60 && Number(next.seconds) < 60) {
     return next;
   }
-  const normalized = normalizeTimeParts(parseTimeField(next.hours), parseTimeField(next.minutes), parseTimeField(next.seconds));
-  const show = (n: number) => (n > 0 ? String(n) : "");
-  return { hours: show(normalized.hours), minutes: show(normalized.minutes), seconds: show(normalized.seconds) };
+  return timePartsToFields(normalizeTimeParts(parseTimeField(next.hours), parseTimeField(next.minutes), parseTimeField(next.seconds)));
 }
 
 /**

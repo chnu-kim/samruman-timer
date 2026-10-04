@@ -11,6 +11,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Pagination } from "@/components/ui/Pagination";
 import { useDebounce } from "@/hooks/useDebounce";
 import { authFetch } from "@/lib/auth-fetch";
+import { fetchMe } from "@/lib/session-me";
 import { SITE_DESCRIPTION } from "@/lib/site";
 import type { ApiSuccessResponse, ProjectListItem, ProjectListResponse, MeResponse, Pagination as PaginationType } from "@/types";
 
@@ -41,14 +42,11 @@ export default function ProjectsPage() {
   const [mineUnfilteredTotal, setMineUnfilteredTotal] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch("/api/auth/me")
-      .then(async (res) => {
-        if (res.ok) {
-          const json = (await res.json()) as { data: MeResponse };
-          setUser(json.data);
-        }
+    // 헤더도 같은 첫 로드에 세션을 확인하므로 fetchMe로 한 요청을 같이 쓴다. 비로그인·오류면 null이라 실패하지 않는다
+    fetchMe()
+      .then((me) => {
+        if (me) setUser(me);
       })
-      .catch(() => {})
       .finally(() => setAuthChecked(true));
   }, []);
 
