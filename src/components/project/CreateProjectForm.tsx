@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
+import { authFetch, isSessionExpired } from "@/lib/auth-fetch";
 import { NEW_TIMER_PARAM } from "@/lib/project-flow";
 import type { ApiSuccessResponse, ApiErrorResponse, ProjectCreateResponse } from "@/types";
 
@@ -26,13 +27,15 @@ export function CreateProjectForm({ onSuccess }: CreateProjectFormProps) {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/projects", {
+      const res = await authFetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, description: description || undefined }),
       });
 
       if (!res.ok) {
+        // 세션 만료 안내(토스트·이동)가 따로 뜨므로 오류 줄은 띄우지 않는다
+        if (isSessionExpired(res)) return;
         const json = (await res.json()) as ApiErrorResponse;
         setError(json.error.message);
         return;

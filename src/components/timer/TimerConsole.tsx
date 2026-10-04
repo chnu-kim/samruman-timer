@@ -102,6 +102,8 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
   const { toast } = useToast();
 
   const [timer, setTimer] = useState<TimerDetailResponse | null>(null);
+  // 시간 추가·차감(낙관적 반영 포함)·되돌리기로 스냅샷이 바뀐 횟수. 응답에 updatedAt이 없어 종료 예정 시각을 다시 잡는 신호로 쓴다
+  const [modifySeq, setModifySeq] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -282,8 +284,9 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
       }
       if (prev.status === "RUNNING") {
         const diff = Math.abs(prev.remainingSeconds - serverData.remainingSeconds);
-        if (diff >= 2) {
-          return { ...prev, remainingSeconds: serverData.remainingSeconds };
+        // updatedAt이 바뀌었으면(다른 기기의 시간 조작) 작은 차이여도 스냅샷을 받아 종료 예정 시각을 다시 잡게 한다
+        if (diff >= 2 || prev.updatedAt !== serverData.updatedAt) {
+          return { ...prev, remainingSeconds: serverData.remainingSeconds, updatedAt: serverData.updatedAt };
         }
       }
       return prev;
@@ -328,6 +331,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
   }, [connection.disconnected]);
 
   function handleModified(data: TimerModifyResponse) {
+    setModifySeq((n) => n + 1);
     setTimer((prev) =>
       prev
         ? { ...prev, remainingSeconds: data.remainingSeconds, status: data.status }
@@ -478,6 +482,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
       <CountdownDisplay
         remainingSeconds={timer.remainingSeconds}
         status={timer.status}
+        snapshotKey={`${timer.updatedAt}:${modifySeq}`}
         scheduledStartAt={timer.scheduledStartAt}
         size="large"
         aside={

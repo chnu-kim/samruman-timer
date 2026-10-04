@@ -209,6 +209,32 @@ describe("CountdownDisplay 서브텍스트", () => {
     expect(screen.getByText(/종료 예정/)).toHaveTextContent("종료 예정 오후 1:33");
   });
 
+  // 콘솔은 폴링마다 서버 값이 2초 이상 다르면 remainingSeconds를 바꿔 넣는다. 스냅샷(updatedAt)이 같으면 종료 예정은 그대로여야 한다
+  it("snapshotKey가 같으면 잔여시간이 흔들려도 종료 예정 시각이 분 경계에서 바뀌지 않는다", () => {
+    vi.setSystemTime(new Date(2026, 9, 4, 12, 0, 0, 500));
+    // 종료 = 12:33:59.5
+    const { rerender } = render(
+      <CountdownDisplay remainingSeconds={2039} status="RUNNING" snapshotKey="t1:0" size="large" />,
+    );
+    expect(screen.getByText(/종료 예정/)).toHaveTextContent("종료 예정 오후 12:33");
+
+    act(() => {
+      vi.advanceTimersByTime(600);
+    });
+    // 서버 초 내림·응답 지연으로 1초 더 큰 값이 와도(다시 재면 12:34:01) 같은 스냅샷이면 유지
+    rerender(<CountdownDisplay remainingSeconds={2040} status="RUNNING" snapshotKey="t1:0" size="large" />);
+    expect(screen.getByText(/종료 예정/)).toHaveTextContent("종료 예정 오후 12:33");
+  });
+
+  it("snapshotKey가 바뀌면(시간 추가) 종료 예정 시각을 다시 잡는다", () => {
+    vi.setSystemTime(new Date(2026, 9, 4, 12, 0, 0, 500));
+    const { rerender } = render(
+      <CountdownDisplay remainingSeconds={2039} status="RUNNING" snapshotKey="t1:0" size="large" />,
+    );
+    rerender(<CountdownDisplay remainingSeconds={2039 + 3600} status="RUNNING" snapshotKey="t1:1" size="large" />);
+    expect(screen.getByText(/종료 예정/)).toHaveTextContent("종료 예정 오후 1:33");
+  });
+
   // UX-54: 만료 상태에도 상태를 알리는 서브텍스트를 둔다
   it("large 만료 상태에서 '만료됨'을 표시한다", () => {
     render(<CountdownDisplay remainingSeconds={0} status="EXPIRED" size="large" />);
