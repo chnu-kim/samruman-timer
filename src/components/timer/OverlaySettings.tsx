@@ -51,6 +51,8 @@ function matchesPreset(config: OverlayConfig, preset: (typeof PRESETS)[number]):
 
 // 투명은 type=color가 표현하지 못해 검정으로 그려지므로 견본 자리에 체커보드를 깐다
 const CHECKERBOARD = "repeating-conic-gradient(#d4d4d4 0% 25%, #ffffff 0% 50%) 50% / 12px 12px";
+// 배경색 칸에 CSS 키워드(transparent) 대신 보여 주는 말. 입력으로도 받는다
+const TRANSPARENT_LABEL = "투명";
 
 const POSITION_LABELS: Record<Position, string> = {
   center: "중앙",
@@ -91,7 +93,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
   const [colorDraft, setColorDraft] = useState<string | null>(null);
   const [bgDraft, setBgDraft] = useState<string | null>(null);
   const [iframeSrc, setIframeSrc] = useState<string>("");
-  // 타이머 제목은 오버레이의 '타이틀 표시'에서만 화면에 나오므로 여기서 함께 고친다.
+  // 타이머 제목은 오버레이의 '제목 표시'에서만 화면에 나오므로 여기서 함께 고친다.
   // 저장 전 변경 여부와 닫기 경고에 포함되도록 설정과 같은 저장 흐름에 둔다
   const [savedTitle, setSavedTitle] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -241,7 +243,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
     // 빈 제목은 저장하지 않는다. 다만 URL과는 무관하므로 복사·설정 저장까지 막지는 않는다
     const titleInvalid = titleDirty && !trimmedTitle;
     if (titleOnly && titleInvalid) {
-      toast("표시할 제목을 입력해주세요", "error");
+      toast("표시할 제목을 입력해 주세요", "error");
       return;
     }
     // 복사는 await 전에 시작한다. Safari는 await를 지나면 클릭의 사용자 활성화를 잃어 클립보드 쓰기를 막는다
@@ -326,7 +328,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
 
         {loading ? (
           <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">
-            설정을 불러오는 중...
+            설정을 불러오는 중…
           </div>
         ) : <>
         {/* 스크롤 가능 콘텐츠 */}
@@ -494,19 +496,20 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
               </span>
               <div className="flex-1 flex items-center gap-1">
                 <Input
-                  value={bgDraft ?? config.bg}
+                  // 저장값·URL은 CSS 키워드 transparent 그대로 두고, 화면에는 '투명'으로 보인다
+                  value={bgDraft ?? (config.bg === "transparent" ? TRANSPARENT_LABEL : config.bg)}
                   onChange={(e) => {
                     const v = e.target.value;
-                    if (v === "transparent" || HEX_COLOR.test(v)) {
+                    if (v === TRANSPARENT_LABEL || v === "transparent" || HEX_COLOR.test(v)) {
                       setBgDraft(null);
-                      setConfig((prev) => ({ ...prev, bg: v }));
+                      setConfig((prev) => ({ ...prev, bg: v === TRANSPARENT_LABEL ? "transparent" : v }));
                     } else {
                       setBgDraft(v);
                     }
                   }}
                   aria-invalid={bgDraft !== null}
                   className="flex-1 font-mono text-sm aria-[invalid=true]:border-red-500"
-                  placeholder="transparent"
+                  placeholder={TRANSPARENT_LABEL}
                   aria-label="배경색 코드"
                 />
               </div>
@@ -569,7 +572,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
               }}
               className="w-4 h-4 accent-accent rounded"
             />
-            <span className="text-sm">타이틀 표시</span>
+            <span className="text-sm">제목 표시</span>
           </label>
           {config.showTitle && savedTitle !== null && (
             <div className="pl-7">
@@ -647,7 +650,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
               className={cn("min-h-11", saving && "cursor-wait")}
             >
               {titleOnly ? <CheckIcon className="w-4 h-4 mr-1" /> : <CopyIcon className="w-4 h-4 mr-1" />}
-              {saving ? "저장 중..." : titleOnly ? "제목 저장" : "URL 복사"}
+              {saving ? "저장 중…" : titleOnly ? "제목 저장" : "URL 복사"}
             </Button>
           </div>
         </div>
@@ -658,7 +661,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
     <ConfirmDialog
       open={showUnsavedDialog}
       title="저장하지 않고 닫기"
-      description="변경된 설정이 저장되지 않았습니다. 그래도 닫으시겠습니까?"
+      description="바꾼 설정은 저장되지 않고 사라집니다."
       confirmLabel="닫기"
       variant="danger"
       onConfirm={onClose}

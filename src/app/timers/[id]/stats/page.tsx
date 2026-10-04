@@ -120,7 +120,7 @@ export default function TimerStatsPage() {
   if (error || !timer || !stats) {
     return (
       <ErrorState
-        message="통계 데이터를 불러오는데 실패했습니다."
+        message="통계를 불러오지 못했습니다."
         onRetry={() => {
           setError(false);
           setLoading(true);

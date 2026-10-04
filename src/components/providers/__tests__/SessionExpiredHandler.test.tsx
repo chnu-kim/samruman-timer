@@ -44,7 +44,7 @@ describe("SessionExpiredHandler + authFetch", () => {
     const res500 = await authFetch("/api/timers/t-1/modify", { method: "POST" });
     expect(res500.status).toBe(500);
     expect(expired).not.toHaveBeenCalled();
-    expect(screen.queryByText("세션이 만료되었습니다. 다시 로그인해주세요.")).toBeNull();
+    expect(screen.queryByText("세션이 만료되었습니다. 다시 로그인해 주세요.")).toBeNull();
 
     // 401: 만료 토스트를 띄운다
     let res401: Response | undefined;
@@ -53,7 +53,7 @@ describe("SessionExpiredHandler + authFetch", () => {
     });
     expect(res401?.status).toBe(401);
     expect(expired).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("세션이 만료되었습니다. 다시 로그인해주세요.")).toBeInTheDocument();
+    expect(screen.getByText("세션이 만료되었습니다. 다시 로그인해 주세요.")).toBeInTheDocument();
 
     window.removeEventListener("session-expired", expired);
     vi.unstubAllGlobals();

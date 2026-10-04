@@ -21,7 +21,7 @@ interface ErrorStateProps {
 
 export function ErrorState({
   title,
-  message = title ? undefined : "데이터를 불러오는데 실패했습니다.",
+  message = title ? undefined : "데이터를 불러오지 못했습니다.",
   onRetry,
   action,
   tone = "error",
