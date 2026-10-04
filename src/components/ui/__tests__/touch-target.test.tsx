@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { Button } from "../Button";
+import { Input } from "../Input";
 import { EditableText } from "../EditableText";
 import { Header } from "@/components/layout/Header";
 
@@ -21,6 +22,30 @@ describe("터치 타깃 44px (pointer-coarse)", () => {
     expect(cls).toContain("h-8");
     expect(cls).toContain("pointer-coarse:min-h-11");
     expect(cls).not.toContain("max-md:min-h-11");
+  });
+
+  // W33: 주 CTA·다이얼로그 제출의 기본 크기. 데스크톱 40px(Input과 같은 줄 리듬), 터치 44px
+  it("Button 기본값 md는 데스크톱 h-10, 터치 기기에서 44px이다", () => {
+    render(<Button>기본 버튼</Button>);
+    const cls = screen.getByRole("button", { name: "기본 버튼" }).className;
+    expect(cls).toContain("h-10");
+    expect(cls).toContain("pointer-coarse:min-h-11");
+  });
+
+  it("텍스트 액션 link 변형은 크기와 상관없이 누르는 높이가 44px이고 h-*를 갖지 않는다", () => {
+    render(<Button variant="link" size="sm">다시 시도</Button>);
+    const cls = screen.getByRole("button", { name: "다시 시도" }).className;
+    expect(cls).toContain("min-h-11");
+    expect(cls).toContain("text-accent");
+    expect(cls).not.toMatch(/(^|\s)h-\d/);
+  });
+
+  it("Input은 데스크톱 40px, 터치 기기에서 44px이다", () => {
+    render(<Input aria-label="이름" />);
+    const cls = screen.getByRole("textbox", { name: "이름" }).className;
+    expect(cls).toContain("h-10");
+    expect(cls).toContain("pointer-coarse:min-h-11");
+    expect(cls).not.toContain("py-2");
   });
 
   it("편집 연필은 보이는 크기를 두고 ::before로만 누르는 영역을 넓힌다", () => {
@@ -46,6 +71,26 @@ describe("터치 타깃 44px (pointer-coarse)", () => {
     const cls = screen.getByRole("link", { name: "로그인" }).className;
     expect(cls).toContain("h-8");
     expect(cls).toContain("pointer-coarse:before:-inset-y-[7px]");
+  });
+
+  // W33: 목록 검색·정렬, 폼의 select도 공용 Input과 같은 높이 규칙을 쓴다
+  it("목록 검색·정렬과 폼 select는 h-10에 터치 44px 변형을 둔다", () => {
+    const files = [
+      "src/app/projects/page.tsx",
+      "src/components/timer/CreateTimerForm.tsx",
+      "src/components/goal/GoalForm.tsx",
+    ];
+    for (const f of files) {
+      const src = readFileSync(join(process.cwd(), f), "utf8");
+      for (const m of src.matchAll(/<(?:input|select)\b[^>]*className="([^"]+)"/g)) {
+        expect(m[1], f).toContain("h-10");
+        expect(m[1], f).toContain("pointer-coarse:min-h-11");
+      }
+      for (const m of src.matchAll(/const selectClass =\s*"([^"]+)"/g)) {
+        expect(m[1], f).toContain("h-10");
+        expect(m[1], f).toContain("pointer-coarse:min-h-11");
+      }
+    }
   });
 
   // 폭 기준(max-md:)으로 되돌아가면 가로 태블릿(1024 터치)에서 다시 32px이 된다

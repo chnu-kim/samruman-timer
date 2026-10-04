@@ -39,6 +39,10 @@
   --shadow-card: var(--shadow-card);
   --shadow-card-hover: var(--shadow-card-hover);
   --shadow-dialog: var(--shadow-dialog);
+  /* 모서리는 세 단계: 컨트롤(버튼·입력·select·메뉴 항목) 8px, 카드·다이얼로그 12px, pill은 rounded-full.
+     rounded·rounded-md(4·6px)는 쓰지 않는다. rounded-lg·rounded-xl은 같은 값이라 점진적으로 토큰으로 옮긴다 */
+  --radius-control: 0.5rem;
+  --radius-card: 0.75rem;
 }
 
 @media (prefers-color-scheme: dark) {

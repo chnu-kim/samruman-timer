@@ -443,7 +443,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
                 key={preset.label}
                 type="button"
                 onClick={() => addPreset(preset.seconds)}
-                className="rounded-md border border-border px-3 py-2 min-h-[48px] min-w-[48px] text-sm font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground disabled:opacity-50"
+                className="rounded-control border border-border px-3 py-2 min-h-[48px] min-w-[48px] text-sm font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground disabled:bg-muted disabled:hover:border-border disabled:hover:text-muted-foreground disabled:cursor-not-allowed"
               >
                 +{preset.label}
               </button>

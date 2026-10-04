@@ -57,7 +57,7 @@ function GoalSection({
   const inactiveGoals = goals.filter((g) => g.status !== "ACTIVE");
 
   const tabClass = (active: boolean) =>
-    `px-4 py-2 pointer-coarse:min-h-11 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-lg ${
+    `h-10 px-4 pointer-coarse:min-h-11 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-lg ${
       active
         ? "border-accent text-accent"
         : "border-transparent text-muted-foreground hover:text-foreground"
@@ -518,7 +518,6 @@ export default function ProjectDetailPage() {
               </p>
               {isOwner && (
                 <Button
-                  size="sm"
                   className="mt-4"
                   onClick={() => { setFormKey((k) => k + 1); setShowForm(true); }}
                 >

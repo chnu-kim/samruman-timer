@@ -417,7 +417,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                     type="button"
                     onClick={() => setShowHelp(true)}
                     aria-haspopup="dialog"
-                    className="hidden pointer-fine:inline-flex -my-1 -mr-2 rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    className="hidden pointer-fine:inline-flex -my-1 -mr-2 rounded-control px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
                   >
                     단축키
                   </button>
@@ -451,7 +451,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
               type="button"
               onClick={toggleLogsExpanded}
               aria-expanded={logsExpanded}
-              className="min-h-11 rounded-md px-2 text-sm font-medium text-accent hover:bg-accent-light transition-colors"
+              className="min-h-11 rounded-control px-2 text-sm font-medium text-accent hover:bg-accent-light transition-colors"
             >
               {logsExpanded ? "접기" : "전체 기록"}
             </button>
@@ -583,7 +583,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
             <div className="space-y-2">
               {SHORTCUT_HELP.map((item) => (
                 <div key={item.key} className="flex items-center gap-3 text-sm">
-                  <kbd className="rounded border border-border bg-muted px-2 py-0.5 font-mono text-xs">
+                  <kbd className="rounded-control border border-border bg-muted px-2 py-0.5 font-mono text-xs">
                     {item.key}
                   </kbd>
                   <span className="text-muted-foreground">{item.description}</span>

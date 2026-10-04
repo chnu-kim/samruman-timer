@@ -94,7 +94,7 @@ export function MoreMenu({ label, items, className }: MoreMenuProps) {
                   item.onSelect();
                 }}
                 className={cn(
-                  "flex min-h-11 w-full items-center rounded-md px-3 text-left text-sm transition-colors disabled:opacity-50",
+                  "flex min-h-11 w-full items-center rounded-control px-3 text-left text-sm transition-colors disabled:opacity-50",
                   item.danger
                     ? "text-red-600 hover:bg-red-500/10 dark:text-red-400"
                     : "text-foreground hover:bg-foreground/10",
