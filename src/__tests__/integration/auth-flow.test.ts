@@ -107,6 +107,30 @@ describe("인증 흐름 통합 테스트", () => {
     expect(res.headers.get("Location")).toBe(`http://localhost:3000${next}`);
   });
 
+  // C154: 동의 화면에서 취소하면 오류 없이 로그인 화면으로 돌아오고, 보던 경로(next)는 URL로 남는다
+  it("2-2. login?next → 동의 취소(code 없음) → 오류 없이 /login?next", async () => {
+    vi.mocked(exchangeCode).mockClear();
+    const next = "/timers/abc";
+    const loginRes = await login(
+      new NextRequest(new URL(`http://localhost:3000/api/auth/login?next=${encodeURIComponent(next)}`)),
+    );
+    const cookieHeader = loginRes.headers
+      .getSetCookie()
+      .filter((c) => c.startsWith("__Host-oauth_state=") || c.startsWith("oauth_next="))
+      .map((c) => c.split(";")[0])
+      .join("; ");
+    const state = /__Host-oauth_state=([^;]+)/.exec(cookieHeader)![1];
+
+    const res = await callback(
+      new NextRequest(new URL(`http://localhost:3000/api/auth/callback?state=${state}`), {
+        headers: { cookie: cookieHeader },
+      }) as never,
+    );
+
+    expect(res.headers.get("Location")).toBe(`http://localhost:3000/login?next=${encodeURIComponent(next)}`);
+    expect(exchangeCode).not.toHaveBeenCalled();
+  });
+
   it("3. me → 사용자 정보 (미들웨어가 주입한 x-user-id 기반)", async () => {
     db._stmt.first.mockResolvedValue({
       id: "user-1",

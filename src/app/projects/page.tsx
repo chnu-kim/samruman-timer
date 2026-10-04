@@ -12,6 +12,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Pagination } from "@/components/ui/Pagination";
 import { useDebounce } from "@/hooks/useDebounce";
 import { authFetch } from "@/lib/auth-fetch";
+import { SITE_DESCRIPTION } from "@/lib/site";
 import type { ApiSuccessResponse, ProjectListItem, ProjectListResponse, MeResponse, Pagination as PaginationType } from "@/types";
 
 type SortBy = "latest" | "name";
@@ -162,7 +163,11 @@ export default function ProjectsPage() {
     <section className="space-y-6">
       {/* 헤더 */}
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold">프로젝트</h1>
+        <div>
+          <h1 className="text-2xl font-bold">프로젝트</h1>
+          {/* 처음 온 사람이 이 서비스가 무엇인지 알 수 있게 로그아웃 상태에만 한 줄 소개를 둔다 */}
+          {!user && <p className="mt-1 text-sm text-muted-foreground">{SITE_DESCRIPTION}</p>}
+        </div>
         {user && (
           <Button
             variant={showForm ? "secondary" : "primary"}
