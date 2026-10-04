@@ -77,7 +77,7 @@ const goal = {
 
 type FetchCall = { url: string; method: string; body?: string };
 
-function stubApi({ timers, goals, me = null }: { timers: unknown[]; goals: unknown[]; me?: unknown }) {
+function stubApi({ timers, goals, me = null, detail = timerDetail }: { timers: unknown[]; goals: unknown[]; me?: unknown; detail?: unknown }) {
   const calls: FetchCall[] = [];
   global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -91,7 +91,7 @@ function stubApi({ timers, goals, me = null }: { timers: unknown[]; goals: unkno
     }
     if (url.startsWith("/api/timers/t1/graph")) return jsonResponse({ mode: "remaining", points: [] });
     if (url === "/api/timers/t1" && method === "DELETE") return jsonResponse({ id: "t1" });
-    if (url === "/api/timers/t1") return jsonResponse(timerDetail);
+    if (url === "/api/timers/t1") return jsonResponse(detail);
     return jsonResponse(project);
   }) as typeof fetch;
   return calls;
@@ -201,6 +201,46 @@ describe("프로젝트 콘솔", () => {
 
     fireEvent.click(within(dialog).getByRole("button", { name: "닫기" }));
     await waitFor(() => expect(dialog).not.toHaveAttribute("open"));
+  });
+
+  // C122·C124: '?'를 몰라도 도움말에 닿도록 시간 조작 제목 줄에 진입점을 하나 둔다
+  describe("단축키 진입점", () => {
+    it("소유자 콘솔의 '단축키' 버튼은 포인터 기기에서만 보이고 도움말을 연다", async () => {
+      stubApi({ timers: [timer], goals: [], me: owner });
+      render(<ProjectDetailPage />);
+      await screen.findByRole("heading", { name: "시간 조작" });
+
+      const entry = screen.getByRole("button", { name: "단축키" });
+      // 터치 기기(pointer: coarse)에서는 숨긴다. 숫자키·X를 누를 키보드가 없기 때문이다
+      expect(entry).toHaveClass("hidden", "pointer-fine:inline-flex");
+      expect(entry).toHaveAttribute("aria-haspopup", "dialog");
+
+      fireEvent.click(entry);
+      const title = await screen.findByRole("heading", { name: "키보드 단축키" });
+      const dialog = title.closest("dialog")!;
+      expect(dialog).toHaveAttribute("open");
+      // 기본 닉네임 설정 버튼은 닉네임을 입력해야 나타나므로 도움말이 그 순서를 알려 준다
+      expect(within(dialog).getByText(/닉네임 입력 후 ‘기본 닉네임으로 설정’을 누르면/)).toBeInTheDocument();
+    });
+
+    it("단축키가 꺼진 예약 타이머와 시청자 화면에는 진입점이 없다", async () => {
+      stubApi({
+        timers: [{ ...timer, status: "SCHEDULED" }],
+        goals: [],
+        me: owner,
+        detail: { ...timerDetail, status: "SCHEDULED", remainingSeconds: 3600, scheduledStartAt: "2099-01-01T00:00:00.000Z" },
+      });
+      const { unmount } = render(<ProjectDetailPage />);
+      await screen.findByRole("heading", { name: "시간 조작" });
+      await screen.findByRole("button", { name: "지금 시작" });
+      expect(screen.queryByRole("button", { name: "단축키" })).not.toBeInTheDocument();
+      unmount();
+
+      stubApi({ timers: [timer], goals: [] });
+      render(<ProjectDetailPage />);
+      await screen.findByRole("heading", { name: "잔여 시간 추이" });
+      expect(screen.queryByRole("button", { name: "단축키" })).not.toBeInTheDocument();
+    });
   });
 
   describe("숫자 단축키", () => {
