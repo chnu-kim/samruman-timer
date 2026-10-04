@@ -52,3 +52,6 @@ storybook-static/
 
 # IDE
 .idea/
+
+# Claude Code agent worktrees
+/.claude/worktrees/
