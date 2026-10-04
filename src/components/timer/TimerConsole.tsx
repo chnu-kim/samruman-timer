@@ -103,7 +103,9 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
 
   // 기록
   const [logsExpanded, setLogsExpanded] = useState(false);
-  const [logs, setLogs] = useState<TimerLogResponse[]>([]);
+  // null은 아직 받지 못한 상태다. 빈 배열(받았는데 0건)과 구분해 실패를 '기록이 없습니다'로 가리지 않는다
+  const [logs, setLogs] = useState<TimerLogResponse[] | null>(null);
+  const [logsError, setLogsError] = useState(false);
   const [logPage, setLogPage] = useState(1);
   const [logTotalPages, setLogTotalPages] = useState(1);
   const [activeFilters, setActiveFilters] = useState<Set<ActionType>>(new Set());
@@ -142,9 +144,16 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
     }
   }, [timerId]);
 
-  // silent: 폴링이 부르는 백그라운드 갱신. 로딩 표시 없이 기존 목록을 둔 채 새 데이터로 바꾼다
+  // silent: 폴링이 부르는 백그라운드 갱신. 로딩 표시 없이 기존 목록을 둔 채 새 데이터로 바꾸고, 실패해도 보이던 목록을 오류로 바꾸지 않는다.
+  // 직접 부른 조회(첫 로드·필터·페이지·펼침·다시 시도)가 실패하면 다른 조건의 목록이 남지 않게 비우고 오류 줄을 띄운다.
+  // 비-ok 응답과 예외는 같은 실패다. 401은 세션 만료 안내가 맡는다(이 GET은 공개라 보통 오지 않는다)
   const fetchLogs = useCallback(async (page: number, filters: Set<ActionType>, expanded: boolean, { silent = false } = {}) => {
     if (!silent) setLogsLoading(true);
+    const fail = () => {
+      if (silent) return;
+      setLogs(null);
+      setLogsError(true);
+    };
     try {
       const params = new URLSearchParams({
         page: expanded ? String(page) : "1",
@@ -153,14 +162,17 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
       if (expanded && filters.size > 0) {
         params.set("actionType", Array.from(filters).join(","));
       }
-      const res = await fetch(`/api/timers/${timerId}/logs?${params}`);
+      const res = await authFetch(`/api/timers/${timerId}/logs?${params}`);
       if (res.ok) {
         const json = (await res.json()) as ApiSuccessResponse<TimerLogsResponse>;
         setLogs(json.data.logs);
         setLogTotalPages(json.data.pagination.totalPages);
+        setLogsError(false);
+      } else if (res.status !== 401) {
+        fail();
       }
     } catch {
-      // ignore
+      fail();
     } finally {
       if (!silent) setLogsLoading(false);
     }
@@ -173,12 +185,12 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
       setGraphError(false);
     }
     try {
-      const res = await fetch(`/api/timers/${timerId}/graph?mode=remaining`);
+      const res = await authFetch(`/api/timers/${timerId}/graph?mode=remaining`);
       if (res.ok) {
         const json = (await res.json()) as ApiSuccessResponse<GraphResponse>;
         setGraphData(json.data);
         setGraphError(false);
-      } else if (!silent) {
+      } else if (!silent && res.status !== 401) {
         setGraphError(true);
       }
     } catch {
@@ -258,14 +270,32 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
       if (logPage === 1) fetchLogs(1, activeFilters, logsExpanded, { silent: true });
       fetchGraph({ silent: true });
       onTimeChanged?.();
+      return;
     }
-  }, [timerId, logPage, activeFilters, logsExpanded, fetchLogs, fetchGraph, onTimeChanged]);
+    // 기록·그래프가 오류 상태면 서버가 응답하는 지금 조용히 다시 불러온다. 성공하면 오류 줄이 사라진다
+    if (logsError) fetchLogs(logPage, activeFilters, logsExpanded, { silent: true });
+    if (graphError) fetchGraph({ silent: true });
+  }, [timerId, logPage, activeFilters, logsExpanded, logsError, graphError, fetchLogs, fetchGraph, onTimeChanged]);
 
   const connection = usePolling({
     fn: pollTimer,
     interval: pollInterval,
     enabled: !loading && !error && !!timer,
   });
+
+  // 연결이 돌아오면(끊김 → 복원) 끊긴 동안 실패했을 수 있는 기록·그래프·목표를 함께 다시 불러온다.
+  // 성공하면 오류 줄이 저절로 사라지고, 다시 실패해도 보이던 데이터는 그대로 둔다(silent)
+  const wasDisconnectedRef = useRef(false);
+  useEffect(() => {
+    const wasDisconnected = wasDisconnectedRef.current;
+    wasDisconnectedRef.current = connection.disconnected;
+    if (!wasDisconnected || connection.disconnected) return;
+    fetchLogs(logPage, activeFilters, logsExpanded, { silent: true });
+    fetchGraph({ silent: true });
+    onTimeChanged?.();
+    // 전이 시점에만 부른다. 나머지 값은 그 순간의 것을 읽으면 된다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connection.disconnected]);
 
   function handleModified(data: TimerModifyResponse) {
     setTimer((prev) =>
@@ -494,7 +524,16 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
               </div>
             )}
 
-            {logs.length === 0 ? (
+            {/* 실패면 오류 한 줄, 아직 받지 못했으면 자리만(스피너가 위에 뜬다). 빈 문구는 받은 결과가 0건일 때만 */}
+            {logsError ? (
+              <ErrorState
+                compact
+                message="기록을 불러오지 못했습니다."
+                onRetry={() => fetchLogs(logPage, activeFilters, logsExpanded)}
+              />
+            ) : logs === null ? (
+              <div className="h-21" />
+            ) : logs.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">기록이 없습니다.</p>
             ) : (
               <ul>
@@ -540,7 +579,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
             )}
           </div>
 
-          {logsExpanded && logTotalPages > 1 && (
+          {logsExpanded && !logsError && logTotalPages > 1 && (
             <div className="mt-4">
               <Pagination
                 page={logPage}
@@ -559,15 +598,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                 <Spinner />
               </div>
             ) : graphError ? (
-              <div className="flex h-64 flex-col items-center justify-center gap-2 text-muted-foreground">
-                <p className="text-sm">그래프를 불러오지 못했습니다.</p>
-                <button
-                  onClick={() => fetchGraph()}
-                  className="rounded-md px-3 py-1.5 pointer-coarse:min-h-11 text-xs font-medium text-accent hover:bg-accent-light transition-colors"
-                >
-                  다시 시도
-                </button>
-              </div>
+              <ErrorState compact className="h-64 py-0" message="그래프를 불러오지 못했습니다." onRetry={() => fetchGraph()} />
             ) : graphData?.mode === "remaining" ? (
               <RemainingChart points={graphData.points} />
             ) : null}
