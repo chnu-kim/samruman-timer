@@ -450,22 +450,23 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
   return (
     <div className="space-y-8">
       {/* 카운트다운 */}
-      <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
-        <CountdownDisplay
-          remainingSeconds={timer.remainingSeconds}
-          status={timer.status}
-          scheduledStartAt={timer.scheduledStartAt}
-          size="large"
-        />
-        {/* 연결이 끊기면 서버 상태를 알 수 없으므로 상태 배지 자리를 연결 끊김으로 바꾼다. 숫자는 로컬 추정값으로 계속 흐른다 */}
-        {connection.disconnected ? (
-          <ConnectionLostBadge lastSyncedAtMs={connection.lastSuccessAtMs} className="mt-2" />
-        ) : (
-          <Badge variant={statusBadgeVariant} className="mt-2">
-            {statusLabel}
-          </Badge>
-        )}
-      </div>
+      {/* 배지는 숫자와 같은 행에 둔다. 좁은 폭에서 줄바꿈돼도 숫자 바로 아래, 보조 문구('종료 예정')보다 위에 붙는다 */}
+      <CountdownDisplay
+        remainingSeconds={timer.remainingSeconds}
+        status={timer.status}
+        scheduledStartAt={timer.scheduledStartAt}
+        size="large"
+        aside={
+          // 연결이 끊기면 서버 상태를 알 수 없으므로 상태 배지 자리를 연결 끊김으로 바꾼다. 숫자는 로컬 추정값으로 계속 흐른다
+          connection.disconnected ? (
+            <ConnectionLostBadge lastSyncedAtMs={connection.lastSuccessAtMs} className="mt-2" />
+          ) : (
+            <Badge variant={statusBadgeVariant} className="mt-2">
+              {statusLabel}
+            </Badge>
+          )
+        }
+      />
 
       {/* 시간 조작 + 곁 영역(목표). 방송 중 가장 자주 쓰는 두 가지를 첫 화면에 나란히 둔다 */}
       {(isOwner || aside) && (

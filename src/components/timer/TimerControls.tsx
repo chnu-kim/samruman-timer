@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useId } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useId } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -154,6 +154,9 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   const [nicknamePrompt, setNicknamePrompt] = useState(false);
   // 글자 입력 칸에 포커스가 있는 동안 모바일 하단 바를 숨긴다(키보드 위로 떠서 입력란을 가리지 않게)
   const [typing, setTyping] = useState(false);
+  // 추가/차감 토글에 포커스가 있는지. 만료로 토글이 사라질 때 포커스가 body로 떨어지지 않게 재시작 안내로 옮긴다
+  const actionFocusedRef = useRef(false);
+  const restartNoticeRef = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
     setRecentActors(getRecentActors());
@@ -168,6 +171,15 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   // 만료(잔여 0)에서는 차감할 시간이 없으므로 세그먼트를 숨기고 '추가'로만 적용한다.
   // 선택 상태는 바꾸지 않고 실효 동작만 고정한다(바·카드·숫자키가 모두 이 값을 쓴다)
   const expired = status === "EXPIRED" || !!expiredProp;
+  // 토글은 사용자 조작 없이(카운트다운이 0에 닿아) 사라질 수 있다. 그때 포커스가 토글 안이었으면 새로 나타난 안내로 옮긴다.
+  // 지워진 노드의 blur는 브라우저마다 다르므로, 포커스가 이미 다른 곳으로 옮겨 갔으면 건드리지 않는다
+  useLayoutEffect(() => {
+    if (!expired || !actionFocusedRef.current) return;
+    actionFocusedRef.current = false;
+    const active = document.activeElement;
+    if (active && active !== document.body && document.contains(active)) return;
+    restartNoticeRef.current?.focus();
+  }, [expired]);
   const action: ModifyAction = expired ? "ADD" : selectedAction;
   const actionLabel = action === "ADD" ? "추가" : "차감";
   // 즉시 적용(모바일 하단 바·숫자 단축키)이 기록할 닉네임. 표시와 제출이 어긋나지 않도록 한 곳에서 정한다
@@ -189,6 +201,12 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
     if (!input) return;
     input.focus();
     input.scrollIntoView?.({ block: "center" });
+  }
+
+  // 닉네임이 생기면 바 안내(role=alert)를 끈다. 입력·칩 어느 쪽으로 채워도 같은 규칙이라, 나중에 다시 비워도 안내가 되살아나지 않는다
+  function changeActorName(name: string) {
+    setActorName(name);
+    if (name.trim()) setNicknamePrompt(false);
   }
 
   function setTime({ hours, minutes, seconds }: TimeParts) {
@@ -416,8 +434,9 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
     // Enter로 제출한다. 오류 안내는 아래 role=alert 문구가 맡으므로 브라우저 기본 검증 말풍선은 끈다
     <form ref={formRef} noValidate onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} onFocus={handleFormFocus} onBlur={handleFormBlur} className={cn("space-y-5", className)}>
       {/* 만료 상태에서 추가는 곧 재시작이므로 결과를 한 줄로 미리 알린다 */}
+      {/* tabIndex -1: 추가/차감 토글이 사라질 때 그 안에 있던 포커스를 받는다(Tab 순서에는 넣지 않는다) */}
       {expired && (
-        <p className="text-sm text-muted-foreground">
+        <p ref={restartNoticeRef} tabIndex={-1} className="text-sm text-muted-foreground">
           시간을 추가하면 다시 시작됩니다
         </p>
       )}
@@ -428,10 +447,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
             ref={actorInputRef}
             label="시청자 닉네임"
             value={actorName}
-            onChange={(e) => {
-              setActorName(e.target.value);
-              if (e.target.value.trim()) setNicknamePrompt(false);
-            }}
+            onChange={(e) => changeActorName(e.target.value)}
             required
             maxLength={50}
             autoComplete="off"
@@ -450,7 +466,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
                   <button
                     key={name}
                     type="button"
-                    onClick={() => setActorName(name)}
+                    onClick={() => changeActorName(name)}
                     className={cn(
                       "rounded-full border px-3 py-2 text-xs cursor-pointer transition-colors",
                       isDefault
@@ -468,18 +484,19 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
           )}
           {/* 버튼 터치 영역(px-2)만 넓히고 글자는 칩과 왼쪽 정렬을 맞춘다 */}
           <div className="mt-1.5 -ml-2 flex flex-wrap items-center gap-x-2">
+            {/* 설명 문구와 구분되도록 글자색·밑줄로 버튼임을 드러낸다 */}
             {actorName.trim() && actorName.trim() !== defaultActor && (
               <button
                 type="button"
                 onClick={handleSetDefault}
-                className="min-h-11 whitespace-nowrap px-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                className="min-h-11 whitespace-nowrap px-2 text-xs font-medium text-foreground underline underline-offset-4 decoration-border-input hover:decoration-foreground transition-colors"
               >
                 기본 닉네임으로 설정
               </button>
             )}
-            {/* 기본 닉네임 안내는 그 버튼이 보이는 자리에서만 한 줄로 */}
+            {/* 기본 닉네임 안내는 그 버튼이 보이는 자리에서만, 버튼 아래 한 줄로(버튼 라벨과 한 문장처럼 이어지지 않게) */}
             {actorName.trim() && !defaultActor && (
-              <span className="text-xs text-muted-foreground">다음부터 입력 없이 바로 적용됩니다</span>
+              <p className="basis-full -mt-2 pl-2 text-xs text-muted-foreground">다음부터 입력 없이 바로 적용됩니다</p>
             )}
             {defaultActor && (
               <button
@@ -495,7 +512,10 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
 
         {/* 추가/차감 토글. X 단축키는 포커스를 받는 라디오에 알려야 스크린리더가 읽는다. 만료면 추가만 되므로 숨긴다 */}
         {!expired && (
-          <div>
+          <div
+            onFocus={() => { actionFocusedRef.current = true; }}
+            onBlur={(e) => { if (e.relatedTarget && !e.currentTarget.contains(e.relatedTarget as Node)) actionFocusedRef.current = false; }}
+          >
             <span id={actionGroupLabelId} className="mb-1.5 block text-sm font-medium text-foreground">변경 유형</span>
             <SegmentedControl
               options={ACTION_OPTIONS}

@@ -245,6 +245,29 @@ describe("TimerControls", () => {
       expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ action: "ADD", deltaSeconds: 3600, actorName: "시청자A" });
     });
 
+    // 토글은 카운트다운이 0에 닿으면 사용자 조작 없이 사라진다. 그 안의 포커스가 body로 떨어지지 않게 재시작 안내로 옮긴다
+    it("차감 radio에 포커스가 있을 때 만료되면 포커스가 재시작 안내로 옮겨지고 바는 숨지 않는다", () => {
+      const { rerender } = render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3} initialAction="SUBTRACT" />);
+      const radio = screen.getByRole("radio", { name: "차감" });
+      act(() => radio.focus());
+      expect(document.activeElement).toBe(radio);
+
+      rerender(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3} initialAction="SUBTRACT" expired />);
+      expect(document.activeElement).not.toBe(document.body);
+      expect(document.activeElement).toBe(screen.getByText("시간을 추가하면 다시 시작됩니다"));
+      expect((document.querySelector("[data-quick-bar]") as HTMLElement).classList.contains("hidden")).toBe(false);
+    });
+
+    it("포커스가 토글 밖에 있으면 만료돼도 포커스를 옮기지 않는다", () => {
+      const { rerender } = render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3} initialAction="SUBTRACT" />);
+      const radio = screen.getByRole("radio", { name: "차감" });
+      act(() => radio.focus());
+      const chipless = screen.getAllByLabelText("분")[0];
+      act(() => chipless.focus());
+      rerender(<Harness timerId={timerId} status="RUNNING" remainingSeconds={3} initialAction="SUBTRACT" expired />);
+      expect(document.activeElement).toBe(chipless);
+    });
+
     it("차감을 고른 뒤 만료되면 카드 확인 버튼도 '시간 추가'로 ADD를 보낸다", async () => {
       mockFetch.mockResolvedValueOnce(okResponse("ADD", 600));
       render(<Harness timerId={timerId} status="EXPIRED" remainingSeconds={0} initialAction="SUBTRACT" />);
@@ -931,6 +954,20 @@ describe("TimerControls", () => {
       fireEvent.change(input, { target: { value: "치즈냥" } });
       expect(screen.queryByText(NICKNAME_PROMPT_MESSAGE)).not.toBeInTheDocument();
       await act(async () => {});
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    // 칩으로 닉네임을 채워도 안내 상태를 끈다. 나중에 입력란을 비워도 누르지 않은 안내가 다시 읽히지 않는다
+    it("안내 후 최근 닉네임 칩을 고르고 입력란을 비우면 안내가 되살아나지 않는다", () => {
+      localStorageMock.setItem("recentActors", JSON.stringify(["치즈냥"]));
+      render(<Harness timerId={timerId} status="RUNNING" />);
+      fireEvent.click(quickBar().getByRole("button", { name: "+1시간" }));
+      expect(screen.getByRole("alert")).toHaveTextContent(NICKNAME_PROMPT_MESSAGE);
+
+      fireEvent.click(screen.getByRole("button", { name: "치즈냥" }));
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "" } });
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
       expect(mockFetch).not.toHaveBeenCalled();
     });
 

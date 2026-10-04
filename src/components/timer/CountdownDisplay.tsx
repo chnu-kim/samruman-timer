@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { cn, formatDateTime, formatEndTime } from "@/lib/utils";
 import type { TimerStatus } from "@/types";
 
@@ -10,6 +10,11 @@ interface CountdownDisplayProps {
   scheduledStartAt?: string | null;
   size?: "compact" | "large";
   className?: string;
+  /**
+   * 숫자 바로 옆에 붙일 요소(상태 배지 등). 보조 문구('종료 예정' 등)보다 앞 행에 두어,
+   * 좁은 폭에서 줄바꿈돼도 숫자 바로 아래에 붙고 보조 문구 뒤로 밀려나지 않는다
+   */
+  aside?: ReactNode;
 }
 
 export function formatTime(totalSeconds: number): string {
@@ -31,6 +36,7 @@ export function CountdownDisplay({
   scheduledStartAt,
   size = "compact",
   className,
+  aside,
 }: CountdownDisplayProps) {
   const [displayed, setDisplayed] = useState(remainingSeconds);
 
@@ -66,30 +72,33 @@ export function CountdownDisplay({
 
   return (
     <div className="flex flex-col">
-      <span
-        role="timer"
-        className={cn(
-          size === "large"
-            ? "text-5xl sm:text-6xl font-mono font-bold tracking-tight"
-            : "text-lg font-mono font-semibold",
-          isExpired && "text-muted-foreground",
-          isScheduled && "text-purple-600 dark:text-purple-400",
-          isCritical && "text-red-600 dark:text-red-400 animate-pulse-urgent-fast",
-          isUrgent && !isCritical && "text-amber-700 dark:text-amber-400 animate-pulse-urgent-slow",
-          className,
-        )}
-        aria-label={
-          isCritical
-            ? `긴급: 남은 시간 ${formatTime(displayed)}, 1분 미만`
-            : isUrgent
-              ? `긴급: 남은 시간 ${formatTime(displayed)}, 5분 미만`
-              : isScheduled
-                ? `예약 시간 ${formatTime(displayed)}`
-                : `남은 시간 ${formatTime(displayed)}`
-        }
-      >
-        {formatTime(displayed)}
-      </span>
+      <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+        <span
+          role="timer"
+          className={cn(
+            size === "large"
+              ? "text-5xl sm:text-6xl font-mono font-bold tracking-tight"
+              : "text-lg font-mono font-semibold",
+            isExpired && "text-muted-foreground",
+            isScheduled && "text-purple-600 dark:text-purple-400",
+            isCritical && "text-red-600 dark:text-red-400 animate-pulse-urgent-fast",
+            isUrgent && !isCritical && "text-amber-700 dark:text-amber-400 animate-pulse-urgent-slow",
+            className,
+          )}
+          aria-label={
+            isCritical
+              ? `긴급: 남은 시간 ${formatTime(displayed)}, 1분 미만`
+              : isUrgent
+                ? `긴급: 남은 시간 ${formatTime(displayed)}, 5분 미만`
+                : isScheduled
+                  ? `예약 시간 ${formatTime(displayed)}`
+                  : `남은 시간 ${formatTime(displayed)}`
+          }
+        >
+          {formatTime(displayed)}
+        </span>
+        {aside}
+      </div>
       {/* compact: 항상 서브텍스트 높이를 확보하여 카드 높이 일관성 유지 */}
       {size === "compact" && (
         <span className="text-xs text-purple-600 dark:text-purple-400 min-h-[1rem] mt-0.5">

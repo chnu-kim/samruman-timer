@@ -79,7 +79,7 @@ const goal = {
 
 type FetchCall = { url: string; method: string; body?: string };
 
-function stubApi({ timers, goals, me = null, modifyStatus, detail = timerDetail }: { timers: unknown[]; goals: unknown[]; me?: unknown; modifyStatus?: number; detail?: unknown }) {
+function stubApi({ timers, goals, me = null, modifyStatus, modifyData, detail = timerDetail }: { timers: unknown[]; goals: unknown[]; me?: unknown; modifyStatus?: number; modifyData?: unknown; detail?: unknown }) {
   const calls: FetchCall[] = [];
   global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -89,6 +89,7 @@ function stubApi({ timers, goals, me = null, modifyStatus, detail = timerDetail 
     if (modifyStatus && url === "/api/timers/t1/modify") {
       return new Response(JSON.stringify({ error: { code: "X", message: "서버 원문" } }), { status: modifyStatus });
     }
+    if (modifyData && url === "/api/timers/t1/modify") return jsonResponse(modifyData);
     if (url === "/api/projects/p1/timers") return jsonResponse(timers);
     if (url === "/api/projects/p1/goals") return jsonResponse(goals);
     if (url.startsWith("/api/timers/t1/logs")) {
@@ -454,6 +455,33 @@ describe("프로젝트 콘솔", () => {
       });
     });
 
+    // 만료 중에는 토글이 보이지 않으므로 X가 숨은 선택을 바꾸면 안 된다. 재시작 뒤 첫 적용이 고르지 않은 방향으로 바로 나가기 때문이다
+    it("만료 중 X는 선택을 바꾸지 않아, 추가로 재시작한 뒤에도 차감이 그대로 선택돼 있다", async () => {
+      const running = { ...timerDetail, status: "RUNNING", remainingSeconds: 1 };
+      const calls = stubApi({
+        timers: [{ ...timer, status: "RUNNING", remainingSeconds: 1 }],
+        goals: [],
+        me: owner,
+        detail: running,
+        modifyData: { id: "t1", remainingSeconds: 3600, status: "RUNNING", log: { id: "l2", actionType: "ADD", actorName: "기본냥", deltaSeconds: 3600, createdAt: "2026-10-04T00:00:00.000Z" } },
+      });
+      render(<ProjectDetailPage />);
+      await waitFor(() => expect(screen.getByLabelText("시청자 닉네임")).toHaveValue("기본냥"));
+      fireEvent.keyDown(window, { key: "x", code: "KeyX" });
+      expect(screen.getByRole("radio", { name: "차감" })).toHaveAttribute("aria-checked", "true");
+
+      await waitFor(() => expect(screen.queryAllByRole("radio")).toHaveLength(0), { timeout: 3000 });
+      fireEvent.keyDown(window, { key: "x", code: "KeyX" });
+      fireEvent.keyDown(window, { key: "1", code: "Digit1" });
+      await waitFor(() => {
+        const modify = calls.find((c) => c.url === "/api/timers/t1/modify" && c.method === "POST");
+        expect(JSON.parse(modify!.body!)).toMatchObject({ action: "ADD", deltaSeconds: 3600 });
+      });
+      // 서버 응답으로 다시 실행 중이 되면 토글이 돌아오고, 만료 전에 고른 차감이 그대로다
+      const subtract = await screen.findByRole("radio", { name: "차감" });
+      expect(subtract).toHaveAttribute("aria-checked", "true");
+    });
+
     it("목표 폼이 열려 있으면 '1'이 뒤쪽 타이머를 바꾸지 않는다", async () => {
       const calls = stubApi({ timers: [timer], goals: [], me: owner });
       render(<ProjectDetailPage />);
@@ -567,7 +595,7 @@ describe("프로젝트 콘솔", () => {
       render(<ProjectDetailPage />);
       await screen.findByRole("heading", { name: "시간 조작" });
       // 카운트다운 옆 상태 배지(기록 행의 '만료' 배지와 구분)
-      const statusBadge = () => screen.getByRole("timer").parentElement!.parentElement!.lastElementChild!;
+      const statusBadge = () => screen.getByRole("timer").parentElement!.lastElementChild!;
       expect(statusBadge()).toHaveTextContent(/^만료$/);
 
       const stubbed = global.fetch;
@@ -600,7 +628,7 @@ describe("프로젝트 콘솔", () => {
       stubApi({ timers: [timer], goals: [], me: owner });
       render(<ProjectDetailPage />);
       await screen.findByRole("heading", { name: "시간 조작" });
-      const statusBadge = () => screen.getByRole("timer").parentElement!.parentElement!.lastElementChild!;
+      const statusBadge = () => screen.getByRole("timer").parentElement!.lastElementChild!;
 
       const stubbed = global.fetch;
       global.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
