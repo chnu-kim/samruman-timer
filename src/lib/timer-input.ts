@@ -26,6 +26,37 @@ export function normalizeTimeParts(hours: number, minutes: number, seconds: numb
 }
 
 /**
+ * 다이얼로그 폼의 시·분·초 입력칸 값. 숫자 대신 입력 문자열을 들고 있어야
+ * 칸을 지웠을 때 '0'이 다시 채워지지 않는다(빈 칸은 placeholder '0'으로 보인다)
+ */
+export type TimeFields = Record<keyof TimeParts, string>;
+
+export const EMPTY_TIME_FIELDS: TimeFields = { hours: "", minutes: "", seconds: "" };
+
+/** 입력칸 문자열을 0 이상의 정수로 읽는다. 빈 값·숫자가 아닌 값은 0 */
+export function parseTimeField(raw: string): number {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+/** 입력칸 값의 총 초. 60 이상의 분·초는 normalizeTimeParts와 같은 규칙으로 센다 */
+export function timeFieldsToSeconds(fields: TimeFields): number {
+  return parseTimeField(fields.hours) * 3600 + parseTimeField(fields.minutes) * 60 + parseTimeField(fields.seconds);
+}
+
+/**
+ * 한 칸을 바꾼 결과. 분·초가 60 이상이 되면 normalizeTimeParts로 윗자리로 올려 세 칸을 다시 쓰고
+ * (0인 칸은 빈 칸), 그렇지 않으면 입력한 문자열을 그대로 둔다
+ */
+export function changeTimeField(fields: TimeFields, field: keyof TimeParts, raw: string): TimeFields {
+  const next = { ...fields, [field]: raw };
+  if (parseTimeField(next.minutes) < 60 && parseTimeField(next.seconds) < 60) return next;
+  const normalized = normalizeTimeParts(parseTimeField(next.hours), parseTimeField(next.minutes), parseTimeField(next.seconds));
+  const show = (n: number) => (n > 0 ? String(n) : "");
+  return { hours: show(normalized.hours), minutes: show(normalized.minutes), seconds: show(normalized.seconds) };
+}
+
+/**
  * 즉시 적용(모바일 하단 바, 숫자 단축키)이 기록할 닉네임.
  * 입력란에 적은 이름이 우선이고, 비어 있으면 기본 닉네임을 쓴다. 둘 다 없으면 빈 문자열
  */

@@ -32,7 +32,7 @@ describe("CreateTimerForm", () => {
     expect(screen.getByRole("combobox", { name: "연도" }).className).toContain("w-20");
   });
 
-  // C021: 초기 시간이 0이면 만들 수 없고, 그 이유를 입력칸 아래 한 줄로 알린다(기본값은 채우지 않는다)
+  // C021·R13: 초기 시간이 0이면 만들 수 없고, 그 이유를 버튼 아래 한 줄로 알린다(기본값은 채우지 않는다)
   it("초기 시간이 0이면 만들기 버튼이 비활성이고 이유가 연결되어 있다", () => {
     render(<CreateTimerForm projectId="p1" defaultTitle="주말 서브어톤" />);
     const submit = screen.getByRole("button", { name: "타이머 만들기" });
@@ -64,5 +64,34 @@ describe("CreateTimerForm", () => {
     expect(screen.getByRole("combobox", { name: "연도" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "취소" })).not.toBeInTheDocument();
   });
-});
 
+  // R13: 시간 칸은 빈 값으로 시작하고(placeholder '0'), 지우면 '0'이 다시 채워지지 않는다
+  it("시·분·초 칸은 비어 있고 지우면 빈 칸으로 남는다", () => {
+    render(<CreateTimerForm projectId="p1" defaultTitle="주말 서브어톤" />);
+    for (const name of ["시간", "분", "초"]) {
+      const input = screen.getByRole("spinbutton", { name });
+      expect(input).toHaveValue(null);
+      expect(input).toHaveAttribute("placeholder", "0");
+    }
+    const hours = screen.getByRole("spinbutton", { name: "시간" });
+    fireEvent.change(hours, { target: { value: "3" } });
+    fireEvent.change(hours, { target: { value: "" } });
+    expect(hours).toHaveValue(null);
+    expect(screen.getByRole("button", { name: "타이머 만들기" })).toBeDisabled();
+  });
+
+  it("제목을 지우면 그 이유도 같은 자리에 알린다", () => {
+    render(<CreateTimerForm projectId="p1" defaultTitle="주말 서브어톤" />);
+    fireEvent.change(screen.getByRole("spinbutton", { name: "분" }), { target: { value: "30" } });
+    fireEvent.change(screen.getByLabelText("제목 (필수)"), { target: { value: " " } });
+    const submit = screen.getByRole("button", { name: "타이머 만들기" });
+    expect(submit).toBeDisabled();
+    expect(submit).toHaveAccessibleDescription("제목을 입력하면 만들 수 있습니다.");
+  });
+
+  // R04: 다이얼로그 제출도 본문 주 버튼과 같은 md(데스크톱 40px, 터치 44px)
+  it("제출 버튼은 md 크기이고 터치 기기에서 44px을 보장한다", () => {
+    render(<CreateTimerForm projectId="p1" />);
+    expect(screen.getByRole("button", { name: "타이머 만들기" })).toHaveClass("h-10", "pointer-coarse:min-h-11");
+  });
+});
