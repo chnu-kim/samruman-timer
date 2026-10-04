@@ -101,6 +101,12 @@ export function GoalForm({ projectId, onSuccess, onCancel }: GoalFormProps) {
     }
   }
 
+  // 이전 유형의 검증 오류가 바뀐 입력 아래에 남지 않게 한다
+  function changeGoalType(type: "DURATION" | "DEADLINE") {
+    setGoalType(type);
+    setError("");
+  }
+
   const maxDay = daysInMonth(schedYear, schedMonth);
   const clampedDay = Math.min(schedDay, maxDay);
 
@@ -200,9 +206,9 @@ export function GoalForm({ projectId, onSuccess, onCancel }: GoalFormProps) {
             size="sm"
             role="radio"
             aria-checked={goalType === "DURATION"}
-            onClick={() => setGoalType("DURATION")}
+            onClick={() => changeGoalType("DURATION")}
           >
-            누적 시간 목표
+            방송 시간 목표
           </Button>
           <Button
             type="button"
@@ -210,7 +216,7 @@ export function GoalForm({ projectId, onSuccess, onCancel }: GoalFormProps) {
             size="sm"
             role="radio"
             aria-checked={goalType === "DEADLINE"}
-            onClick={() => setGoalType("DEADLINE")}
+            onClick={() => changeGoalType("DEADLINE")}
           >
             데드라인 목표
           </Button>

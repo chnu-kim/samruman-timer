@@ -191,7 +191,7 @@ status = DELETED
 구현: `src/lib/goal.ts` (`computeProgress`). 목표는 프로젝트 단위이며 프로젝트의 비삭제 타이머 1개를 기준으로 계산한다.
 
 ### 상태
-`ACTIVE` → `COMPLETED` | `FAILED` (자동 판정) / `CANCELLED` (소유자 취소. 삭제 API는 `COMPLETED`·`FAILED` 목표도 `CANCELLED`로 바꾼다)
+`ACTIVE` → `COMPLETED` | `FAILED` (자동 판정) / `CANCELLED` (소유자 취소). 삭제 API는 상태를 바꾸지 않고 `FAILED`·`CANCELLED` 행만 실제로 지운다. `COMPLETED`로 바뀐 목표는 다시 바뀌지 않는다
 
 판정 결과는 `GET /api/projects/[id]/goals` 조회 시에만 DB에 반영된다 (lazy, 로그 없음). 목표 상태가 바뀌면 `completed_at`에 판정 시각을 기록한다.
 
@@ -203,11 +203,12 @@ consumed = max(0, 초기값(CREATE.after_seconds) + Σ ADD.delta - Σ SUBTRACT.d
 - 타이머가 없으면 0
 
 ### DURATION (누적 진행 시간 목표)
-- `percentage = round(consumed / targetSeconds × 100)`, 최대 999
+- `percentage = round(consumed / targetSeconds × 100)`, 최대 999. `COMPLETED`이면 100으로 고정하고 `currentSeconds`는 `targetSeconds`로 보여 준다(달성 뒤에도 consumed는 늘어난다). 화면 이름은 '방송 시간 목표'
 - `ACTIVE`이고 consumed ≥ targetSeconds이면 `COMPLETED`. `FAILED`로는 가지 않는다
 
 ### DEADLINE (마감 시각까지 타이머 생존 목표)
-- `percentage = round(consumed / (deadline - 타이머 생성 시각) × 100)`, 최대 100
+- `percentage = round(consumed / (deadline - 타이머 생성 시각) × 100)`, 최대 100. `COMPLETED`이면 100. 카드는 퍼센트 대신 마감 시각('10. 05 (월) 00:00 · D-1')을 보여 준다
+- `deadlineAfterTimerEnd`: 종료 예정(RUNNING: 지금+잔여, SCHEDULED: 시작 예정+잔여)보다 마감이 늦으면 true. 카드에 '종료 예정보다 뒤' 경고
 - 타이머 생존: DB status가 `RUNNING`이고 계산한 잔여 > 0
 - `ACTIVE`일 때:
   - 현재 시각 ≥ deadline: 생존이면 `COMPLETED`, 아니면 `FAILED`

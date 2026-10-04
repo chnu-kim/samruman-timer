@@ -113,6 +113,15 @@ export async function computeProgress(
       newStatus = "COMPLETED";
     }
 
+    // 달성한 목표는 달성 시점의 값으로 보여 준다. 달성 뒤에도 소비 시간은 계속 늘어
+    // '283%'처럼 막대(최대 100%)와 맞지 않는 숫자가 되기 때문이다
+    if ((newStatus ?? goal.status) === "COMPLETED") {
+      return {
+        progress: { percentage: 100, currentSeconds: targetSeconds, remainingToTarget: 0 },
+        newStatus,
+      };
+    }
+
     return {
       progress: {
         percentage: Math.min(percentage, 999),
@@ -170,10 +179,29 @@ export async function computeProgress(
 
   return {
     progress: {
-      percentage: Math.min(percentage, 100),
+      percentage: (newStatus ?? goal.status) === "COMPLETED" ? 100 : Math.min(percentage, 100),
       timerSurvivesDeadline: timerIsAlive,
       deadlineIn: Math.max(0, deadlineIn),
+      deadlineAfterTimerEnd: deadlineAfterTimerEnd(timer, deadlineMs, nowMs),
     },
     newStatus,
   };
+}
+
+/**
+ * 지금 남은 시간대로 흐르면 타이머가 마감보다 먼저 끝나는지.
+ * RUNNING은 지금 + 잔여, SCHEDULED는 시작 예정 + 잔여를 종료 예정으로 본다.
+ * 종료 예정을 셀 수 없으면(타이머 없음·만료) false다. 그때는 목표가 곧 실패로 전이된다.
+ */
+function deadlineAfterTimerEnd(timer: TimerRow | null, deadlineMs: number, nowMs: number): boolean {
+  if (!timer) return false;
+  let endMs: number;
+  if (timer.status === "RUNNING") {
+    endMs = nowMs + calculateRemaining(timer.base_remaining_seconds, timer.last_calculated_at) * 1000;
+  } else if (timer.status === "SCHEDULED" && timer.scheduled_start_at) {
+    endMs = new Date(timer.scheduled_start_at).getTime() + timer.base_remaining_seconds * 1000;
+  } else {
+    return false;
+  }
+  return Number.isFinite(endMs) && deadlineMs > endMs;
 }

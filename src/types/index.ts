@@ -350,6 +350,8 @@ export interface GoalProgress {
   remainingToTarget?: number;
   timerSurvivesDeadline?: boolean;
   deadlineIn?: number;
+  /** DEADLINE: 지금 잔여 시간대로면 타이머가 마감 전에 끝난다 */
+  deadlineAfterTimerEnd?: boolean;
 }
 
 // ─── Refresh Token 타입 ───
