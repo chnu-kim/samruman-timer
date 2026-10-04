@@ -321,7 +321,7 @@ POST /api/auth/logout
 
 - `authFetch()`(`src/lib/auth-fetch.ts`)는 `fetch`를 감싸 401이면 `fireSessionExpired()`를 호출한다
 - `fireSessionExpired()`(`src/lib/session-expired.ts`)는 페이지 수명 동안 한 번만 `window`에 `session-expired` 이벤트를 보낸다
-- `SessionExpiredHandler`(`src/components/providers/`)가 이벤트를 받아 토스트("세션이 만료되었습니다. 다시 로그인해주세요.")를 띄우고 1.5초 뒤 `loginUrlWithNext(현재 경로 + 쿼리)`로 이동한다
+- `SessionExpiredHandler`(`src/components/providers/`)가 이벤트를 받아 토스트("세션이 만료되어 로그인 화면으로 이동합니다.")를 띄우고 1.5초 뒤 `sessionExpiredLoginUrl(현재 경로 + 쿼리)`(`/login?next=…&expired=1`)로 이동한다
 - `/api/auth/me` 조회(헤더, 프로젝트·타이머 페이지)는 `authFetch`가 아닌 `fetch`를 써서 비로그인 401이 세션 만료로 처리되지 않는다
 - 미들웨어는 `refresh` 쿠키가 없으면 401 `UNAUTHORIZED`, 있는데 갱신이 거부되면 401 `SESSION_EXPIRED`를 낸다. 로그아웃 상태로도 열 수 있는 화면이 첫 로드부터 보호 API를 부를 때는 이 코드로 나눈다. 통계 화면(`/timers/[id]/stats`)은 `fetch`로 부르고 `SESSION_EXPIRED`일 때만 `fireSessionExpired()`를 직접 부르며, `UNAUTHORIZED`면 '로그인이 필요합니다' 안내만 보인다. `authFetch`는 코드와 무관하게 모든 401을 세션 만료로 본다(로그인한 사용자만 부르는 경로에서 쓴다)
 - refresh 도중 서버 오류로 미들웨어가 500을 내면 `authFetch`는 이벤트를 보내지 않는다. 호출한 화면의 오류 처리가 그대로 동작한다 (`SessionExpiredHandler.test.tsx`)
