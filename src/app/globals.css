@@ -3,6 +3,8 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  /* 네이티브 요소(dialog의 CanvasText, select, 스크롤바)가 테마를 따르게 한다 */
+  color-scheme: light;
   --background: #ffffff;
   --foreground: #171717;
   --accent: #4f46e5;
@@ -38,6 +40,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not(.light) {
+    color-scheme: dark;
     --background: #0a0a0a;
     --foreground: #ededed;
     --accent: #818cf8;
@@ -55,6 +58,7 @@
 }
 
 html.dark {
+  color-scheme: dark;
   --background: #0a0a0a;
   --foreground: #ededed;
   --accent: #818cf8;
