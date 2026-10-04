@@ -3,26 +3,31 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, act } from "@testing-library/react";
 import { ToastProvider } from "@/components/ui/Toast";
 import { SessionExpiredHandler, SESSION_EXPIRED_TOAST } from "../SessionExpiredHandler";
-import { authFetch } from "@/lib/auth-fetch";
+import { authFetch, isSessionExpired } from "@/lib/auth-fetch";
 
 // authFetch를 쓰는 화면(시간 증감 등)의 계약만 확인한다. 페이지 로드 때 refresh를 처음 일으키는
-// GET /api/auth/me는 Header·각 페이지가 authFetch가 아닌 fetch로 부르므로 이 경로를 타지 않는다
+// GET /api/auth/me는 Header·각 페이지가 authFetch가 아닌 fetchMe(session-me.ts)로 부르므로 이 경로를 타지 않는다
 // (그쪽 500 동작은 Header.test.tsx).
 // session-expired.ts는 한 번만 발화하도록 모듈 수준 플래그를 둔다.
-// 그래서 500 → 401 순서를 한 테스트 안에서 이어서 확인한다
+// 그래서 500 → 401(UNAUTHORIZED) → 401(SESSION_EXPIRED) 순서를 한 테스트 안에서 이어서 확인한다
 describe("SessionExpiredHandler + authFetch", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
-  it("authFetch는 500을 세션 만료로 다루지 않고 호출자에게 돌려주며, 401만 세션 만료 토스트를 띄운다", async () => {
+  it("authFetch는 500과 SESSION_EXPIRED가 아닌 401을 세션 만료로 다루지 않고, SESSION_EXPIRED 401만 세션 만료 토스트를 띄운다", async () => {
     vi.useFakeTimers();
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ error: { code: "INTERNAL_ERROR", message: "서버 오류가 발생했습니다" } }), {
           status: 500,
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: { code: "UNAUTHORIZED", message: "인증이 필요합니다" } }), {
+          status: 401,
         })
       )
       .mockResolvedValueOnce(
@@ -46,12 +51,25 @@ describe("SessionExpiredHandler + authFetch", () => {
     expect(expired).not.toHaveBeenCalled();
     expect(screen.queryByText(SESSION_EXPIRED_TOAST)).toBeNull();
 
-    // 401: 만료 토스트를 띄운다
+    // refresh 쿠키가 없는 401(UNAUTHORIZED): 일반 실패로 호출자에게 맡긴다. 본문은 호출자가 그대로 읽는다
+    let unauthorized: Response | undefined;
+    await act(async () => {
+      unauthorized = await authFetch("/api/timers/t-1/modify", { method: "POST" });
+    });
+    expect(unauthorized?.status).toBe(401);
+    expect(isSessionExpired(unauthorized!)).toBe(false);
+    expect(expired).not.toHaveBeenCalled();
+    expect(screen.queryByText(SESSION_EXPIRED_TOAST)).toBeNull();
+    expect(await unauthorized!.json()).toEqual({ error: { code: "UNAUTHORIZED", message: "인증이 필요합니다" } });
+
+    // 갱신 실패 401(SESSION_EXPIRED): 만료 토스트를 띄운다. 호출자는 isSessionExpired로 알고 본문도 읽을 수 있다
     let res401: Response | undefined;
     await act(async () => {
       res401 = await authFetch("/api/timers/t-1/modify", { method: "POST" });
     });
     expect(res401?.status).toBe(401);
+    expect(isSessionExpired(res401!)).toBe(true);
+    expect((await res401!.json()).error.code).toBe("SESSION_EXPIRED");
     expect(expired).toHaveBeenCalledTimes(1);
     expect(screen.getByText(SESSION_EXPIRED_TOAST)).toBeInTheDocument();
 

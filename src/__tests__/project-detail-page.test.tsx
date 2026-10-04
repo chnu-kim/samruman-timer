@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen, waitFor, fireEvent, within, act } from "@testing-library/react";
 import ProjectDetailPage from "@/app/projects/[id]/page";
+import { fetchMe, resetMeCache } from "@/lib/session-me";
 import { MODIFY_FAILED_QUICK_MESSAGE } from "@/components/timer/TimerControls";
 
 vi.mock("next/navigation", () => ({
@@ -79,15 +80,17 @@ const goal = {
 
 type FetchCall = { url: string; method: string; body?: string };
 
-function stubApi({ timers, goals, me = null, modifyStatus, modifyData, detail = timerDetail }: { timers: unknown[]; goals: unknown[]; me?: unknown; modifyStatus?: number; modifyData?: unknown; detail?: unknown }) {
+function stubApi({ timers, goals, me = null, modifyStatus, modifyCode = "X", modifyData, detail = timerDetail }: { timers: unknown[]; goals: unknown[]; me?: unknown; modifyStatus?: number; modifyCode?: string; modifyData?: unknown; detail?: unknown }) {
   const calls: FetchCall[] = [];
+  // 새 페이지 로드처럼 로그인 확인부터 다시 하게 한다(한 테스트 안에서 소유자 → 시청자로 다시 그리는 경우)
+  resetMeCache();
   global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? "GET";
     calls.push({ url, method, body: typeof init?.body === "string" ? init.body : undefined });
     if (url.startsWith("/api/auth/me")) return me ? jsonResponse(me) : new Response(null, { status: 401 });
     if (modifyStatus && url === "/api/timers/t1/modify") {
-      return new Response(JSON.stringify({ error: { code: "X", message: "서버 원문" } }), { status: modifyStatus });
+      return new Response(JSON.stringify({ error: { code: modifyCode, message: "서버 원문" } }), { status: modifyStatus });
     }
     if (modifyData && url === "/api/timers/t1/modify") return jsonResponse(modifyData);
     if (url === "/api/projects/p1/timers") return jsonResponse(timers);
@@ -104,7 +107,20 @@ function stubApi({ timers, goals, me = null, modifyStatus, modifyData, detail = 
 }
 
 afterEach(() => {
+  // fetchMe는 확정 결과를 잠깐 같이 쓰므로 테스트마다 비워 이전 테스트의 로그인 상태가 남지 않게 한다
+  resetMeCache();
   vi.restoreAllMocks();
+});
+
+// 헤더와 같은 첫 로드에 로그인을 확인하므로 공용 fetchMe로 한 요청을 같이 쓴다
+describe("프로젝트 상세 로그인 확인 (fetchMe)", () => {
+  it("헤더가 먼저 물은 로그인 확인을 같이 써서 /api/auth/me를 한 번만 부르고 소유자 화면을 보인다", async () => {
+    const calls = stubApi({ timers: [timer], goals: [], me: owner });
+    void fetchMe();
+    render(<ProjectDetailPage />);
+    expect(await screen.findByLabelText("시청자 닉네임")).toBeInTheDocument();
+    expect(calls.filter((c) => c.url.startsWith("/api/auth/me"))).toHaveLength(1);
+  });
 });
 
 // UX-50: 타이머가 없으면 누를 수 없는 목표 버튼과 빈 탭을 보여 주지 않는다
@@ -414,7 +430,7 @@ describe("프로젝트 콘솔", () => {
       });
     });
 
-    // C029·C032: 단축키 실패는 토스트 한 건. 401은 세션 만료 안내만 남도록 아무것도 띄우지 않는다
+    // C029·C032: 단축키 실패는 토스트 한 건. 세션 만료(SESSION_EXPIRED)는 그 안내만 남도록 아무것도 띄우지 않는다
     it("'1'이 500이면 다시 시도 안내 토스트 한 건", async () => {
       mockToast.mockReset();
       stubApi({ timers: [timer], goals: [], me: owner, modifyStatus: 500 });
@@ -427,9 +443,9 @@ describe("프로젝트 콘솔", () => {
       expect(screen.queryByText("서버 원문")).toBeNull();
     });
 
-    it("'1'이 401이면 아무 알림도 띄우지 않는다", async () => {
+    it("'1'이 세션 만료(401 SESSION_EXPIRED)면 아무 알림도 띄우지 않는다", async () => {
       mockToast.mockReset();
-      const calls = stubApi({ timers: [timer], goals: [], me: owner, modifyStatus: 401 });
+      const calls = stubApi({ timers: [timer], goals: [], me: owner, modifyStatus: 401, modifyCode: "SESSION_EXPIRED" });
       render(<ProjectDetailPage />);
       await waitFor(() => expect(screen.getByLabelText("시청자 닉네임")).toHaveValue("기본냥"));
 
@@ -437,6 +453,18 @@ describe("프로젝트 콘솔", () => {
       await waitFor(() => expect(calls.some((c) => c.url === "/api/timers/t1/modify")).toBe(true));
       await new Promise((r) => setTimeout(r, 50));
       expect(mockToast).not.toHaveBeenCalled();
+    });
+
+    // W34: 세션 만료가 아닌 401(로그아웃 상태 등)은 일반 실패처럼 서버 문구를 알린다
+    it("'1'이 SESSION_EXPIRED가 아닌 401이면 서버 문구 토스트 한 건", async () => {
+      mockToast.mockReset();
+      stubApi({ timers: [timer], goals: [], me: owner, modifyStatus: 401, modifyCode: "UNAUTHORIZED" });
+      render(<ProjectDetailPage />);
+      await waitFor(() => expect(screen.getByLabelText("시청자 닉네임")).toHaveValue("기본냥"));
+
+      fireEvent.keyDown(window, { key: "1", code: "Digit1" });
+      await waitFor(() => expect(mockToast).toHaveBeenCalledWith("서버 원문", "error"));
+      expect(mockToast).toHaveBeenCalledTimes(1);
     });
 
     // R25: 차감을 고른 뒤 카운트다운이 0에 닿으면(폴링 전) 숫자키도 '추가'로 적용한다

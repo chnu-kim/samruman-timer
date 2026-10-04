@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import { GoalForm } from "../GoalForm";
 import { ToastProvider } from "@/components/ui/Toast";
 
@@ -121,6 +121,94 @@ describe("GoalForm", () => {
     fireEvent.change(screen.getAllByRole("combobox", { name: "시" })[0], { target: { value: "0" } });
     expect(submit).toBeDisabled();
     expect(submit).toHaveAccessibleDescription("지금 이후의 날짜를 고르면 만들 수 있습니다.");
+  });
+
+  // 5a 이월: 기한을 effect로 채우면 '데드라인 목표'로 처음 바꾼 프레임에 값이 비어 비활성 안내가 한 번 깜빡였다
+  it("처음 '데드라인 목표'로 바꿀 때 비활성 안내가 한 프레임도 나타나지 않는다", () => {
+    const { container } = render(
+      <ToastProvider>
+        <GoalForm projectId="p1" />
+      </ToastProvider>,
+    );
+    fireEvent.change(screen.getByLabelText("목표 제목"), { target: { value: "마감" } });
+    const observer = new MutationObserver(() => {});
+    observer.observe(container, { childList: true, subtree: true, characterData: true });
+    fireEvent.click(screen.getByRole("radio", { name: "데드라인 목표" }));
+    const records = observer.takeRecords();
+    observer.disconnect();
+    const flashed = records.some((r) =>
+      [...r.addedNodes].some((n) => n.textContent?.includes("지금 이후의 날짜")) ||
+      (r.type === "characterData" && r.target.textContent?.includes("지금 이후의 날짜")),
+    );
+    expect(flashed).toBe(false);
+    expect(screen.getByRole("button", { name: "목표 만들기" })).toBeEnabled();
+  });
+
+  // 5a 이월: 대화상자를 연 채 기한이 지나면 그 순간 버튼을 막는다(날짜를 바꾼 순간에 판정이 고정되지 않는다)
+  describe("열어 둔 채 기한이 지나면", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("버튼이 비활성이 되고 같은 자리에 이유를 알린다", () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+      vi.setSystemTime(new Date(2026, 9, 4, 17, 59, 0));
+      render(
+        <ToastProvider>
+          <GoalForm projectId="p1" />
+        </ToastProvider>,
+      );
+      fireEvent.change(screen.getByLabelText("목표 제목"), { target: { value: "마감" } });
+      fireEvent.click(screen.getByRole("radio", { name: "데드라인 목표" }));
+      // 오늘 18:00 = 1분 뒤
+      fireEvent.change(screen.getByRole("combobox", { name: "월" }), { target: { value: "10" } });
+      fireEvent.change(screen.getByRole("combobox", { name: "일" }), { target: { value: "4" } });
+      fireEvent.change(screen.getAllByRole("combobox", { name: "시" })[0], { target: { value: "18" } });
+      fireEvent.change(screen.getAllByRole("combobox", { name: "분" })[0], { target: { value: "0" } });
+      const submit = screen.getByRole("button", { name: "목표 만들기" });
+      expect(submit).toBeEnabled();
+
+      act(() => {
+        vi.advanceTimersByTime(59_000);
+      });
+      expect(submit).toBeEnabled();
+      act(() => {
+        vi.advanceTimersByTime(1_000);
+      });
+      expect(submit).toBeDisabled();
+      expect(submit).toHaveAccessibleDescription("지금 이후의 날짜를 고르면 만들 수 있습니다.");
+    });
+  });
+
+  // W34·5a 이월: 목표 만들기도 authFetch를 거친다. 세션 만료면 그 안내에 맡기고 폼 오류를 겹쳐 띄우지 않는다
+  it("세션 만료(401 SESSION_EXPIRED)면 세션 만료 이벤트만 내고 폼 오류를 띄우지 않는다", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ error: { code: "SESSION_EXPIRED", message: "유효하지 않은 세션입니다" } }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const expired = vi.fn();
+    window.addEventListener("session-expired", expired);
+    try {
+      render(
+        <ToastProvider>
+          <GoalForm projectId="p1" />
+        </ToastProvider>,
+      );
+      fireEvent.change(screen.getByLabelText("목표 제목"), { target: { value: "열 시간" } });
+      fireEvent.change(screen.getByRole("spinbutton", { name: "시간" }), { target: { value: "10" } });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "목표 만들기" }));
+      });
+      expect(fetchMock).toHaveBeenCalledWith("/api/projects/p1/goals", expect.objectContaining({ method: "POST" }));
+      expect(expired).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    } finally {
+      window.removeEventListener("session-expired", expired);
+      vi.unstubAllGlobals();
+    }
   });
 
   // R04: 다이얼로그 제출도 본문 주 버튼과 같은 md(데스크톱 40px, 터치 44px)

@@ -17,7 +17,8 @@ import { ProjectDetailSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import { GoalCard } from "@/components/goal/GoalCard";
 import { GoalForm } from "@/components/goal/GoalForm";
-import { authFetch } from "@/lib/auth-fetch";
+import { authFetch, isSessionExpired } from "@/lib/auth-fetch";
+import { fetchMe } from "@/lib/session-me";
 import { consumeNewTimerFlag } from "@/lib/project-flow";
 import { cn } from "@/lib/utils";
 import { useDocumentTitle, APP_TITLE } from "@/hooks/useDocumentTitle";
@@ -252,7 +253,7 @@ export default function ProjectDetailPage() {
 
   // silent: 30초 주기·시간 변경·연결 복구 때의 백그라운드 갱신. 실패해도 보이던 목록(또는 오류 줄)을 그대로 둔다.
   // 직접 부른 조회(첫 로드·다시 시도·목표 변경 뒤)가 실패하면 오류 줄을 띄운다. 비-ok 응답과 예외는 같은 실패다.
-  // 401은 세션 만료 안내가 맡는다(이 GET은 공개라 보통 오지 않는다)
+  // 세션 만료는 그 안내가 맡는다(이 GET은 공개라 보통 오지 않는다)
   const fetchGoals = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     try {
       const res = await authFetch(`/api/projects/${projectId}/goals`);
@@ -260,7 +261,7 @@ export default function ProjectDetailPage() {
         const json = (await res.json()) as ApiSuccessResponse<GoalResponse[]>;
         setGoals(json.data);
         setGoalsError(false);
-      } else if (!silent && res.status !== 401) {
+      } else if (!silent && !isSessionExpired(res)) {
         setGoalsError(true);
       }
     } catch {
@@ -292,14 +293,11 @@ export default function ProjectDetailPage() {
     load();
     fetchTimers();
     fetchGoals();
-    fetch("/api/auth/me")
-      .then(async (res) => {
-        if (res.ok) {
-          const json = (await res.json()) as { data: MeResponse };
-          setUser(json.data);
-        }
+    // 헤더도 같은 첫 로드에 세션을 확인하므로 fetchMe로 한 요청을 같이 쓴다. 비로그인·오류면 null이라 실패하지 않는다
+    fetchMe()
+      .then((me) => {
+        if (me) setUser(me);
       })
-      .catch(() => {})
       .finally(() => setAuthChecked(true));
   }, [projectId, fetchProject, fetchTimers, fetchGoals]);
 
@@ -406,7 +404,8 @@ export default function ProjectDetailPage() {
         router.push("/projects");
       } else {
         setDeleting(false);
-        toast("프로젝트 삭제에 실패했습니다", "error");
+        // 세션 만료는 그 안내가 따로 뜬다
+        if (!isSessionExpired(res)) toast("프로젝트 삭제에 실패했습니다", "error");
       }
     } catch {
       setDeleting(false);
@@ -434,7 +433,7 @@ export default function ProjectDetailPage() {
         toast("타이머를 초기화했습니다", "success");
         fetchTimers();
         fetchGoals();
-      } else {
+      } else if (!isSessionExpired(res)) {
         toast("타이머를 초기화하지 못했습니다", "error");
       }
     } catch {

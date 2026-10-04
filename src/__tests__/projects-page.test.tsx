@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import ProjectsPage from "@/app/projects/page";
+import { fetchMe, resetMeCache } from "@/lib/session-me";
 import { SITE_DESCRIPTION } from "@/lib/site";
 
 const push = vi.fn();
@@ -27,6 +28,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // fetchMe는 확정 결과를 잠깐 같이 쓰므로 테스트마다 비워 이전 테스트의 로그인 상태가 남지 않게 한다
+  resetMeCache();
   vi.restoreAllMocks();
   push.mockReset();
 });
@@ -47,6 +50,18 @@ describe("프로젝트 목록 탭", () => {
     fireEvent.keyDown(others, { key: "ArrowLeft" });
     expect(mine).toHaveAttribute("aria-selected", "true");
     expect(document.activeElement).toBe(mine);
+  });
+});
+
+// 헤더와 같은 첫 로드에 로그인을 확인하므로 공용 fetchMe로 한 요청을 같이 쓴다
+describe("로그인 확인 (fetchMe)", () => {
+  it("헤더가 먼저 물은 로그인 확인을 같이 써서 /api/auth/me를 한 번만 부른다", async () => {
+    // 헤더(레이아웃)가 같은 첫 로드에 먼저 묻는다
+    void fetchMe();
+    render(<ProjectsPage />);
+    await screen.findByRole("tab", { name: /내 프로젝트/ });
+    const meCalls = vi.mocked(global.fetch).mock.calls.filter(([input]) => String(input).startsWith("/api/auth/me"));
+    expect(meCalls).toHaveLength(1);
   });
 });
 

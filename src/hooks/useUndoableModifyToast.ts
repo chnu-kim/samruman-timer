@@ -2,7 +2,7 @@
 
 import { useCallback, useRef } from "react";
 import { useToast } from "@/components/ui/Toast";
-import { authFetch } from "@/lib/auth-fetch";
+import { authFetch, isSessionExpired } from "@/lib/auth-fetch";
 import { formatDeltaSeconds } from "@/lib/utils";
 import type { ApiErrorResponse, ApiSuccessResponse, TimerLogResponse, TimerModifyResponse } from "@/types";
 
@@ -35,8 +35,8 @@ export function useUndoableModifyToast(timerId: string, onApplied?: (data: Timer
           toast(`되돌렸습니다 (${summary})`, "success");
           return;
         }
-        // 401은 세션 만료 안내가 따로 뜬다
-        if (res.status === 401) return;
+        // 세션 만료는 그 안내가 따로 뜬다
+        if (isSessionExpired(res)) return;
         const json = (await res.json().catch(() => null)) as ApiErrorResponse | null;
         toast(json?.error?.message || "되돌리지 못했습니다.", "error");
       } catch {

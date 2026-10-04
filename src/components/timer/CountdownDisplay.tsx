@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useMemo, type ReactNode } from "react";
 import { cn, formatDateTime, formatEndTime } from "@/lib/utils";
 import type { TimerStatus } from "@/types";
 
@@ -39,6 +39,12 @@ export function CountdownDisplay({
   aside,
 }: CountdownDisplayProps) {
   const [displayed, setDisplayed] = useState(remainingSeconds);
+  // 종료 예정 시각은 잔여시간 값(서버 스냅샷)이 들어올 때 한 번만 잡는다. 1초 틱마다 '지금 + 남은 초'로 다시 재면
+  // 내림 오차로 분 경계에서 두 값을 오간다. 폴링 값은 다른 기기의 변경이 없으면 그대로 오므로(reconcilePolledTimer) 고정된다
+  const endAtMs = useMemo(
+    () => (status === "RUNNING" ? Date.now() + remainingSeconds * 1000 : null),
+    [remainingSeconds, status],
+  );
 
   useEffect(() => {
     setDisplayed(remainingSeconds);
@@ -66,8 +72,8 @@ export function CountdownDisplay({
 
   // 생성 시각부터 잰 경과는 만료 후 다시 시작한 타이머에서 실제 진행 시간과 어긋나므로 종료 예정 시각만 보여 준다.
   // 오버레이의 종료 예정 줄과 같은 포맷(formatEndTime)을 쓴다
-  const endTimeText = isRunning
-    ? `종료 예정 ${formatEndTime(new Date(Date.now() + displayed * 1000))}`
+  const endTimeText = isRunning && endAtMs !== null
+    ? `종료 예정 ${formatEndTime(new Date(endAtMs))}`
     : null;
 
   return (

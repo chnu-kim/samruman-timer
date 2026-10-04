@@ -7,9 +7,19 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { SegmentedControl, type SegmentedOption } from "@/components/ui/SegmentedControl";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
-import { authFetch } from "@/lib/auth-fetch";
+import { authFetch, isSessionExpired } from "@/lib/auth-fetch";
 import { useUndoableModifyToast } from "@/hooks/useUndoableModifyToast";
-import { normalizeTimeParts, resolveQuickActor, type TimeParts } from "@/lib/timer-input";
+import {
+  changeTimeField,
+  EMPTY_TIME_FIELDS,
+  normalizeTimeParts,
+  parseTimeField,
+  resolveQuickActor,
+  timeFieldsToSeconds,
+  timePartsToFields,
+  type TimeFields,
+  type TimeParts,
+} from "@/lib/timer-input";
 import type { ApiSuccessResponse, ApiErrorResponse, TimerModifyResponse, TimerLogResponse, ModifyAction, TimerStatus } from "@/types";
 
 const ACTION_OPTIONS = [
@@ -127,9 +137,8 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   const { toast } = useToast();
   const showModifiedToast = useUndoableModifyToast(timerId, onModified);
   const [actorName, setActorName] = useState("");
-  const [hours, setHours] = useState(0);
-  const [minutes, setMinutes] = useState(0);
-  const [seconds, setSeconds] = useState(0);
+  // 문자열로 들고 있어야 칸을 지웠을 때 '0'이 다시 채워지지 않는다(빈 칸은 placeholder '0', 제출 때 0으로 센다)
+  const [time, setTime] = useState<TimeFields>(EMPTY_TIME_FIELDS);
   const [error, setError] = useState("");
   const [recentActors, setRecentActors] = useState<string[]>([]);
   const [defaultActor, setDefaultActor] = useState("");
@@ -139,8 +148,8 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   const [confirmActivate, setConfirmActivate] = useState(false);
   const [activateError, setActivateError] = useState("");
   // 실패 시 입력을 되돌릴 때, 요청 중에 새로 입력한 값을 덮어쓰지 않도록 최신 입력을 들고 있는다
-  const inputsRef = useRef({ hours, minutes, seconds });
-  inputsRef.current = { hours, minutes, seconds };
+  const inputsRef = useRef(time);
+  inputsRef.current = time;
   // 겹친 요청 중 먼저 실패한 쪽이 이미 대체된 금액을 되살리지 않도록 제출 순번을 센다
   const submitSeqRef = useRef(0);
   const [barCooldown, setBarCooldown] = useState(false);
@@ -171,7 +180,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
     }
   }, []);
 
-  const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+  const totalSeconds = timeFieldsToSeconds(time);
   // 만료(잔여 0)에서는 차감할 시간이 없으므로 세그먼트를 숨기고 '추가'로만 적용한다.
   // 선택 상태는 상위(TimerConsole)가 만료로 들어갈 때 '추가'로 되돌린다. 여기서도 실효 동작을 고정해 그 사이 렌더를 막는다
   const expired = status === "EXPIRED" || !!expiredProp;
@@ -253,20 +262,18 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
     if (name.trim()) setNicknamePrompt(false);
   }
 
-  function setTime({ hours, minutes, seconds }: TimeParts) {
-    setHours(hours);
-    setMinutes(minutes);
-    setSeconds(seconds);
-  }
-
-  // 60 이상의 분·초는 자르지 않고 윗자리로 올린다(90분 → 1시간 30분). 결과는 확인 버튼 라벨에 보인다
-  function changeTime(field: keyof TimeParts, value: number) {
-    const next = { hours, minutes, seconds, [field]: value };
-    setTime(normalizeTimeParts(next.hours, next.minutes, next.seconds));
+  // 타이머 만들기·새 목표와 같은 규칙: 60 이상의 분·초는 자르지 않고 윗자리로 올린다(90분 → 1시간 30분).
+  // 결과는 확인 버튼 라벨에 보인다. 칸을 비우면 빈 칸으로 둔다
+  function changeTime(field: keyof TimeParts, raw: string) {
+    setTime((t) => changeTimeField(t, field, raw));
   }
 
   function addPreset(presetSeconds: number) {
-    setTime(normalizeTimeParts(hours, minutes, seconds + presetSeconds));
+    setTime((t) =>
+      timePartsToFields(
+        normalizeTimeParts(parseTimeField(t.hours), parseTimeField(t.minutes), parseTimeField(t.seconds) + presetSeconds),
+      ),
+    );
   }
 
   /**
@@ -296,21 +303,16 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
     });
 
     // 입력 즉시 초기화 (실패하면 restoreInputs로 되돌린다)
-    const submitted = { hours, minutes, seconds };
+    const submitted = time;
     const seq = ++submitSeqRef.current;
     saveRecentActor(actor);
     setRecentActors(getRecentActors());
-    setHours(0);
-    setMinutes(0);
-    setSeconds(0);
+    setTime(EMPTY_TIME_FIELDS);
 
     function restoreInputs() {
       if (seq !== submitSeqRef.current) return; // 이후 제출이 있으면 그 금액이 사용자 의도다
-      const current = inputsRef.current;
-      if (current.hours !== 0 || current.minutes !== 0 || current.seconds !== 0) return;
-      setHours(submitted.hours);
-      setMinutes(submitted.minutes);
-      setSeconds(submitted.seconds);
+      if (timeFieldsToSeconds(inputsRef.current) !== 0) return;
+      setTime(submitted);
     }
 
     // 백그라운드에서 서버 확정
@@ -330,8 +332,9 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
           log: {} as TimerLogResponse,
         });
         restoreInputs();
-        // 401은 세션 만료 안내(SessionExpiredHandler) 한 건만 띄운다. 여기서 또 알리면 그 안내를 덮는다
-        if (res.status === 401) return;
+        // 세션 만료는 그 안내(SessionExpiredHandler) 한 건만 띄운다. 여기서 또 알리면 그 안내를 덮는다.
+        // 그 밖의 401(로그아웃 상태 등)은 아래 4xx처럼 서버 문구로 알린다
+        if (isSessionExpired(res)) return;
         // 4xx는 서버가 이유를 알려 준다(만료된 타이머 차감 등, 다시 눌러도 안 된다). 5xx는 다시 시도하면 된다
         const json = (await res.json().catch(() => null)) as ApiErrorResponse | null;
         const message = res.status < 500 && json?.error?.message
@@ -419,8 +422,8 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
         onTimerRemoved();
         return;
       }
-      // 401은 세션 만료 안내가 따로 뜬다
-      if (res.status === 401) return;
+      // 세션 만료는 그 안내가 따로 뜬다
+      if (isSessionExpired(res)) return;
       if (!res.ok) {
         const json = (await res.json().catch(() => null)) as ApiErrorResponse | null;
         setActivateError(json?.error?.message || "타이머를 시작하지 못했습니다.");
@@ -613,9 +616,10 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
               type="number"
               inputMode="numeric"
               min={0}
-              value={hours}
-              onChange={(e) => changeTime("hours", Number(e.target.value))}
+              value={time.hours}
+              onChange={(e) => changeTime("hours", e.target.value)}
               className="w-full text-center"
+              placeholder="0"
               aria-label="시"
             />
             <span className="text-sm text-muted-foreground">시</span>
@@ -623,9 +627,10 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
               type="number"
               inputMode="numeric"
               min={0}
-              value={minutes}
-              onChange={(e) => changeTime("minutes", Number(e.target.value))}
+              value={time.minutes}
+              onChange={(e) => changeTime("minutes", e.target.value)}
               className="w-full text-center"
+              placeholder="0"
               aria-label="분"
             />
             <span className="text-sm text-muted-foreground">분</span>
@@ -633,9 +638,10 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
               type="number"
               inputMode="numeric"
               min={0}
-              value={seconds}
-              onChange={(e) => changeTime("seconds", Number(e.target.value))}
+              value={time.seconds}
+              onChange={(e) => changeTime("seconds", e.target.value)}
               className="w-full text-center"
+              placeholder="0"
               aria-label="초"
             />
             <span className="text-sm text-muted-foreground">초</span>

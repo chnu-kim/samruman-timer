@@ -1,4 +1,4 @@
-import { changeTimeField, EMPTY_TIME_FIELDS, normalizeTimeParts, parseTimeField, resolveQuickActor, splitSeconds, timeFieldsToSeconds } from "../timer-input";
+import { changeTimeField, EMPTY_TIME_FIELDS, normalizeTimeParts, parseTimeField, resolveQuickActor, splitSeconds, timeFieldsToSeconds, timePartsToFields } from "../timer-input";
 
 describe("normalizeTimeParts", () => {
   it("60 이상의 분·초를 윗자리로 올린다", () => {
@@ -45,6 +45,12 @@ describe("다이얼로그 시간 입력칸", () => {
   it("분·초가 60 이상이면 윗자리로 올리고 0인 칸은 비운다", () => {
     expect(changeTimeField(EMPTY_TIME_FIELDS, "minutes", "90")).toEqual({ hours: "1", minutes: "30", seconds: "" });
     expect(changeTimeField({ hours: "", minutes: "59", seconds: "" }, "seconds", "60")).toEqual({ hours: "1", minutes: "", seconds: "" });
+  });
+
+  // 프리셋 결과처럼 숫자로 정한 값을 칸에 쓸 때도 0인 칸은 비운다(placeholder '0')
+  it("timePartsToFields는 0인 칸을 빈 칸으로 쓴다", () => {
+    expect(timePartsToFields({ hours: 1, minutes: 0, seconds: 5 })).toEqual({ hours: "1", minutes: "", seconds: "5" });
+    expect(timePartsToFields({ hours: 0, minutes: 0, seconds: 0 })).toEqual(EMPTY_TIME_FIELDS);
   });
 });
 

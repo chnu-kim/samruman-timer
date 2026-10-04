@@ -438,6 +438,38 @@ describe("TimerControls", () => {
     expect(screen.queryByText(/0~59/)).not.toBeInTheDocument();
   });
 
+  // W36과 같은 규칙: 칸을 비우면 '0'을 다시 채우지 않고 빈 칸(placeholder '0')으로 둔다. 빈 칸은 0으로 센다
+  it("시간 칸을 비우면 빈 칸으로 남고 0으로 센다", () => {
+    render(<Harness timerId={timerId} status="RUNNING" />);
+    const hours = screen.getByRole("spinbutton", { name: "시" });
+    const minutes = screen.getByRole("spinbutton", { name: "분" });
+    // 처음에는 빈 칸(placeholder '0')이다
+    expect(hours).toHaveValue(null);
+    expect(hours).toHaveAttribute("placeholder", "0");
+
+    fireEvent.change(hours, { target: { value: "2" } });
+    fireEvent.change(minutes, { target: { value: "5" } });
+    expect(cardButton("시간 추가 (2시간 5분)")).toBeEnabled();
+
+    fireEvent.change(hours, { target: { value: "" } });
+    expect(hours).toHaveValue(null);
+    expect(minutes).toHaveValue(5);
+    expect(cardButton("시간 추가 (5분)")).toBeEnabled();
+
+    fireEvent.change(minutes, { target: { value: "" } });
+    expect(minutes).toHaveValue(null);
+    expect(cardButton("시간 추가")).toBeDisabled();
+  });
+
+  it("프리셋은 빈 칸을 0으로 보고 더하고, 0인 칸은 빈 칸으로 둔다", () => {
+    render(<Harness timerId={timerId} status="RUNNING" />);
+    fireEvent.change(screen.getByRole("spinbutton", { name: "분" }), { target: { value: "30" } });
+    fireEvent.click(cardButton("+1시간"));
+    expect(screen.getByRole("spinbutton", { name: "시" })).toHaveValue(1);
+    expect(screen.getByRole("spinbutton", { name: "분" })).toHaveValue(30);
+    expect(screen.getByRole("spinbutton", { name: "초" })).toHaveValue(null);
+  });
+
   it("올림이 윗자리까지 이어진다(59분 + 초 75 → 1시간 0분 15초)", () => {
     render(<Harness timerId={timerId} status="RUNNING" />);
     fireEvent.change(screen.getByRole("spinbutton", { name: "분" }), { target: { value: "59" } });
@@ -905,7 +937,7 @@ describe("TimerControls", () => {
     });
   });
 
-  // C029·C032: 실패는 한 곳에만 알린다. 401은 세션 만료 안내(SessionExpiredHandler) 한 건만
+  // C029·C032: 실패는 한 곳에만 알린다. 세션 만료(401 SESSION_EXPIRED)는 그 안내(SessionExpiredHandler) 한 건만
   describe("failure notice channel", () => {
     const serverError = () => ({
       ok: false,
@@ -976,30 +1008,41 @@ describe("TimerControls", () => {
       expect(screen.queryByRole("alert")).toBeNull();
     });
 
-    it("401이면 아무 알림도 띄우지 않고(세션 만료 안내만 남게) 화면 값·입력만 되돌린다", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
+    // W34: 미들웨어가 refresh 갱신에 실패하면 SESSION_EXPIRED를 준다. 그때만 세션 만료 안내에 맡긴다
+    const unauthorized = (code: "SESSION_EXPIRED" | "UNAUTHORIZED") =>
+      new Response(JSON.stringify({ error: { code, message: code === "SESSION_EXPIRED" ? "유효하지 않은 세션입니다" : "인증이 필요합니다" } }), {
         status: 401,
-        json: async () => ({ error: { code: "UNAUTHORIZED", message: "인증이 필요합니다" } }),
+        headers: { "Content-Type": "application/json" },
       });
+
+    it("세션 만료(401 SESSION_EXPIRED)면 아무 알림도 띄우지 않고(세션 만료 안내만 남게) 화면 값·입력만 되돌린다", async () => {
+      mockFetch.mockResolvedValueOnce(unauthorized("SESSION_EXPIRED"));
       const onModified = renderAndFill();
       fireEvent.click(cardButton(/시간 추가/));
 
       await waitFor(() =>
         expect(onModified).toHaveBeenLastCalledWith(expect.objectContaining({ remainingSeconds: 7200 })),
       );
+      await act(async () => {});
       expect(mockToast).not.toHaveBeenCalled();
       expect(screen.queryByRole("alert")).toBeNull();
-      expect(screen.queryByText("인증이 필요합니다")).toBeNull();
+      expect(screen.queryByText("유효하지 않은 세션입니다")).toBeNull();
       expect(cardButton(/시간 추가/)).toHaveTextContent("1시간");
     });
 
-    it("하단 바 401도 알리지 않는다", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 401,
-        json: async () => ({ error: { code: "UNAUTHORIZED", message: "인증이 필요합니다" } }),
-      });
+    it("세션 만료가 아닌 401은 일반 실패처럼 서버 문구를 인라인으로 알린다", async () => {
+      mockFetch.mockResolvedValueOnce(unauthorized("UNAUTHORIZED"));
+      const onModified = renderAndFill();
+      fireEvent.click(cardButton(/시간 추가/));
+
+      await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("인증이 필요합니다"));
+      expect(onModified).toHaveBeenLastCalledWith(expect.objectContaining({ remainingSeconds: 7200 }));
+      expect(mockToast).not.toHaveBeenCalled();
+      expect(cardButton(/시간 추가/)).toHaveTextContent("1시간");
+    });
+
+    it("하단 바도 세션 만료면 알리지 않는다", async () => {
+      mockFetch.mockResolvedValueOnce(unauthorized("SESSION_EXPIRED"));
       renderAndFill(vi.fn(), { pickPreset: false });
       fireEvent.click(quickBar().getByRole("button", { name: "+1시간" }));
       await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
@@ -1008,17 +1051,28 @@ describe("TimerControls", () => {
       expect(screen.queryByRole("alert")).toBeNull();
     });
 
-    it("'지금 시작'이 401이면 버튼 아래 오류를 띄우지 않는다", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 401,
-        json: async () => ({ error: { code: "UNAUTHORIZED", message: "인증이 필요합니다" } }),
-      });
+    it("하단 바의 세션 만료가 아닌 401은 서버 문구 토스트 한 건", async () => {
+      mockFetch.mockResolvedValueOnce(unauthorized("UNAUTHORIZED"));
+      renderAndFill(vi.fn(), { pickPreset: false });
+      fireEvent.click(quickBar().getByRole("button", { name: "+1시간" }));
+      await waitFor(() => expect(mockToast).toHaveBeenCalledWith("인증이 필요합니다", "error"));
+      expect(mockToast).toHaveBeenCalledTimes(1);
+    });
+
+    it("'지금 시작'이 세션 만료면 버튼 아래 오류를 띄우지 않는다", async () => {
+      mockFetch.mockResolvedValueOnce(unauthorized("SESSION_EXPIRED"));
       render(<Harness timerId={timerId} status="SCHEDULED" />);
       await confirmActivate();
       await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
       await act(async () => {});
-      expect(screen.queryByText("인증이 필요합니다")).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("'지금 시작'의 세션 만료가 아닌 401은 버튼 아래 서버 문구로 알린다", async () => {
+      mockFetch.mockResolvedValueOnce(unauthorized("UNAUTHORIZED"));
+      render(<Harness timerId={timerId} status="SCHEDULED" />);
+      await confirmActivate();
+      expect(await screen.findByRole("alert")).toHaveTextContent("인증이 필요합니다");
     });
 
     it("닉네임 없이 제출하면 통일된 문구 하나만 인라인으로", async () => {

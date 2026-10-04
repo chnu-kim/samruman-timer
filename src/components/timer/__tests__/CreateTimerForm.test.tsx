@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import { CreateTimerForm } from "../CreateTimerForm";
 
 vi.mock("@/components/ui/Toast", () => ({
@@ -87,6 +87,59 @@ describe("CreateTimerForm", () => {
     const submit = screen.getByRole("button", { name: "타이머 만들기" });
     expect(submit).toBeDisabled();
     expect(submit).toHaveAccessibleDescription("제목을 입력하면 만들 수 있습니다.");
+  });
+
+  // 5a 이월: 예약 시각이 지나면 제출 전에 버튼을 막고 새 목표의 기한과 같은 꼴로 이유를 알린다(제출 뒤 오류로 미루지 않는다)
+  describe("예약 시각이 지나면", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function renderScheduledInOneMinute() {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+      vi.setSystemTime(new Date(2026, 9, 4, 17, 59, 0));
+      render(<CreateTimerForm projectId="p1" defaultTitle="주말 서브어톤" />);
+      fireEvent.change(screen.getByRole("spinbutton", { name: "시간" }), { target: { value: "2" } });
+      fireEvent.click(screen.getByRole("radio", { name: "예약 시작" }));
+      // 오늘 18:00 = 1분 뒤
+      fireEvent.change(screen.getByRole("combobox", { name: "시" }), { target: { value: "18" } });
+      fireEvent.change(screen.getByRole("combobox", { name: "분" }), { target: { value: "0" } });
+      return screen.getByRole("button", { name: "타이머 만들기" });
+    }
+
+    it("열어 둔 채 그 시각이 지나면 버튼이 비활성이 되고 이유와 '지난 시각'을 함께 알린다", () => {
+      const submit = renderScheduledInOneMinute();
+      expect(submit).toBeEnabled();
+      expect(screen.getByText("예약됨")).toBeInTheDocument();
+
+      act(() => {
+        vi.advanceTimersByTime(60_000);
+      });
+      expect(submit).toBeDisabled();
+      expect(submit).toHaveAccessibleDescription("지금 이후의 시각을 고르면 만들 수 있습니다.");
+      // 배지와 상대 시간 문구가 같은 순간에 바뀐다(30초 주기를 기다리지 않는다)
+      expect(screen.getByText("지난 시각")).toBeInTheDocument();
+      expect(screen.getByText("이미 지난 시각")).toBeInTheDocument();
+    });
+
+    it("다른 이유와 함께면 한 문장으로 알린다", () => {
+      const submit = renderScheduledInOneMinute();
+      fireEvent.change(screen.getByRole("spinbutton", { name: "시간" }), { target: { value: "" } });
+      act(() => {
+        vi.advanceTimersByTime(60_000);
+      });
+      expect(submit).toHaveAccessibleDescription("초기 시간을 입력하고 지금 이후의 시각을 고르면 만들 수 있습니다.");
+    });
+
+    it("즉시 시작으로 바꾸면 지난 예약 시각은 막지 않는다", () => {
+      const submit = renderScheduledInOneMinute();
+      act(() => {
+        vi.advanceTimersByTime(60_000);
+      });
+      expect(submit).toBeDisabled();
+      fireEvent.click(screen.getByRole("radio", { name: "즉시 시작" }));
+      expect(submit).toBeEnabled();
+    });
   });
 
   // R04: 다이얼로그 제출도 본문 주 버튼과 같은 md(데스크톱 40px, 터치 44px)
