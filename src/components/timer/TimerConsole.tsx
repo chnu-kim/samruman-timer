@@ -359,8 +359,8 @@ export function TimerConsole({ timerId, initialSnapshot, isOwner, aside, onTimeC
     if (!serverData) throw new Error(`poll ${status}`);
     const synced = syncedRef.current;
     // 이 화면이 이미 반영한 것보다 옛 상태다(조작 직전에 떠난 폴링이 조작 응답 뒤에 도착). 화면을 되돌리지 않고 버린다.
-    // updatedAt은 같은 형식의 ISO UTC 문자열이라 글자 순서가 시간 순서다
-    if (synced && serverData.updatedAt < synced.updatedAt) return;
+    // 시각으로 바꿔 비교한다(밀리초 유무 등 표기가 달라도 글자 순서가 아니라 시간 순서로). 읽을 수 없는 값이면 버리지 않는다
+    if (synced && Date.parse(serverData.updatedAt) < Date.parse(synced.updatedAt)) return;
     // updatedAt이 다르면 1~2초짜리 변경이어도 다른 기기의 조작으로 본다. 3초 임계(hasExternalChange)는 상태 전이와
     // updatedAt이 같은 채로 값만 어긋난 경우를 잡는다. 타이머 제목 수정(오버레이 설정)도 updatedAt을 올려 같은 길을 타는데,
     // 그때는 기록·그래프·목표를 한 번 조용히 다시 받을 뿐이라(깜빡임 없음) 따로 막지 않는다

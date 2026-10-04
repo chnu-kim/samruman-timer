@@ -160,6 +160,18 @@ describe("폴링의 외부 변경 판정 (updatedAt)", () => {
     expect(count("/api/timers/t1/graph")).toBe(graphs);
   });
 
+  it("표기가 다른(밀리초 없는) 더 새 updatedAt도 옛 응답으로 버리지 않는다", async () => {
+    server.updatedAt = "2026-10-05T00:00:00Z";
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    render(<ProjectDetailPage />);
+    await screen.findByRole("heading", { name: "최근 기록" });
+    const before = count("/api/timers/t1/graph");
+    // 글자 순서로는 "…00.500Z" < "…00Z"('.' < 'Z')지만 시각은 0.5초 뒤다
+    server.updatedAt = "2026-10-05T00:00:00.500Z";
+    await vi.advanceTimersByTimeAsync(5_000);
+    await waitFor(() => expect(count("/api/timers/t1/graph")).toBe(before + 1));
+  });
+
   it("다른 기기의 1초 변경도 updatedAt이 바뀌었으면 한 번만 다시 부른다", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     render(<ProjectDetailPage />);
@@ -224,6 +236,7 @@ describe("첫 타이머 값 보정", () => {
     render(<ProjectDetailPage />);
     // 기록·그래프 0.5초 + 목표 0.5초를 기다린 뒤 그린다
     const timer = await screen.findByRole("timer", {}, { timeout: 2000 });
-    expect(timer).toHaveTextContent("00:59:59");
+    // 보정하지 않으면 01:00:00이다. 부하로 더 늦거나 한 번 틱해도 59:58까지는 같은 보정이다
+    expect(timer).toHaveTextContent(/^00:59:5[89]$/);
   });
 });
