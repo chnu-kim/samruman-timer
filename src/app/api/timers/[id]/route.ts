@@ -77,16 +77,22 @@ export const GET = withErrorHandler(async (
   const since = Number.isNaN(sinceMs) ? null : new Date(sinceMs).toISOString();
   let deltaSince: { deltaSinceSeconds: number | null } | Record<string, never> = {};
   if (since && sinceMs < Date.parse(checked.updatedAt)) {
+    // 되돌리기는 ADD·SUBTRACT 행을 새로 쓰지 않고 원래 행에 reverted_at만 채운다. 그사이 되돌린 기록이 있으면
+    // 합계가 실제 변경과 어긋나므로(추가 후 바로 되돌리면 '+N', 되돌리기만 있으면 '변경 없음') 필드를 빼서 추정으로 넘긴다.
+    // 되돌린 양을 빼는 방식은 0에서 잘리는 되돌리기에서 다시 어긋난다
     const sum = await db
       .prepare(
-        `SELECT SUM(after_seconds - before_seconds) AS d
-           FROM timer_logs
-          WHERE timer_id = ? AND action_type IN ('ADD', 'SUBTRACT')
-            AND created_at > ? AND created_at <= ?`
+        `SELECT
+           (SELECT SUM(after_seconds - before_seconds)
+              FROM timer_logs
+             WHERE timer_id = ? AND action_type IN ('ADD', 'SUBTRACT')
+               AND created_at > ? AND created_at <= ?) AS d,
+           EXISTS (SELECT 1 FROM timer_logs
+                    WHERE timer_id = ? AND reverted_at > ? AND reverted_at <= ?) AS reverted`
       )
-      .bind(checked.id, since, checked.updatedAt)
-      .first<{ d: number | null }>();
-    deltaSince = { deltaSinceSeconds: sum?.d ?? null };
+      .bind(checked.id, since, checked.updatedAt, checked.id, since, checked.updatedAt)
+      .first<{ d: number | null; reverted: number }>();
+    if (sum && !sum.reverted) deltaSince = { deltaSinceSeconds: sum.d ?? null };
   }
 
   const remainingSeconds =

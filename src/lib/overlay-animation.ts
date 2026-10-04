@@ -37,7 +37,7 @@ export function detectTimerChange(
   // 서버가 직전 updatedAt(since) 이후의 실제 변경량 합계를 주면 그대로 쓴다. 폴링 시각으로 추정하면
   // 폴링 시각과 서버의 초 내림 때문에 1~2초 어긋나 '+60초'가 '+1:01'로 보이고, 만료·재오픈이 끼면 더 어긋난다.
   // null은 그사이 시간 추가·차감이 없었다는 뜻(제목 수정, 만료 기록 등)이라 연출하지 않는다.
-  // undefined(since를 보내지 않았거나 이 필드가 없는 이전 서버)일 때만 폴링 시각으로 추정한다
+  // undefined(since를 보내지 않았거나, 그사이 되돌리기가 있었거나, 이 필드가 없는 이전 서버)일 때만 폴링 시각으로 추정한다
   if (current.deltaSinceSeconds === null) return null;
   let delta: number;
   if (typeof current.deltaSinceSeconds === "number") {

@@ -106,7 +106,7 @@ describe("GET /api/timers/[id]", () => {
     it("since 뒤 지금 상태까지의 ADD·SUBTRACT 변경량 합계를 내려 준다", async () => {
       db._stmt.first
         .mockResolvedValueOnce({ ...TIMER_ROW })
-        .mockResolvedValueOnce({ d: 120 });
+        .mockResolvedValueOnce({ d: 120, reverted: 0 });
       const res = await GET(
         createGetRequest(`/api/timers/timer-1?since=${encodeURIComponent(SINCE)}`) as never,
         makeParams() as never,
@@ -117,13 +117,27 @@ describe("GET /api/timers/[id]", () => {
       const sql = db.prepare.mock.calls[1][0] as string;
       expect(sql).toContain("action_type IN ('ADD', 'SUBTRACT')");
       expect(sql).toContain("created_at > ? AND created_at <= ?");
-      expect(db._stmt.bind).toHaveBeenLastCalledWith("timer-1", SINCE, TIMER_ROW.updated_at);
+      expect(db._stmt.bind).toHaveBeenLastCalledWith("timer-1", SINCE, TIMER_ROW.updated_at, "timer-1", SINCE, TIMER_ROW.updated_at);
+    });
+
+    it("그사이 되돌린 기록이 있으면 합계를 믿지 않고 필드를 빼서 클라이언트가 추정하게 한다", async () => {
+      db._stmt.first
+        .mockResolvedValueOnce({ ...TIMER_ROW })
+        .mockResolvedValueOnce({ d: 600, reverted: 1 });
+      const res = await GET(
+        createGetRequest(`/api/timers/timer-1?since=${encodeURIComponent(SINCE)}`) as never,
+        makeParams() as never,
+      );
+      const body = await parseJson(res);
+      expect(body.data).not.toHaveProperty("deltaSinceSeconds");
+      const sql = db.prepare.mock.calls[1][0] as string;
+      expect(sql).toContain("reverted_at > ? AND reverted_at <= ?");
     });
 
     it("그사이 추가·차감이 없으면(제목 수정 등) null", async () => {
       db._stmt.first
         .mockResolvedValueOnce({ ...TIMER_ROW })
-        .mockResolvedValueOnce({ d: null });
+        .mockResolvedValueOnce({ d: null, reverted: 0 });
       const res = await GET(
         createGetRequest(`/api/timers/timer-1?since=${encodeURIComponent(SINCE)}`) as never,
         makeParams() as never,
@@ -146,14 +160,14 @@ describe("GET /api/timers/[id]", () => {
     it("다른 ISO 표기(오프셋)의 since도 저장 형식으로 맞춰 비교한다", async () => {
       db._stmt.first
         .mockResolvedValueOnce({ ...TIMER_ROW })
-        .mockResolvedValueOnce({ d: 60 });
+        .mockResolvedValueOnce({ d: 60, reverted: 0 });
       const res = await GET(
         createGetRequest(`/api/timers/timer-1?since=${encodeURIComponent("2025-01-01T08:59:55+09:00")}`) as never,
         makeParams() as never,
       );
       const body = await parseJson(res);
       expect(body.data.deltaSinceSeconds).toBe(60);
-      expect(db._stmt.bind).toHaveBeenLastCalledWith("timer-1", SINCE, TIMER_ROW.updated_at);
+      expect(db._stmt.bind).toHaveBeenLastCalledWith("timer-1", SINCE, TIMER_ROW.updated_at, "timer-1", SINCE, TIMER_ROW.updated_at);
     });
   });
 });
