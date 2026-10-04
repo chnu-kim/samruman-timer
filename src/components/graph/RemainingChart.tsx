@@ -95,6 +95,7 @@ export function RemainingChart({ points, className }: RemainingChartProps) {
               color: "var(--color-foreground)",
               opacity: 0.9,
             }}
+            itemStyle={{ color: "var(--color-foreground)" }}
           />
           <Line
             type="stepAfter"

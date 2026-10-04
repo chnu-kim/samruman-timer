@@ -244,14 +244,14 @@ export default function ProjectsPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="프로젝트 검색..."
               aria-label="프로젝트 검색"
-              className="w-full rounded-lg border border-border bg-background pl-9 pr-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+              className="w-full rounded-lg border border-border-input bg-background pl-9 pr-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
             />
           </div>
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortBy)}
             aria-label="정렬 기준"
-            className="shrink-0 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="shrink-0 rounded-lg border border-border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <option value="latest">최신순</option>
             <option value="name">이름순</option>

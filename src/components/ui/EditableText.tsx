@@ -89,7 +89,7 @@ export function EditableText({
           disabled={saving}
           placeholder={placeholder}
           className={cn(
-            "min-w-0 w-full flex-1 rounded-md border border-border bg-background px-2 py-1 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "min-w-0 w-full flex-1 rounded-md border border-border-input bg-background px-2 py-1 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring",
             Tag === "h1" && "text-2xl font-bold",
             Tag === "p" && "text-base",
             className,

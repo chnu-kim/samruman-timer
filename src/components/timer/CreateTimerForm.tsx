@@ -47,7 +47,7 @@ function range(start: number, end: number): number[] {
 }
 
 const selectClass =
-  "appearance-none border border-border rounded-lg px-3 py-2 bg-background text-foreground text-center outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors cursor-pointer";
+  "appearance-none border border-border-input rounded-lg px-3 py-2 bg-background text-foreground text-center outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors cursor-pointer";
 
 interface SelectFieldProps {
   value: number;

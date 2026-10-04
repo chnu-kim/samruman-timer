@@ -479,7 +479,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
               className={cn(
                 "rounded-lg py-3 min-h-[48px] text-sm font-bold transition-colors disabled:opacity-50",
                 selectedAction === "ADD"
-                  ? "bg-green-600 text-white hover:bg-green-700 active:bg-green-800"
+                  ? "bg-green-700 text-white hover:bg-green-800 active:bg-green-900"
                   : "bg-red-600 text-white hover:bg-red-700 active:bg-red-800",
               )}
             >
