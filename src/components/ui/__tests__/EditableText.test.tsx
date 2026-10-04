@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { EditableText } from "../EditableText";
 
 const noopSave = async () => {};
@@ -34,6 +34,38 @@ describe("EditableText", () => {
     render(<EditableText value="제목" onSave={noopSave} editable as="h1" />);
     fireEvent.click(screen.getByRole("heading", { level: 1 }));
     expect(screen.getByRole("textbox")).toHaveValue("제목");
+  });
+
+  // C007: 키보드로 편집을 끝내면 포커스가 body로 떨어지지 않고 편집 버튼으로 돌아온다
+  it("Esc로 취소하면 편집 버튼으로 포커스가 돌아온다", () => {
+    render(<EditableText value="제목" onSave={noopSave} editable as="h1" />);
+    fireEvent.click(screen.getByRole("button", { name: "제목 편집" }));
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Escape" });
+    expect(screen.getByRole("button", { name: "제목 편집" })).toHaveFocus();
+  });
+
+  it("Enter로 저장하면 저장이 끝난 뒤 편집 버튼으로 포커스가 돌아온다", async () => {
+    const onSave = vi.fn(async () => {});
+    render(<EditableText value="제목" onSave={onSave} editable as="h1" />);
+    fireEvent.click(screen.getByRole("button", { name: "제목 편집" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "새 제목" } });
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+    await waitFor(() => expect(screen.getByRole("button", { name: "제목 편집" })).toHaveFocus());
+    expect(onSave).toHaveBeenCalledWith("새 제목");
+  });
+
+  it("다른 곳으로 포커스를 옮겨 저장되면 포커스를 빼앗지 않는다", async () => {
+    render(
+      <>
+        <EditableText value="제목" onSave={noopSave} editable as="h1" />
+        <button type="button">다른 버튼</button>
+      </>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "제목 편집" }));
+    const other = screen.getByRole("button", { name: "다른 버튼" });
+    act(() => other.focus());
+    expect(await screen.findByRole("button", { name: "제목 편집" })).not.toHaveFocus();
+    expect(other).toHaveFocus();
   });
 
   // UX-32: 터치 기기(hover 없음)에서는 연필 아이콘이 항상 보인다

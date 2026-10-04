@@ -28,6 +28,10 @@ export function EditableText({
   const [draft, setDraft] = useState(value);
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const editButtonRef = useRef<HTMLButtonElement>(null);
+  // Enter·Esc·저장/취소 버튼으로 끝냈을 때만 편집 버튼으로 포커스를 돌린다.
+  // 다른 곳을 클릭하거나 Tab으로 나가서(blur) 저장된 경우는 사용자가 옮긴 포커스를 빼앗지 않는다
+  const restoreFocusRef = useRef(false);
 
   useEffect(() => {
     setDraft(value);
@@ -37,6 +41,9 @@ export function EditableText({
     if (editing) {
       inputRef.current?.focus();
       inputRef.current?.select();
+    } else if (restoreFocusRef.current) {
+      restoreFocusRef.current = false;
+      editButtonRef.current?.focus();
     }
   }, [editing]);
 
@@ -67,8 +74,10 @@ export function EditableText({
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter") {
       e.preventDefault();
+      restoreFocusRef.current = true;
       handleSave();
     } else if (e.key === "Escape") {
+      restoreFocusRef.current = true;
       handleCancel();
     }
   }
@@ -89,7 +98,7 @@ export function EditableText({
           disabled={saving}
           placeholder={placeholder}
           className={cn(
-            "min-w-0 w-full flex-1 rounded-md border border-border bg-background px-2 py-1 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "min-w-0 w-full flex-1 rounded-md border border-border bg-background px-2 py-1 text-foreground",
             Tag === "h1" && "text-2xl font-bold",
             Tag === "p" && "text-base",
             className,
@@ -98,9 +107,12 @@ export function EditableText({
         <button
           type="button"
           onMouseDown={(e) => e.preventDefault()}
-          onClick={handleSave}
+          onClick={() => {
+            restoreFocusRef.current = true;
+            handleSave();
+          }}
           disabled={saving}
-          className="rounded p-1 text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="rounded p-1 text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
           aria-label="저장"
         >
           <CheckIcon className="w-4 h-4" />
@@ -108,9 +120,12 @@ export function EditableText({
         <button
           type="button"
           onMouseDown={(e) => e.preventDefault()}
-          onClick={handleCancel}
+          onClick={() => {
+            restoreFocusRef.current = true;
+            handleCancel();
+          }}
           disabled={saving}
-          className="rounded p-1 text-muted-foreground hover:bg-foreground/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="rounded p-1 text-muted-foreground hover:bg-foreground/10 transition-colors"
           aria-label="취소"
         >
           <XIcon className="w-4 h-4" />
@@ -129,9 +144,10 @@ export function EditableText({
         {value || <span className="text-muted-foreground">{placeholder}</span>}
       </Tag>
       <button
+        ref={editButtonRef}
         type="button"
         onClick={() => setEditing(true)}
-        className="mt-1 rounded p-1 text-muted-foreground opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:bg-foreground/10 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="mt-1 rounded p-1 text-muted-foreground opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:bg-foreground/10 transition-[opacity,background-color]"
         aria-label={Tag === "h1" ? "제목 편집" : "설명 편집"}
       >
         <PencilIcon className="w-3.5 h-3.5" />

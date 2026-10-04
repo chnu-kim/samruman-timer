@@ -413,3 +413,56 @@ describe("프로젝트 콘솔", () => {
     expect(trigger).toHaveFocus();
   });
 });
+
+// W20: 키보드 포커스 흐름(C006 목표 탭, C022 모달 첫 입력칸, C008 더보기 메뉴)
+describe("프로젝트 상세 키보드 포커스", () => {
+  it("목표 탭에서 화살표 키로 선택을 옮기면 포커스도 새 탭으로 간다", async () => {
+    stubApi({ timers: [timer], goals: [], me: owner });
+    render(<ProjectDetailPage />);
+    const activeTab = await screen.findByRole("tab", { name: /진행 중/ });
+    activeTab.focus();
+    fireEvent.keyDown(activeTab, { key: "ArrowRight" });
+    const completedTab = screen.getByRole("tab", { name: /종료/ });
+    expect(completedTab).toHaveAttribute("aria-selected", "true");
+    expect(completedTab).toHaveFocus();
+
+    fireEvent.keyDown(completedTab, { key: "ArrowLeft" });
+    expect(activeTab).toHaveAttribute("aria-selected", "true");
+    expect(activeTab).toHaveFocus();
+  });
+
+  it("새 목표 모달을 열면 목표 제목 칸에 포커스가 간다", async () => {
+    stubApi({ timers: [timer], goals: [], me: owner });
+    render(<ProjectDetailPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /새 목표/ }));
+    await screen.findByRole("heading", { name: "새 목표 설정" });
+    expect(screen.getByLabelText("목표 제목")).toHaveFocus();
+  });
+
+  it("새 타이머 모달을 열면 미리 채워진 제목 대신 시간 칸에 포커스가 간다", async () => {
+    stubApi({ timers: [], goals: [], me: owner });
+    render(<ProjectDetailPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "타이머 만들기" }));
+    await screen.findByRole("heading", { name: "새 타이머 만들기" });
+    expect(screen.getByRole("spinbutton", { name: "시간" })).toHaveFocus();
+  });
+
+  it("더보기 메뉴는 파괴적 항목 앞에 구분선을 하나 두고, Tab으로 메뉴 밖에 포커스가 가면 닫힌다", async () => {
+    stubApi({ timers: [timer], goals: [], me: owner });
+    render(<ProjectDetailPage />);
+    const trigger = await screen.findByRole("button", { name: "더보기" });
+    fireEvent.click(trigger);
+    expect(screen.getAllByRole("separator")).toHaveLength(1);
+
+    const lastItem = screen.getByRole("button", { name: "프로젝트 삭제" });
+    const outside = screen.getByRole("button", { name: /OBS 오버레이/ });
+    // 다음 포커스를 알 수 없는 blur(Safari 버튼 클릭 등)에는 닫지 않는다
+    fireEvent.blur(lastItem, { relatedTarget: null });
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    // 메뉴 안에서 움직이면 열린 채다
+    fireEvent.blur(lastItem, { relatedTarget: trigger });
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    fireEvent.blur(lastItem, { relatedTarget: outside });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+});

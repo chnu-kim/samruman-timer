@@ -56,11 +56,20 @@ function GoalSection({
   const inactiveGoals = goals.filter((g) => g.status !== "ACTIVE");
 
   const tabClass = (active: boolean) =>
-    `px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+    `px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-lg ${
       active
         ? "border-accent text-accent"
         : "border-transparent text-muted-foreground hover:text-foreground"
     }`;
+
+  // WAI-ARIA Tabs 패턴: 화살표 키로 선택을 옮길 때 포커스도 새 탭으로 옮긴다(프로젝트 목록 탭과 같다)
+  function handleGoalTabKeyDown(e: React.KeyboardEvent) {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    e.preventDefault();
+    const next = goalTab === "active" ? "completed" : "active";
+    setGoalTab(next);
+    document.getElementById(`goal-tab-${next}`)?.focus();
+  }
 
   return (
     <section className={cn("space-y-4", className)} aria-label="목표">
@@ -99,12 +108,7 @@ function GoalSection({
           aria-controls="goal-tabpanel"
           tabIndex={goalTab === "active" ? 0 : -1}
           onClick={() => setGoalTab("active")}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-              e.preventDefault();
-              setGoalTab(goalTab === "active" ? "completed" : "active");
-            }
-          }}
+          onKeyDown={handleGoalTabKeyDown}
           className={tabClass(goalTab === "active")}
         >
           진행 중 ({activeGoals.length})
@@ -116,12 +120,7 @@ function GoalSection({
           aria-controls="goal-tabpanel"
           tabIndex={goalTab === "completed" ? 0 : -1}
           onClick={() => setGoalTab("completed")}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-              e.preventDefault();
-              setGoalTab(goalTab === "active" ? "completed" : "active");
-            }
-          }}
+          onKeyDown={handleGoalTabKeyDown}
           className={tabClass(goalTab === "completed")}
         >
           종료 ({inactiveGoals.length})
@@ -339,7 +338,7 @@ export default function ProjectDetailPage() {
   const isOwner = user?.id === project.owner.id;
   const timer = timers[0] ?? null;
   const headerButton =
-    "inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium text-foreground transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+    "inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium text-foreground transition-colors hover:bg-foreground/5";
 
   function handleCreateSuccess() {
     setShowForm(false);
@@ -461,7 +460,7 @@ export default function ProjectDetailPage() {
               onClick={handleCopyLink}
               aria-label="링크 복사"
               title="링크 복사"
-              className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
             >
               <LinkIcon className="w-5 h-5" />
             </button>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { MoreHorizontalIcon } from "@/components/ui/Icons";
 
@@ -48,8 +48,20 @@ export function MoreMenu({ label, items, className }: MoreMenuProps) {
     };
   }, [open]);
 
+  // 파괴적 항목 묶음 앞(일반 항목 다음 첫 danger)에 구분선을 하나 둔다
+  const firstDangerIndex = items.findIndex((item) => item.danger);
+
   return (
-    <div ref={rootRef} className={cn("relative", className)}>
+    <div
+      ref={rootRef}
+      className={cn("relative", className)}
+      // Tab으로 메뉴 밖에 포커스가 가면 닫는다. relatedTarget이 없는 blur(포커스가 body로 빠짐, Safari에서 버튼 클릭 등)는
+      // 다음 포커스 위치를 알 수 없으므로 여기서 닫지 않고 pointerdown·Escape 처리에 맡긴다
+      onBlur={(e) => {
+        const next = e.relatedTarget as Node | null;
+        if (open && next && !rootRef.current?.contains(next)) setOpen(false);
+      }}
+    >
       <button
         ref={triggerRef}
         type="button"
@@ -58,7 +70,7 @@ export function MoreMenu({ label, items, className }: MoreMenuProps) {
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((v) => !v)}
-        className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
       >
         <MoreHorizontalIcon className="w-5 h-5" />
       </button>
@@ -67,26 +79,30 @@ export function MoreMenu({ label, items, className }: MoreMenuProps) {
           id={panelId}
           className="absolute right-0 top-full z-30 mt-1 min-w-40 rounded-lg border border-border bg-background p-1 shadow-dialog"
         >
-          {items.map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              disabled={item.disabled}
-              onClick={() => {
-                setOpen(false);
-                // 다이얼로그를 여는 항목이 많아 포커스를 트리거로 돌려 두면 다이얼로그가 닫힌 뒤 제자리로 돌아온다
-                triggerRef.current?.focus();
-                item.onSelect();
-              }}
-              className={cn(
-                "flex min-h-11 w-full items-center rounded-md px-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
-                item.danger
-                  ? "text-red-600 hover:bg-red-500/10 dark:text-red-400"
-                  : "text-foreground hover:bg-foreground/10",
+          {items.map((item, index) => (
+            <Fragment key={item.label}>
+              {index > 0 && index === firstDangerIndex && (
+                <div role="separator" className="my-1 h-px bg-border" />
               )}
-            >
-              {item.label}
-            </button>
+              <button
+                type="button"
+                disabled={item.disabled}
+                onClick={() => {
+                  setOpen(false);
+                  // 다이얼로그를 여는 항목이 많아 포커스를 트리거로 돌려 두면 다이얼로그가 닫힌 뒤 제자리로 돌아온다
+                  triggerRef.current?.focus();
+                  item.onSelect();
+                }}
+                className={cn(
+                  "flex min-h-11 w-full items-center rounded-md px-3 text-left text-sm transition-colors disabled:opacity-50",
+                  item.danger
+                    ? "text-red-600 hover:bg-red-500/10 dark:text-red-400"
+                    : "text-foreground hover:bg-foreground/10",
+                )}
+              >
+                {item.label}
+              </button>
+            </Fragment>
           ))}
         </div>
       )}

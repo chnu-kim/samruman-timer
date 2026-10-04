@@ -161,7 +161,7 @@ export function GoalCard({ goal, projectId, isOwner, onUpdate, compact = false }
           onClick={() => setExpanded(true)}
           aria-expanded={false}
           aria-label={`${goal.title} - ${statusLabel[goal.status]} ${summaryText(goal)} 상세 보기`}
-          className="min-w-0 flex-1 rounded-lg px-3 py-2 min-h-11 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="min-w-0 flex-1 rounded-lg px-3 py-2 min-h-11 text-left"
         >
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-bold text-foreground truncate">{goal.title}</h3>
@@ -186,7 +186,7 @@ export function GoalCard({ goal, projectId, isOwner, onUpdate, compact = false }
             onClick={() => setExpanded(false)}
             aria-expanded={true}
             aria-label={`${goal.title} 접기`}
-            className="min-w-0 flex-1 text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg -m-1 p-1"
+            className="min-w-0 flex-1 text-left cursor-pointer rounded-lg -m-1 p-1"
           >
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-sm font-bold text-foreground truncate">{goal.title}</h3>

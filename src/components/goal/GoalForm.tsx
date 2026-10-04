@@ -8,7 +8,7 @@ import { useToast } from "@/components/ui/Toast";
 import type { ApiSuccessResponse, ApiErrorResponse, GoalResponse } from "@/types";
 
 const selectClass =
-  "appearance-none border border-border rounded-lg px-3 py-2 bg-background text-foreground text-center outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors cursor-pointer";
+  "appearance-none border border-border rounded-lg px-3 py-2 bg-background text-foreground text-center transition-colors cursor-pointer";
 
 function range(start: number, end: number): number[] {
   const arr: number[] = [];
@@ -194,7 +194,7 @@ export function GoalForm({ projectId, onSuccess, onCancel }: GoalFormProps) {
         required
         maxLength={100}
         placeholder="목표 제목을 입력하세요"
-        autoFocus
+        data-autofocus
       />
 
       <div>

@@ -47,7 +47,7 @@ function range(start: number, end: number): number[] {
 }
 
 const selectClass =
-  "appearance-none border border-border rounded-lg px-3 py-2 bg-background text-foreground text-center outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors cursor-pointer";
+  "appearance-none border border-border rounded-lg px-3 py-2 bg-background text-foreground text-center transition-colors cursor-pointer";
 
 interface SelectFieldProps {
   value: number;
@@ -285,6 +285,8 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess, onCan
             className="w-full text-center"
             placeholder="시"
             aria-label="시간"
+            // 제목은 프로젝트 이름으로 미리 채워지므로 모달을 열면 비어 있는 시간부터 입력한다
+            data-autofocus
           />
           <span className="text-sm text-muted-foreground">시</span>
           <Input
