@@ -437,7 +437,9 @@ export function TimerConsole({ timerId, initialSnapshot, initialFailed = false, 
     // 빠른 연속 조작에서 앞 요청의 응답이 뒤 요청의 응답보다 늦게 오면, 그 값(잔여·상태·updatedAt)은 이미 반영한 것보다 옛 상태다.
     // 폴링과 같은 규칙(시각 비교, 같거나 읽을 수 없으면 반영)으로 버려 화면과 저장한 updatedAt을 되돌리지 않는다.
     // updatedAt이 없는 값(낙관적 반영)은 지연 없이 그대로 반영한다. 롤백은 조작 직전의 updatedAt을 실어 와, 그 뒤 더 새 확정 값
-    // (뒤 조작의 응답 등)이 반영됐으면 같은 규칙으로 버려진다. 같으면 지연 없이 되돌린다
+    // (뒤 조작의 응답 등)이 반영됐으면 같은 규칙으로 버려진다. 같으면 지연 없이 되돌린다.
+    // 별개의 두 조작이 같은 updatedAt으로 확정되는 일은 사실상 없다(modifyTimer가 조건부 UPDATE·재조회·재시도로 직렬화하고
+    // 둘째의 시각은 첫째 커밋 뒤에 다시 잡는다). 나와도 다음 폴링이 바로잡는다
     const applied = appliedUpdatedAtRef.current;
     if (data.updatedAt && applied && Date.parse(data.updatedAt) < Date.parse(applied)) return;
     if (data.updatedAt) appliedUpdatedAtRef.current = data.updatedAt;
