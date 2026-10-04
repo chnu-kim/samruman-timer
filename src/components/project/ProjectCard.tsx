@@ -83,12 +83,17 @@ export function ProjectCard({ project, showOwner = true, className }: ProjectCar
 
         {/* 하단: 메타 정보 (고정 영역). 항목 사이 '·'는 글자로 두어 링크 설명에서도 항목이 붙어 읽히지 않는다 */}
         <div id={metaId} className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
-          {metaItems.map((item, i) => (
-            <Fragment key={i}>
-              {i > 0 && <span>{" · "}</span>}
-              {item}
-            </Fragment>
-          ))}
+          {metaItems.map((item, i) =>
+            i === 0 ? (
+              <Fragment key={i}>{item}</Fragment>
+            ) : (
+              // 구분자를 뒤 항목에 붙여 줄바꿈 때 '·'만 홀로 남지 않게 한다
+              <span key={i} className="inline-flex items-center gap-1.5">
+                <span>{" · "}</span>
+                {item}
+              </span>
+            ),
+          )}
         </div>
       </article>
     </Link>

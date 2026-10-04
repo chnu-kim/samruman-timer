@@ -52,6 +52,26 @@ describe("fetchMe", () => {
     expect(ok).toHaveBeenCalledTimes(1);
   });
 
+  // 다른 탭에서 로그인한 뒤 뒤로 가기로 /login에 돌아오면 같은 문서라도 다시 물어야 한다
+  it("확정 결과는 잠깐(3초)만 다시 쓰고 그 뒤에는 새로 묻는다", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const first = respond(401);
+      vi.stubGlobal("fetch", first);
+      expect(await fetchMe()).toBeNull();
+      vi.setSystemTime(Date.now() + 2000);
+      expect(await fetchMe()).toBeNull();
+      expect(first).toHaveBeenCalledTimes(1);
+      vi.setSystemTime(Date.now() + 1500);
+      const later = respond(200);
+      vi.stubGlobal("fetch", later);
+      expect(await fetchMe()).toEqual(me);
+      expect(later).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("세션 만료 이벤트가 나면 캐시를 비운다", async () => {
     vi.stubGlobal("fetch", respond(200));
     expect(await fetchMe()).toEqual(me);
