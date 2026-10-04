@@ -233,7 +233,7 @@
 - **근거**: 측정 캡처 [modal-bottom-d-light.png](ux-review/measure/modal-bottom-d-light.png), [modal-font200.png](ux-review/measure/modal-font200.png) · `src/components/timer/OverlaySettings.tsx:469-487`
 
 #### UX-23. 오버레이의 변화량 텍스트('+1:00:00')가 숫자 중심에서 반폭만큼 오른쪽으로 치우친다
-- **상태**: 해결 — `overlay-float-up` 키프레임의 transform을 `translateY` 대신 `translate(-50%, 0)`에서 `translate(-50%, -60px)`로 움직이게 바꿔 가로 중앙 정렬을 유지한다. jsdom은 레이아웃을 계산하지 않아 자동 테스트는 두지 않았다.
+- **상태**: 해결 — `overlay-float-up` 키프레임의 transform을 `translateY` 대신 `translate(-50%, 0)`에서 `translate(-50%, -60px)`로 움직이게 바꿔 가로 중앙 정렬을 유지한다. jsdom은 레이아웃을 계산하지 않아 자동 테스트는 두지 않았다. 이후 C061에서 변경량이 제목과 겹치고 위쪽 배치에서 잘리는 문제로 숫자 줄 옆에 붙이는 방식으로 바꿔, 가운데 정렬 transform은 없어졌다(`docs/UI.md` 5절 '변경 연출').
 - **심각도**: minor · **영역**: 오버레이
 - **관찰**: 인라인 `translateX(-50%)`를 `overlay-float-up` 키프레임의 `transform: translateY(...)`가 덮어쓴다. 실측 결과 중심이 69.6px(폭 139px의 절반) 어긋났다.
 - **이유**: 시간이 추가될 때마다 시청자에게 보이는 텍스트가 어긋난 위치에 뜬다.

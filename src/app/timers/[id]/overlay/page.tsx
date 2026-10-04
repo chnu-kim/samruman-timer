@@ -267,66 +267,74 @@ export default function TimerOverlayPage() {
               {timer.title}
             </span>
           )}
-          <span
-            role="timer"
-            aria-label={
-              isCritical
-                ? `긴급: 남은 시간 ${formatTime(displayed)}, 1분 미만`
-                : isUrgent
-                  ? `긴급: 남은 시간 ${formatTime(displayed)}, 5분 미만`
-                  : isScheduled
-                    ? `예약 시간 ${formatTime(displayed)}`
-                    : `남은 시간 ${formatTime(displayed)}`
-            }
-            style={{
-              color: textColor,
-              fontSize: `${fontSizePx}px`,
-              fontWeight: 700,
-              lineHeight: 1,
-              whiteSpace: "nowrap",
-              letterSpacing: "-0.02em",
-              textShadow,
-              ...(animClass === "overlay-anim-add"
-                ? { animation: "overlay-flash-add 0.6s ease-out" }
-                : animClass === "overlay-anim-subtract"
-                  ? { animation: "overlay-flash-subtract 0.5s ease-out" }
-                  : !animation
-                    ? {}
-                    : isExpired
-                      ? { animation: "pulse-expired 2s ease-in-out infinite" }
-                      : isCritical
-                        ? { animation: "pulse-urgent-fast 0.8s ease-in-out infinite" }
-                        : isUrgent
-                          ? { animation: "pulse-urgent-slow 2s ease-in-out infinite" }
-                          : {}),
-            }}
-            onAnimationEnd={() => {
-              if (animClass) setAnimClass(null);
-            }}
-          >
-            {formatTime(displayed)}
-          </span>
-          {floatingText && (
+          {/* 변경량('+N')은 숫자 줄의 안쪽 옆에 붙여 띄운다. 위로 띄우면 제목과 겹치고 위쪽 배치에서 화면 밖으로 잘리며,
+              아래로 띄우면 '만료됨'·'종료 예정' 줄과 겹치고 아래쪽 배치에서 잘린다. 숫자 줄 안에서만 움직이므로 어느 배치에서도 겹치지 않는다 */}
+          <div style={{ position: "relative", display: "flex" }}>
             <span
-              key={floatingKey}
+              role="timer"
+              aria-label={
+                isCritical
+                  ? `긴급: 남은 시간 ${formatTime(displayed)}, 1분 미만`
+                  : isUrgent
+                    ? `긴급: 남은 시간 ${formatTime(displayed)}, 5분 미만`
+                    : isScheduled
+                      ? `예약 시간 ${formatTime(displayed)}`
+                      : `남은 시간 ${formatTime(displayed)}`
+              }
               style={{
-                position: "absolute",
-                top: `-${Math.round(fontSizePx * 0.3)}px`,
-                left: "50%",
-                transform: "translateX(-50%)",
-                fontSize: `${Math.round(fontSizePx * 0.4)}px`,
+                color: textColor,
+                fontSize: `${fontSizePx}px`,
                 fontWeight: 700,
-                color: floatingText.startsWith("+") ? "#22c55e" : "#ef4444",
+                lineHeight: 1,
                 whiteSpace: "nowrap",
-                pointerEvents: "none",
-                animation: "overlay-float-up 1.2s ease-out forwards",
+                letterSpacing: "-0.02em",
                 textShadow,
+                ...(animClass === "overlay-anim-add"
+                  ? { animation: "overlay-flash-add 0.6s ease-out" }
+                  : animClass === "overlay-anim-subtract"
+                    ? { animation: "overlay-flash-subtract 0.5s ease-out" }
+                    : !animation
+                      ? {}
+                      : isExpired
+                        ? { animation: "pulse-expired 2s ease-in-out infinite" }
+                        : isCritical
+                          ? { animation: "pulse-urgent-fast 0.8s ease-in-out infinite" }
+                          : isUrgent
+                            ? { animation: "pulse-urgent-slow 2s ease-in-out infinite" }
+                            : {}),
               }}
-              onAnimationEnd={() => setFloatingText(null)}
+              onAnimationEnd={() => {
+                if (animClass) setAnimClass(null);
+              }}
             >
-              {floatingText}
+              {formatTime(displayed)}
             </span>
-          )}
+            {floatingText && (
+              <span
+                key={floatingKey}
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  top: "50%",
+                  // 오른쪽 배치는 숫자 왼쪽에, 나머지는 숫자 오른쪽에 둬서 화면 가장자리 쪽으로 넘치지 않게 한다
+                  ...(position.endsWith("right")
+                    ? { right: "100%", marginRight: `${Math.round(fontSizePx * 0.25)}px` }
+                    : { left: "100%", marginLeft: `${Math.round(fontSizePx * 0.25)}px` }),
+                  fontSize: `${Math.round(fontSizePx * 0.4)}px`,
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  color: floatingText.startsWith("+") ? "#22c55e" : "#ef4444",
+                  whiteSpace: "nowrap",
+                  pointerEvents: "none",
+                  animation: "overlay-float-up 1.2s ease-out forwards",
+                  textShadow,
+                }}
+                onAnimationEnd={() => setFloatingText(null)}
+              >
+                {floatingText}
+              </span>
+            )}
+          </div>
           {isExpired && (
             <span
               style={{

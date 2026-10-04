@@ -156,6 +156,106 @@ describe("detectTimerChange", () => {
   });
 });
 
+describe("detectTimerChange — 서버의 실제 변경량 (C062)", () => {
+  const BASE_TIME = 1700000000000;
+  const prev = { remainingSeconds: 3600, updatedAt: "2024-01-01T00:00:00Z", fetchedAt: BASE_TIME, status: "RUNNING" as const };
+
+  it("+60초를 10번 추가해도 폴링 시각 오차와 상관없이 모두 '+1:00'", () => {
+    // 폴링 사이 경과(4.2~5.8초)와 서버의 초 내림 때문에 추정값은 58~62초로 흔들린다
+    const cases = [
+      { elapsedMs: 4200, remaining: 3655 },
+      { elapsedMs: 4600, remaining: 3656 },
+      { elapsedMs: 4999, remaining: 3654 },
+      { elapsedMs: 5000, remaining: 3655 },
+      { elapsedMs: 5001, remaining: 3656 },
+      { elapsedMs: 5400, remaining: 3654 },
+      { elapsedMs: 5499, remaining: 3655 },
+      { elapsedMs: 5500, remaining: 3655 },
+      { elapsedMs: 5800, remaining: 3653 },
+      { elapsedMs: 4500, remaining: 3657 },
+    ];
+    for (const { elapsedMs, remaining } of cases) {
+      const result = detectTimerChange(
+        prev,
+        { remainingSeconds: remaining, updatedAt: "2024-01-01T00:00:05Z", lastDeltaSeconds: 60 },
+        BASE_TIME + elapsedMs,
+      );
+      expect(result?.floatingText).toBe("+1:00");
+    }
+  });
+
+  it("차감도 실제 변경량(음수)을 쓴다", () => {
+    const result = detectTimerChange(
+      prev,
+      { remainingSeconds: 2994, updatedAt: "2024-01-01T00:00:05Z", lastDeltaSeconds: -600 },
+      BASE_TIME + 5000,
+    );
+    expect(result?.animClass).toBe("overlay-anim-subtract");
+    expect(result?.floatingText).toBe("-10:00");
+  });
+
+  it("폴링 사이에 여러 번 바뀌어 실제 변경량이 추정과 크게 다르면 합계에 가까운 추정값을 쓴다", () => {
+    // +60초 두 번 → 마지막 변경량은 60이지만 화면 값은 120초 늘었다
+    const result = detectTimerChange(
+      prev,
+      { remainingSeconds: 3715, updatedAt: "2024-01-01T00:00:05Z", lastDeltaSeconds: 60 },
+      BASE_TIME + 5000,
+    );
+    expect(result?.floatingText).toBe("+2:00");
+  });
+
+  it("만료 상태에서 +60초로 재오픈된 뒤 몇 초 지나 폴링해도 '+1:00'", () => {
+    const expired = { remainingSeconds: 0, updatedAt: "2024-01-01T00:00:00Z", fetchedAt: BASE_TIME, status: "EXPIRED" as const };
+    for (const remaining of [60, 58, 57, 55]) {
+      const result = detectTimerChange(
+        expired,
+        { remainingSeconds: remaining, updatedAt: "2024-01-01T00:00:05Z", status: "RUNNING", lastDeltaSeconds: 60 },
+        BASE_TIME + 5000,
+      );
+      expect(result?.floatingText).toBe("+1:00");
+    }
+  });
+
+  it("만료 상태에서 폴링 사이에 +60초가 두 번 들어오면 합계에 가까운 추정값을 쓴다", () => {
+    const expired = { remainingSeconds: 0, updatedAt: "2024-01-01T00:00:00Z", fetchedAt: BASE_TIME, status: "EXPIRED" as const };
+    const result = detectTimerChange(
+      expired,
+      { remainingSeconds: 117, updatedAt: "2024-01-01T00:00:05Z", status: "RUNNING", lastDeltaSeconds: 60 },
+      BASE_TIME + 5000,
+    );
+    expect(result?.floatingText).toBe("+1:57");
+  });
+
+  it("차감으로 0이 되어 만료되면 폴링 사이 경과와 상관없이 실제로 줄어든 만큼", () => {
+    // 직전 폴링 30초 → 2초 뒤 10분 차감(28초 → 0) → 3초 뒤 폴링: 추정은 -25초
+    const prev30 = { remainingSeconds: 30, updatedAt: "2024-01-01T00:00:00Z", fetchedAt: BASE_TIME, status: "RUNNING" as const };
+    const result = detectTimerChange(
+      prev30,
+      { remainingSeconds: 0, updatedAt: "2024-01-01T00:00:02Z", status: "EXPIRED", lastDeltaSeconds: -28 },
+      BASE_TIME + 5000,
+    );
+    expect(result?.floatingText).toBe("-28초");
+  });
+
+  it("실제 변경량이 없으면(null) 반올림한 경과 시간으로 추정한다", () => {
+    const result = detectTimerChange(
+      prev,
+      { remainingSeconds: 3655, updatedAt: "2024-01-01T00:00:05Z", lastDeltaSeconds: null },
+      BASE_TIME + 4600, // 내림이면 4초 → '+59초', 반올림이면 5초 → '+1:00'
+    );
+    expect(result?.floatingText).toBe("+1:00");
+  });
+
+  it("제목 수정처럼 시간이 그대로인 변경은 실제 변경량이 없으므로 연출하지 않는다", () => {
+    const result = detectTimerChange(
+      prev,
+      { remainingSeconds: 3595, updatedAt: "2024-01-01T00:00:05Z", lastDeltaSeconds: null },
+      BASE_TIME + 5000,
+    );
+    expect(result).toBeNull();
+  });
+});
+
 describe("isStaleResponse", () => {
   const snap = { remainingSeconds: 600, updatedAt: "2024-01-01T00:00:10.000Z", fetchedAt: 0, status: "RUNNING" as const };
 

@@ -203,6 +203,8 @@ export interface TimerDetailResponse {
   projectOwnerId: string;
   createdAt: string;
   updatedAt: string;
+  /** updatedAt을 만든 시간 추가·차감의 실제 변경량(초, 차감은 음수). 그 밖의 변경이면 null */
+  lastDeltaSeconds: number | null;
 }
 
 export interface TimerModifyResponse {

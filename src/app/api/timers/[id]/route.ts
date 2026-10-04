@@ -17,7 +17,13 @@ export const GET = withErrorHandler(async (
               t.scheduled_start_at,
               t.created_by, t.created_at, t.updated_at,
               u.id AS creator_id, u.nickname AS creator_nickname,
-              p.owner_user_id, p.name AS project_name
+              p.owner_user_id, p.name AS project_name,
+              (SELECT l.after_seconds - l.before_seconds
+                 FROM timer_logs l
+                WHERE l.timer_id = t.id
+                  AND l.created_at = t.updated_at
+                  AND l.action_type IN ('ADD', 'SUBTRACT')
+                LIMIT 1) AS last_delta_seconds
        FROM timers t
        JOIN users u ON u.id = t.created_by
        JOIN projects p ON p.id = t.project_id
@@ -40,6 +46,7 @@ export const GET = withErrorHandler(async (
       creator_nickname: string;
       owner_user_id: string;
       project_name: string;
+      last_delta_seconds: number | null;
     }>();
 
   if (!row || row.status === "DELETED") {
@@ -91,6 +98,10 @@ export const GET = withErrorHandler(async (
       projectOwnerId: row.owner_user_id,
       createdAt: checked.createdAt,
       updatedAt: checked.updatedAt,
+      // 지금 상태를 만든 시간 추가·차감의 실제 변경량(초, 차감은 음수). 오버레이가 '+N'을 추정 대신 이 값으로 그린다.
+      // 이 조회에서 예약 활성화·만료가 기록돼 updatedAt이 바뀌었으면 지금 상태를 만든 변경이 아니므로 null
+      lastDeltaSeconds:
+        checked.updatedAt === row.updated_at ? (row.last_delta_seconds ?? null) : null,
     },
   });
 });

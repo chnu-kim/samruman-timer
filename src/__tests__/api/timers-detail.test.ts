@@ -99,6 +99,40 @@ describe("GET /api/timers/[id]", () => {
     expect(body.data.status).toBe("EXPIRED");
     expect(body.data.remainingSeconds).toBe(0);
   });
+
+  describe("lastDeltaSeconds (C062: 오버레이 '+N'의 실제 변경량)", () => {
+    it("지금 상태를 만든 추가·차감의 변경량을 그대로 내려 준다", async () => {
+      db._stmt.first.mockResolvedValue({ ...TIMER_ROW, last_delta_seconds: -600 });
+      const res = await GET(createGetRequest("/api/timers/timer-1") as never, makeParams() as never);
+      const body = await parseJson(res);
+
+      expect(body.data.lastDeltaSeconds).toBe(-600);
+      // updatedAt과 같은 시각에 기록된 ADD·SUBTRACT 로그만 본다(제목 수정·만료·재개 로그는 제외)
+      const sql = db.prepare.mock.calls[0][0] as string;
+      expect(sql).toContain("l.created_at = t.updated_at");
+      expect(sql).toContain("l.action_type IN ('ADD', 'SUBTRACT')");
+    });
+
+    it("해당 로그가 없으면 null", async () => {
+      db._stmt.first.mockResolvedValue({ ...TIMER_ROW, last_delta_seconds: null });
+      const res = await GET(createGetRequest("/api/timers/timer-1") as never, makeParams() as never);
+      const body = await parseJson(res);
+      expect(body.data.lastDeltaSeconds).toBeNull();
+    });
+
+    it("이 조회에서 만료가 기록돼 updatedAt이 바뀌면 이전 변경량을 내려 주지 않는다", async () => {
+      db._stmt.first.mockResolvedValue({
+        ...TIMER_ROW,
+        base_remaining_seconds: 5,
+        last_calculated_at: new Date(Date.now() - 20_000).toISOString(),
+        last_delta_seconds: 60,
+      });
+      const res = await GET(createGetRequest("/api/timers/timer-1") as never, makeParams() as never);
+      const body = await parseJson(res);
+      expect(body.data.status).toBe("EXPIRED");
+      expect(body.data.lastDeltaSeconds).toBeNull();
+    });
+  });
 });
 
 describe("PATCH /api/timers/[id]", () => {
