@@ -421,7 +421,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                     setConfig((prev) => ({ ...prev, fontSize: clamped }));
                   }
                 }}
-                className="w-16 text-center rounded border border-border bg-background px-2 py-1 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="w-16 text-center rounded border border-border-input bg-background px-2 py-1 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label="폰트 크기 입력"
               />
               <span className="text-sm text-muted-foreground">px</span>
@@ -446,7 +446,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                   setColorDraft(null);
                   setConfig((prev) => ({ ...prev, color: e.target.value }));
                 }}
-                className="w-11 h-11 rounded border border-border cursor-pointer"
+                className="w-11 h-11 rounded border border-border-input cursor-pointer"
                 aria-label="텍스트 색상"
               />
               <Input
@@ -483,13 +483,13 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                     setConfig((prev) => ({ ...prev, bg: e.target.value }));
                   }}
                   className={cn(
-                    "block w-11 h-11 rounded border border-border cursor-pointer",
+                    "block w-11 h-11 rounded border border-border-input cursor-pointer",
                     config.bg === "transparent" && "opacity-0",
                   )}
                   aria-label="배경색"
                 />
                 {config.bg === "transparent" && (
-                  <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded border border-border" />
+                  <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded border border-border-input" />
                 )}
               </span>
               <div className="flex-1 flex items-center gap-1">
@@ -541,10 +541,10 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                   onClick={() => setConfig((prev) => ({ ...prev, position: pos }))}
                   className={cn(
                     "rounded border text-xs transition-colors min-h-[40px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    // 고르지 않은 칸도 누를 수 있는 자리로 보이게 윤곽을 상시 둔다(배경 대비 3:1 이상)
+                    // 고르지 않은 칸도 누를 수 있는 자리로 보이게 입력 경계 토큰으로 윤곽을 상시 둔다(bg-muted 대비 3:1 이상)
                     config.position === pos
                       ? "border-accent bg-accent text-accent-foreground"
-                      : "border-foreground/50 hover:bg-foreground/10",
+                      : "border-border-input hover:bg-foreground/10",
                   )}
                   aria-label={POSITION_LABELS[pos]}
                   aria-pressed={config.position === pos}

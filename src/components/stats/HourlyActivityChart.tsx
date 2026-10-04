@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { cn } from "@/lib/utils";
 import type { HourlyDistribution } from "@/types";
+import { chartTooltipStyle } from "@/components/graph/tooltip-style";
 
 interface HourlyActivityChartProps {
   data: HourlyDistribution[];
@@ -77,14 +78,7 @@ export function HourlyActivityChart({ data, className }: HourlyActivityChartProp
             formatter={(value, name) =>
               name === "adds" ? [`${value}회`, "추가"] : [`${Math.abs(Number(value))}회`, "차감"]
             }
-            contentStyle={{
-              backgroundColor: "var(--color-background)",
-              border: "1px solid var(--color-border)",
-              borderRadius: "8px",
-              fontSize: "12px",
-              color: "var(--color-foreground)",
-              opacity: 0.9,
-            }}
+            {...chartTooltipStyle}
           />
           <Legend
             formatter={(value: string) => (value === "adds" ? "+ 추가" : "- 차감")}

@@ -478,8 +478,18 @@ describe("OverlaySettings 현재 상태 표시 (C036·C038·C026·C070)", () => 
   it("위치 칸은 윤곽으로 보이고 '현재: …' 문구는 없다", async () => {
     render(<OverlaySettings timerId="abc" onClose={() => {}} />);
     const topLeft = await screen.findByRole("button", { name: "좌상단" });
-    expect(topLeft).toHaveClass("border", "border-foreground/50");
+    expect(topLeft).toHaveClass("border", "border-border-input");
     expect(screen.queryByText(/현재:/)).not.toBeInTheDocument();
+  });
+
+  // W06: 흰 글자색 견본이 흰 카드에 묻히지 않게 입력 칸은 입력 경계 토큰(3:1 이상)을 쓴다
+  it("폰트 크기 입력과 색 견본은 입력 경계 토큰을 쓴다", async () => {
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    for (const name of ["폰트 크기 입력", "텍스트 색상", "배경색"]) {
+      const el = await screen.findByLabelText(name);
+      expect(el).toHaveClass("border-border-input");
+      expect(el).not.toHaveClass("border-border");
+    }
   });
 
   it("저장 안 한 변경 경고는 라이트에서 amber-700을 쓴다", async () => {

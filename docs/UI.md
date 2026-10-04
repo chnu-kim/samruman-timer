@@ -205,6 +205,7 @@ RootLayout (ThemeProvider, ToastProvider, SessionExpiredHandler)
 - 점: 각 로그 이벤트 시점의 변경 후 잔여 시간(`after_seconds`)
 - stepAfter 보간: 이벤트 시점에 값이 바뀐다. 실행 중 자연 감소는 그리지 않는다(점 사이가 평평하다)
 - 선 색은 앱 강조색 토큰(`--color-accent`)
+- 모든 그래프 툴팁은 `graph/tooltip-style.ts`의 `chartTooltipStyle`을 펼쳐 쓴다. 값 글자는 계열 색(라이트에서 `#22c55e`는 2.3:1)을 따르지 않고 본문색(`--color-foreground`)이다
 
 ### 누적 변경량 (AreaChart, 통계 화면)
 
