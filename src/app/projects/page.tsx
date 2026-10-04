@@ -35,9 +35,9 @@ export default function ProjectsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("mine");
   const [page, setPage] = useState(1);
 
-  // Track total per tab for tab counts
-  const [mineTotal, setMineTotal] = useState(0);
-  const [othersTotal, setOthersTotal] = useState(0);
+  // 탭 개수. 응답 전에는 null로 두어 '(0)'처럼 확정된 값으로 보이지 않게 한다
+  const [mineTotal, setMineTotal] = useState<number | null>(null);
+  const [othersTotal, setOthersTotal] = useState<number | null>(null);
   // 검색어와 무관한 내 프로젝트 수. mineTotal은 검색 결과 수로 덮어써지므로 따로 둔다
   const [mineUnfilteredTotal, setMineUnfilteredTotal] = useState<number | null>(null);
 
@@ -207,7 +207,7 @@ export default function ProjectsPage() {
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
-            내 프로젝트 ({mineTotal})
+            내 프로젝트{mineTotal !== null && ` (${mineTotal})`}
           </button>
           <button
             role="tab"
@@ -223,15 +223,15 @@ export default function ProjectsPage() {
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
-            다른 프로젝트 ({othersTotal})
+            다른 프로젝트{othersTotal !== null && ` (${othersTotal})`}
           </button>
         </div>
       )}
 
       {/* 검색 + 정렬 */}
       {!hideSearchControls && (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div className="flex-1 relative">
+        <div className="flex items-center gap-3">
+          <div className="flex-1 min-w-0 relative">
             <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
             <input
               type="text"
@@ -246,7 +246,7 @@ export default function ProjectsPage() {
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortBy)}
             aria-label="정렬 기준"
-            className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="shrink-0 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <option value="latest">최신순</option>
             <option value="name">이름순</option>
@@ -292,7 +292,7 @@ export default function ProjectsPage() {
           <>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {projects.map((project) => (
-                <ProjectCard key={project.id} project={project} />
+                <ProjectCard key={project.id} project={project} showOwner={!(user && activeTab === "mine")} />
               ))}
             </div>
             {pagination.totalPages > 1 && (
