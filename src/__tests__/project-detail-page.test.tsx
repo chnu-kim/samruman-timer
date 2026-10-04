@@ -186,6 +186,33 @@ describe("프로젝트 콘솔", () => {
     );
   });
 
+  // 필터는 '추가·차감·기타' 세 칩. '기타'는 자동·관리 기록을 한 번에 거른다(삭제된 타이머의 기록은 볼 수 없어 DELETE 칩은 없다)
+  it("펼친 기록의 필터는 세 칩이고 '기타'는 자동·관리 유형을 한 번에 요청한다", async () => {
+    const calls = stubApi({ timers: [timer], goals: [] });
+    render(<ProjectDetailPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "전체 기록" }));
+    await screen.findByRole("heading", { name: "변경 기록" });
+    const section = screen.getByRole("region", { name: "변경 기록" });
+    const chips = within(section).getAllByRole("button", { pressed: false });
+    expect(chips.map((b) => b.textContent)).toEqual(["추가", "차감", "기타"]);
+
+    fireEvent.click(within(section).getByRole("button", { name: "기타" }));
+    expect(within(section).getByRole("button", { name: "기타", pressed: true })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(calls.some((c) => decodeURIComponent(c.url).includes("actionType=CREATE,EXPIRE,REOPEN,ACTIVATE"))).toBe(true),
+    );
+  });
+
+  it("오늘이 아닌 기록은 날짜를 붙이고, 초까지의 전체 시각은 title로 둔다", async () => {
+    stubApi({ timers: [timer], goals: [] });
+    render(<ProjectDetailPage />);
+    await waitFor(() => expect(document.querySelector("time")).not.toBeNull());
+    const time = document.querySelector("time")!;
+    expect(time).toHaveAttribute("dateTime", logs[0].createdAt);
+    expect(time.textContent).toMatch(/^(\d{4}\. )?\d{2}\. \d{2}\. \d{2}:\d{2}$/);
+    expect(time.getAttribute("title")).toMatch(/\d{2}:\d{2}:\d{2}/);
+  });
+
   // UX-64: 단축키 도움말은 닫기 버튼이 있는 공용 FormDialog다
   it("'?'로 연 단축키 도움말을 닫기 버튼으로 닫을 수 있다", async () => {
     stubApi({ timers: [timer], goals: [], me: owner });
