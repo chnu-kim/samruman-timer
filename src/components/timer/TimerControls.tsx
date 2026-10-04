@@ -467,12 +467,12 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
             </div>
           )}
           {/* 버튼 터치 영역(px-2)만 넓히고 글자는 칩과 왼쪽 정렬을 맞춘다 */}
-          <div className="mt-1.5 -ml-2 flex items-center gap-2">
+          <div className="mt-1.5 -ml-2 flex flex-wrap items-center gap-x-2">
             {actorName.trim() && actorName.trim() !== defaultActor && (
               <button
                 type="button"
                 onClick={handleSetDefault}
-                className="min-h-11 px-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                className="min-h-11 whitespace-nowrap px-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
                 기본 닉네임으로 설정
               </button>
@@ -485,7 +485,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
               <button
                 type="button"
                 onClick={handleClearDefault}
-                className="min-h-11 px-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                className="min-h-11 whitespace-nowrap px-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
                 기본 닉네임 해제
               </button>

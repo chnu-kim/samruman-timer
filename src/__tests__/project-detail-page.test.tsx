@@ -391,7 +391,8 @@ describe("프로젝트 콘솔", () => {
       await screen.findByRole("heading", { name: "시간 조작" });
 
       mockToast.mockReset();
-      fireEvent.keyDown(window, { key: "1", code: "Digit1" });
+      // 포커스를 입력란으로 옮기므로 기본 동작을 막아 눌린 '1'이 닉네임 칸에 입력되지 않게 한다
+      expect(fireEvent.keyDown(window, { key: "1", code: "Digit1" })).toBe(false);
       await new Promise((r) => setTimeout(r, 50));
       expect(calls.some((c) => c.url === "/api/timers/t1/modify")).toBe(false);
       // R02: 닉네임 입력란으로 포커스를 옮기고 한 문장만 알린다(입력란 옆 alert는 토스트와 겹치므로 띄우지 않는다)
