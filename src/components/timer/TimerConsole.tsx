@@ -10,7 +10,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { FormDialog } from "@/components/ui/FormDialog";
 import { useToast } from "@/components/ui/Toast";
-import { cn, formatDateTime, displayActorName, formatDeltaSeconds } from "@/lib/utils";
+import { cn, formatDateTime, formatLogTime, displayActorName, formatDeltaSeconds } from "@/lib/utils";
 import { RemainingChart } from "@/components/graph/RemainingChart";
 import { useKeyboardShortcuts, SHORTCUT_HELP } from "@/hooks/useKeyboardShortcuts";
 import { usePolling } from "@/hooks/usePolling";
@@ -51,7 +51,12 @@ const ACTION_TYPE_BADGE_VARIANT: Record<ActionType, "create" | "add" | "subtract
   DELETE: "delete",
 };
 
-const FILTER_ACTIONS: ActionType[] = ["CREATE", "ADD", "SUBTRACT", "EXPIRE", "REOPEN", "ACTIVATE", "DELETE"];
+// 필터는 보는 사람이 찾는 단위로 세 묶음만 둔다. 삭제(DELETE)된 타이머는 기록 자체를 볼 수 없어 칩이 필요 없다
+const FILTER_GROUPS: { label: string; actions: ActionType[] }[] = [
+  { label: "추가", actions: ["ADD"] },
+  { label: "차감", actions: ["SUBTRACT"] },
+  { label: "기타", actions: ["CREATE", "EXPIRE", "REOPEN", "ACTIVATE"] },
+];
 
 // 접힌 기록은 방금 일어난 일만 확인하는 용도라 몇 건만 보여 준다. 펼치면 필터와 페이지가 생긴다
 const RECENT_LOG_LIMIT = 5;
@@ -334,13 +339,15 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
   // 카운트다운이 0에 닿으면 다음 폴링을 기다리지 않고 배지를 '만료'로 보여 준다
   const countdownEnded = useCountdownEnded(timer?.remainingSeconds, timer?.status);
 
-  function toggleFilter(action: ActionType) {
+  const isFilterOn = (actions: ActionType[]) => actions.every((a) => activeFilters.has(a));
+
+  function toggleFilter(actions: ActionType[]) {
     setActiveFilters((prev) => {
       const next = new Set(prev);
-      if (next.has(action)) {
-        next.delete(action);
-      } else {
-        next.add(action);
+      const on = actions.every((a) => next.has(a));
+      for (const a of actions) {
+        if (on) next.delete(a);
+        else next.add(a);
       }
       return next;
     });
@@ -452,20 +459,20 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
           {/* 필터 */}
           {logsExpanded && (
             <div className="mt-3 flex flex-wrap gap-1.5">
-              {FILTER_ACTIONS.map((action) => (
+              {FILTER_GROUPS.map(({ label, actions }) => (
                 <button
-                  key={action}
-                  onClick={() => toggleFilter(action)}
-                  aria-pressed={activeFilters.has(action)}
+                  key={label}
+                  onClick={() => toggleFilter(actions)}
+                  aria-pressed={isFilterOn(actions)}
                   className={cn(
                     "rounded-full px-3 py-2 min-h-11 text-xs font-medium transition-colors",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    activeFilters.has(action)
+                    isFilterOn(actions)
                       ? "bg-accent text-accent-foreground"
                       : "border border-border text-muted-foreground hover:bg-foreground/5",
                   )}
                 >
-                  {ACTION_TYPE_LABELS[action]}
+                  {label}
                 </button>
               ))}
               {activeFilters.size > 0 && (
@@ -519,7 +526,10 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                     )}
                     {/* 좁은 화면에서 변경 전→후가 길면 날짜가 둘로 쪼개지지 않고 전→후가 다음 줄로 내려간다 */}
                     <div className="col-span-3 flex flex-wrap items-baseline justify-between gap-x-3 font-mono text-xs text-muted-foreground">
-                      <span className="whitespace-nowrap">{formatDateTime(log.createdAt)}</span>
+                      {/* 오늘이면 'HH:mm'만, 날짜는 오늘이 아닐 때만. 초까지의 전체 시각은 title로 */}
+                      <time dateTime={log.createdAt} title={formatDateTime(log.createdAt)} className="whitespace-nowrap">
+                        {formatLogTime(log.createdAt)}
+                      </time>
                       <span className="ml-auto whitespace-nowrap text-right">
                         {formatDeltaSeconds(log.beforeSeconds)} → <span className="text-foreground">{formatDeltaSeconds(log.afterSeconds)}</span>
                       </span>
