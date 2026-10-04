@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { useState } from "react";
 import { OverlaySettings } from "../OverlaySettings";
 
 const mockToast = vi.fn();
@@ -11,6 +12,16 @@ vi.mock("@/components/ui/Toast", () => ({
 vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ data: null }) })));
 
 const writeText = vi.fn();
+
+// jsdom에는 native <dialog>의 showModal/close가 없다
+beforeAll(() => {
+  HTMLDialogElement.prototype.showModal = function () {
+    this.setAttribute("open", "");
+  };
+  HTMLDialogElement.prototype.close = function () {
+    this.removeAttribute("open");
+  };
+});
 
 describe("OverlaySettings URL 복사 (UX-11)", () => {
   beforeEach(() => {
@@ -212,5 +223,130 @@ describe("OverlaySettings 표시할 제목", () => {
     await screen.findByLabelText("표시할 제목");
     fireEvent.click(screen.getByRole("checkbox", { name: "타이틀 표시" }));
     expect(screen.queryByLabelText("표시할 제목")).not.toBeInTheDocument();
+  });
+});
+
+describe("OverlaySettings 네이티브 모달 (C002·C007)", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ data: null }) })));
+  });
+
+  it("showModal로 연 <dialog>이고 제목으로 이름이 붙는다", async () => {
+    const showModal = vi.spyOn(HTMLDialogElement.prototype, "showModal");
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+
+    const dialog = await screen.findByRole("dialog", { name: "OBS 오버레이 설정" });
+    expect(dialog.tagName).toBe("DIALOG");
+    expect(dialog).toHaveAttribute("open");
+    expect(showModal).toHaveBeenCalledTimes(1);
+    showModal.mockRestore();
+  });
+
+  it("변경이 없으면 Esc(cancel)로 바로 닫고 기본 닫기는 막는다", async () => {
+    const onClose = vi.fn();
+    render(<OverlaySettings timerId="abc" onClose={onClose} />);
+    await screen.findByRole("button", { name: "복사" });
+
+    const cancel = new Event("cancel", { cancelable: true });
+    act(() => {
+      screen.getByRole("dialog", { name: "OBS 오버레이 설정" }).dispatchEvent(cancel);
+    });
+
+    expect(cancel.defaultPrevented).toBe(true);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("저장 안 한 변경이 있으면 Esc는 확인창을 띄우고 닫지 않는다", async () => {
+    const onClose = vi.fn();
+    render(<OverlaySettings timerId="abc" onClose={onClose} />);
+    fireEvent.click(await screen.findByRole("button", { name: "게이밍 네온" }));
+
+    act(() => {
+      screen.getByRole("dialog", { name: "OBS 오버레이 설정" }).dispatchEvent(new Event("cancel", { cancelable: true }));
+    });
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "저장하지 않고 닫기" })).toHaveAttribute("open");
+  });
+
+  it("배경(dialog 자신)을 누르면 닫고, 안쪽을 누르면 닫지 않는다", async () => {
+    const onClose = vi.fn();
+    render(<OverlaySettings timerId="abc" onClose={onClose} />);
+    fireEvent.click(await screen.findByRole("button", { name: "복사" }).then((b) => b.closest("div")!));
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("dialog", { name: "OBS 오버레이 설정" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("닫히면 연 버튼으로 포커스를 돌려준다", async () => {
+    function Host() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>OBS 오버레이</button>
+          {open && <OverlaySettings timerId="abc" onClose={() => setOpen(false)} />}
+        </>
+      );
+    }
+    render(<Host />);
+    const opener = screen.getByRole("button", { name: "OBS 오버레이" });
+    opener.focus();
+    fireEvent.click(opener);
+    await screen.findByRole("button", { name: "복사" });
+    screen.getByRole("button", { name: "닫기" }).focus();
+
+    fireEvent.click(screen.getByRole("button", { name: "닫기" }));
+
+    await waitFor(() => expect(document.activeElement).toBe(opener));
+  });
+});
+
+describe("OverlaySettings 현재 상태 표시 (C036·C038·C026·C070)", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ data: null }) })));
+  });
+
+  it("설정이 프리셋 값과 같으면 그 프리셋만 눌린 상태다", async () => {
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    const basic = await screen.findByRole("button", { name: "기본 흰색" });
+    const neon = screen.getByRole("button", { name: "게이밍 네온" });
+    expect(basic).toHaveAttribute("aria-pressed", "true");
+    expect(neon).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(neon);
+    expect(basic).toHaveAttribute("aria-pressed", "false");
+    expect(neon).toHaveAttribute("aria-pressed", "true");
+
+    // 프리셋 값에서 벗어나면 어느 것도 눌리지 않는다
+    fireEvent.change(screen.getByRole("textbox", { name: "텍스트 색상 코드" }), { target: { value: "#123456" } });
+    for (const name of ["기본 흰색", "게이밍 네온", "미니멀"]) {
+      expect(screen.getByRole("button", { name })).toHaveAttribute("aria-pressed", "false");
+    }
+  });
+
+  it("배경이 투명이면 견본을 체커보드로 그리고 '투명으로 초기화'를 숨긴다", async () => {
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    const swatch = await screen.findByTestId("bg-swatch");
+    expect(swatch.style.background).toContain("conic-gradient");
+    expect(screen.queryByRole("button", { name: "투명으로 초기화" })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "배경색 코드" }), { target: { value: "#000000" } });
+    expect(swatch.style.background).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: "투명으로 초기화" }));
+    expect(screen.getByRole("textbox", { name: "배경색 코드" })).toHaveValue("transparent");
+  });
+
+  it("위치 칸은 윤곽으로 보이고 '현재: …' 문구는 없다", async () => {
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    const topLeft = await screen.findByRole("button", { name: "좌상단" });
+    expect(topLeft).toHaveClass("border", "border-foreground/50");
+    expect(screen.queryByText(/현재:/)).not.toBeInTheDocument();
+  });
+
+  it("저장 안 한 변경 경고는 라이트에서 amber-700을 쓴다", async () => {
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    await screen.findByRole("button", { name: "복사" });
+    expect(screen.getByText("저장하지 않은 변경 사항이 있습니다")).toHaveClass("text-amber-700");
   });
 });
