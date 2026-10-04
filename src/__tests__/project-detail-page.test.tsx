@@ -137,7 +137,7 @@ describe("프로젝트 상세 목표 섹션 (UX-50)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "더보기" }));
     fireEvent.click(screen.getByRole("button", { name: "프로젝트 삭제" }));
     const dialog = (await screen.findByRole("heading", { name: "프로젝트 삭제" })).closest("dialog")!;
-    expect(dialog).toHaveTextContent("타이머·목표·변경 기록이 함께 지워지고 되돌릴 수 없습니다.");
+    expect(dialog).toHaveTextContent("타이머·목표·기록이 함께 지워지고 되돌릴 수 없습니다.");
     expect(dialog).not.toHaveTextContent("정말로");
     expect(within(dialog).getByRole("button", { name: "프로젝트 삭제" })).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "돌아가기" })).toBeInTheDocument();
@@ -203,7 +203,7 @@ describe("프로젝트 생성 직후 타이머 만들기 자동 열기 (C109)", 
     window.history.replaceState(null, "", "/projects/p1?new=timer");
     stubApi({ timers: [timer], goals: [], me: owner });
     render(<ProjectDetailPage />);
-    await screen.findByRole("heading", { name: "시간 조작" });
+    await screen.findByRole("region", { name: "시간" });
     await waitFor(() => expect(window.location.search).toBe(""));
     expect(screen.getByRole("heading", { name: "새 타이머 만들기", hidden: true }).closest("dialog")).not.toHaveAttribute("open");
   });
@@ -214,7 +214,7 @@ describe("프로젝트 콘솔", () => {
   it("소유자는 이 화면에서 바로 시간을 조작하고 목표를 함께 본다", async () => {
     stubApi({ timers: [timer], goals: [], me: owner });
     render(<ProjectDetailPage />);
-    expect(await screen.findByRole("heading", { name: "시간 조작" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "시간" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "목표" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /통계/ })).toHaveAttribute("href", "/timers/t1/stats");
   });
@@ -223,7 +223,7 @@ describe("프로젝트 콘솔", () => {
   it("타이머 상세는 처음에 한 번만 불러온다", async () => {
     const calls = stubApi({ timers: [timer], goals: [], me: owner });
     render(<ProjectDetailPage />);
-    await screen.findByRole("heading", { name: "시간 조작" });
+    await screen.findByRole("region", { name: "시간" });
     // 상위 화면 상태를 바꿔 다시 렌더시킨다(목표 폼 열기)
     fireEvent.click(screen.getByRole("button", { name: /새 목표/ }));
     await screen.findByRole("heading", { name: "새 목표 설정" });
@@ -235,7 +235,7 @@ describe("프로젝트 콘솔", () => {
     stubApi({ timers: [timer], goals: [] });
     render(<ProjectDetailPage />);
     await screen.findByRole("heading", { name: "잔여 시간 추이" });
-    expect(screen.queryByRole("heading", { name: "시간 조작" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "시간" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /통계/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "더보기" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "링크 복사" })).toBeInTheDocument();
@@ -252,12 +252,12 @@ describe("프로젝트 콘솔", () => {
   it("최근 기록은 몇 건만 불러오고, 펼치면 필터와 함께 전체 기록을 불러온다", async () => {
     const calls = stubApi({ timers: [timer], goals: [] });
     render(<ProjectDetailPage />);
-    await screen.findByRole("heading", { name: "최근 변경" });
+    await screen.findByRole("heading", { name: "최근 기록" });
     expect(calls.some((c) => c.url.startsWith("/api/timers/t1/logs") && c.url.includes("limit=5"))).toBe(true);
     expect(screen.queryByRole("button", { name: "추가" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "전체 기록" }));
-    expect(await screen.findByRole("heading", { name: "변경 기록" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "기록" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "추가", pressed: false })).toBeInTheDocument();
     await waitFor(() =>
       expect(calls.some((c) => c.url.startsWith("/api/timers/t1/logs") && c.url.includes("limit=20"))).toBe(true),
@@ -269,8 +269,8 @@ describe("프로젝트 콘솔", () => {
     const calls = stubApi({ timers: [timer], goals: [] });
     render(<ProjectDetailPage />);
     fireEvent.click(await screen.findByRole("button", { name: "전체 기록" }));
-    await screen.findByRole("heading", { name: "변경 기록" });
-    const section = screen.getByRole("region", { name: "변경 기록" });
+    await screen.findByRole("heading", { name: "기록" });
+    const section = screen.getByRole("region", { name: "기록" });
     const chips = within(section).getAllByRole("button", { pressed: false });
     expect(chips.map((b) => b.textContent)).toEqual(["추가", "차감", "기타"]);
 
@@ -296,7 +296,7 @@ describe("프로젝트 콘솔", () => {
     stubApi({ timers: [timer], goals: [], me: owner });
     render(<ProjectDetailPage />);
     // 소유자 확인(/api/auth/me)이 끝나야 단축키가 켜진다
-    await screen.findByRole("heading", { name: "시간 조작" });
+    await screen.findByRole("region", { name: "시간" });
 
     fireEvent.keyDown(window, { key: "?" });
     const title = await screen.findByRole("heading", { name: "키보드 단축키" });
@@ -308,12 +308,12 @@ describe("프로젝트 콘솔", () => {
     await waitFor(() => expect(dialog).not.toHaveAttribute("open"));
   });
 
-  // C122·C124: '?'를 몰라도 도움말에 닿도록 시간 조작 제목 줄에 진입점을 하나 둔다
+  // C122·C124: '?'를 몰라도 도움말에 닿도록 시간 제목 줄에 진입점을 하나 둔다
   describe("단축키 진입점", () => {
     it("소유자 콘솔의 '단축키' 버튼은 포인터 기기에서만 보이고 도움말을 연다", async () => {
       stubApi({ timers: [timer], goals: [], me: owner });
       render(<ProjectDetailPage />);
-      await screen.findByRole("heading", { name: "시간 조작" });
+      await screen.findByRole("region", { name: "시간" });
 
       const entry = screen.getByRole("button", { name: "단축키" });
       // 터치 기기(pointer: coarse)에서는 숨긴다. 숫자키·X를 누를 키보드가 없기 때문이다
@@ -336,7 +336,7 @@ describe("프로젝트 콘솔", () => {
         detail: { ...timerDetail, status: "SCHEDULED", remainingSeconds: 3600, scheduledStartAt: "2099-01-01T00:00:00.000Z" },
       });
       const { unmount } = render(<ProjectDetailPage />);
-      await screen.findByRole("heading", { name: "시간 조작" });
+      await screen.findByRole("region", { name: "시간" });
       await screen.findByRole("button", { name: "지금 시작" });
       expect(screen.queryByRole("button", { name: "단축키" })).not.toBeInTheDocument();
       unmount();
@@ -360,8 +360,8 @@ describe("프로젝트 콘솔", () => {
     it("기본 닉네임이 있으면 '1'로 1시간을 바로 적용한다", async () => {
       const calls = stubApi({ timers: [timer], goals: [], me: owner });
       render(<ProjectDetailPage />);
-      await screen.findByRole("heading", { name: "시간 조작" });
-      // 기본 닉네임은 시간 조작 카드가 마운트 뒤 localStorage에서 읽어 입력란에 채운다
+      await screen.findByRole("region", { name: "시간" });
+      // 기본 닉네임은 시간 카드가 마운트 뒤 localStorage에서 읽어 입력란에 채운다
       await waitFor(() => expect(screen.getByLabelText("시청자 닉네임")).toHaveValue("기본냥"));
 
       fireEvent.keyDown(window, { key: "1", code: "Digit1" });
@@ -375,7 +375,7 @@ describe("프로젝트 콘솔", () => {
     it("입력한 시청자 닉네임이 있으면 '1'은 그 이름으로 기록한다", async () => {
       const calls = stubApi({ timers: [timer], goals: [], me: owner });
       render(<ProjectDetailPage />);
-      await screen.findByRole("heading", { name: "시간 조작" });
+      await screen.findByRole("region", { name: "시간" });
 
       fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "벌칙룰렛" } });
       fireEvent.keyDown(window, { key: "1", code: "Digit1" });
@@ -389,7 +389,7 @@ describe("프로젝트 콘솔", () => {
       localStorage.removeItem("defaultActorName");
       const calls = stubApi({ timers: [timer], goals: [], me: owner });
       render(<ProjectDetailPage />);
-      await screen.findByRole("heading", { name: "시간 조작" });
+      await screen.findByRole("region", { name: "시간" });
 
       mockToast.mockReset();
       // 포커스를 입력란으로 옮기므로 기본 동작을 막아 눌린 '1'이 닉네임 칸에 입력되지 않게 한다
@@ -495,7 +495,7 @@ describe("프로젝트 콘솔", () => {
     it("목표 폼이 열려 있으면 '1'이 뒤쪽 타이머를 바꾸지 않는다", async () => {
       const calls = stubApi({ timers: [timer], goals: [], me: owner });
       render(<ProjectDetailPage />);
-      await screen.findByRole("heading", { name: "시간 조작" });
+      await screen.findByRole("region", { name: "시간" });
 
       fireEvent.click(screen.getByRole("button", { name: /새 목표/ }));
       await screen.findByRole("heading", { name: "새 목표 설정" });
@@ -506,11 +506,11 @@ describe("프로젝트 콘솔", () => {
   });
 
   // C109: 1:1인 대상을 '타이머 삭제'·'프로젝트 삭제' 두 개념 대신 결과로 부른다
-  it("더보기 메뉴는 결과 기준으로 '타이머 초기화(목표 기록 유지)'와 '프로젝트 삭제'를 보인다", async () => {
+  it("더보기 메뉴는 결과 기준으로 '타이머 초기화(목표 유지)'와 '프로젝트 삭제'를 보인다", async () => {
     stubApi({ timers: [timer], goals: [], me: owner });
     render(<ProjectDetailPage />);
     fireEvent.click(await screen.findByRole("button", { name: "더보기" }));
-    expect(screen.getByRole("button", { name: "타이머 초기화(목표 기록 유지)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "타이머 초기화(목표 유지)" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "프로젝트 삭제" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "타이머 삭제" })).not.toBeInTheDocument();
   });
@@ -518,10 +518,10 @@ describe("프로젝트 콘솔", () => {
   it("타이머만 삭제하면 화면에 남아 '타이머 없음' 상태가 된다", async () => {
     const calls = stubApi({ timers: [timer], goals: [], me: owner });
     render(<ProjectDetailPage />);
-    await screen.findByRole("heading", { name: "시간 조작" });
+    await screen.findByRole("region", { name: "시간" });
 
     fireEvent.click(screen.getByRole("button", { name: "더보기" }));
-    fireEvent.click(screen.getByRole("button", { name: "타이머 초기화(목표 기록 유지)" }));
+    fireEvent.click(screen.getByRole("button", { name: "타이머 초기화(목표 유지)" }));
     const confirmTitle = await screen.findByRole("heading", { name: "타이머 초기화" });
     // 새 타이머는 오버레이 주소가 달라진다. '초기화'를 같은 타이머 재시작으로 오해해 OBS 소스를 그대로 두지 않게 알린다
     expect(within(confirmTitle.closest("dialog")!).getByText(/OBS 브라우저 소스에 새 주소를 다시 넣어야/)).toBeInTheDocument();
@@ -539,7 +539,7 @@ describe("프로젝트 콘솔", () => {
     expect(calls.some((c) => c.url === "/api/timers/t1" && c.method === "DELETE")).toBe(true);
   });
 
-  // 목표 진행률은 현재 타이머의 변경 기록으로 계산된다. 목표 행은 남아도 진행 중인 목표는 0부터 다시 쌓인다는 것을 되돌릴 수 없는 동작 앞에서 알린다
+  // 목표 진행률은 현재 타이머의 기록으로 계산된다. 목표 행은 남아도 진행 중인 목표는 0부터 다시 쌓인다는 것을 되돌릴 수 없는 동작 앞에서 알린다
   it("진행 중인 목표가 있으면 초기화 확인창이 진행률이 처음부터 다시 쌓인다고 알린다", async () => {
     const activeGoal = {
       id: "g2",
@@ -558,7 +558,7 @@ describe("프로젝트 콘솔", () => {
     render(<ProjectDetailPage />);
     await screen.findByText("12시간 달성");
     fireEvent.click(screen.getByRole("button", { name: "더보기" }));
-    fireEvent.click(screen.getByRole("button", { name: "타이머 초기화(목표 기록 유지)" }));
+    fireEvent.click(screen.getByRole("button", { name: "타이머 초기화(목표 유지)" }));
     const dialog = (await screen.findByRole("heading", { name: "타이머 초기화" })).closest("dialog")!;
     expect(within(dialog).getByText(/진행 중인 목표의 진행률은 새 타이머 기준으로 처음부터 다시 쌓입니다/)).toBeInTheDocument();
   });
@@ -566,9 +566,9 @@ describe("프로젝트 콘솔", () => {
   it("진행 중인 목표가 없으면 진행률 안내 문장을 넣지 않는다", async () => {
     stubApi({ timers: [timer], goals: [goal], me: owner });
     render(<ProjectDetailPage />);
-    await screen.findByRole("heading", { name: "시간 조작" });
+    await screen.findByRole("region", { name: "시간" });
     fireEvent.click(screen.getByRole("button", { name: "더보기" }));
-    fireEvent.click(screen.getByRole("button", { name: "타이머 초기화(목표 기록 유지)" }));
+    fireEvent.click(screen.getByRole("button", { name: "타이머 초기화(목표 유지)" }));
     const dialog = (await screen.findByRole("heading", { name: "타이머 초기화" })).closest("dialog")!;
     expect(within(dialog).queryByText(/처음부터 다시 쌓입니다/)).not.toBeInTheDocument();
   });
@@ -578,7 +578,7 @@ describe("프로젝트 콘솔", () => {
     try {
       stubApi({ timers: [timer], goals: [], me: owner });
       render(<ProjectDetailPage />);
-      await screen.findByRole("heading", { name: "시간 조작" });
+      await screen.findByRole("region", { name: "시간" });
 
       global.fetch = vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
@@ -591,7 +591,7 @@ describe("프로젝트 콘솔", () => {
       await vi.advanceTimersByTimeAsync(15_000);
 
       expect(await screen.findByText("타이머를 만들면 방송 화면에 띄울 카운트다운과 OBS 주소가 생깁니다.")).toBeInTheDocument();
-      expect(screen.queryByRole("heading", { name: "시간 조작" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "시간" })).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
@@ -603,7 +603,7 @@ describe("프로젝트 콘솔", () => {
     try {
       stubApi({ timers: [timer], goals: [], me: owner });
       render(<ProjectDetailPage />);
-      await screen.findByRole("heading", { name: "시간 조작" });
+      await screen.findByRole("region", { name: "시간" });
       // 카운트다운 옆 상태 배지(기록 행의 '만료' 배지와 구분)
       const statusBadge = () => screen.getByRole("timer").parentElement!.lastElementChild!;
       expect(statusBadge()).toHaveTextContent(/^만료$/);
@@ -622,7 +622,7 @@ describe("프로젝트 콘솔", () => {
       await vi.advanceTimersByTimeAsync(15_000);
       await waitFor(() => expect(statusBadge()).toHaveTextContent(/^연결 끊김 · \d+초 전 기준$/));
       // 오류 화면으로 바꾸지 않고 콘솔은 그대로 둔다
-      expect(screen.getByRole("heading", { name: "시간 조작" })).toBeInTheDocument();
+      expect(screen.getByRole("region", { name: "시간" })).toBeInTheDocument();
 
       detailDown = false;
       await vi.advanceTimersByTimeAsync(15_000);
@@ -637,7 +637,7 @@ describe("프로젝트 콘솔", () => {
     try {
       stubApi({ timers: [timer], goals: [], me: owner });
       render(<ProjectDetailPage />);
-      await screen.findByRole("heading", { name: "시간 조작" });
+      await screen.findByRole("region", { name: "시간" });
       const statusBadge = () => screen.getByRole("timer").parentElement!.lastElementChild!;
 
       const stubbed = global.fetch;
@@ -697,7 +697,7 @@ describe("프로젝트 콘솔", () => {
 // W20: 키보드 포커스 흐름(C006 목표 탭, C022 모달 첫 입력칸, C008 더보기 메뉴)
 describe("프로젝트 상세 키보드 포커스", () => {
   it("목표 탭에서 화살표 키로 선택을 옮기면 포커스도 새 탭으로 간다", async () => {
-    stubApi({ timers: [timer], goals: [], me: owner });
+    stubApi({ timers: [timer], goals: [{ ...goal, status: "ACTIVE", type: "DURATION", targetSeconds: 3600, targetDatetime: null, progress: { percentage: 10, currentSeconds: 360 } }], me: owner });
     render(<ProjectDetailPage />);
     const activeTab = await screen.findByRole("tab", { name: /진행 중/ });
     activeTab.focus();
@@ -744,5 +744,34 @@ describe("프로젝트 상세 키보드 포커스", () => {
     expect(trigger).toHaveAttribute("aria-expanded", "true");
     fireEvent.blur(lastItem, { relatedTarget: outside });
     expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+});
+
+// W25: 시간 카드 제목은 안내와 버튼뿐인 예약·만료 상태에서 숨긴다(상태는 배지·보조 문구가 알린다)
+describe("시간 카드 제목 (W25)", () => {
+  const detailOf = (status: string, extra: object = {}) => ({ ...timerDetail, status, ...extra });
+
+  it("실행 중에는 '시간' 제목을 보인다", async () => {
+    stubApi({ timers: [{ ...timer, status: "RUNNING", remainingSeconds: 3600 }], goals: [], me: owner, detail: detailOf("RUNNING", { remainingSeconds: 3600 }) });
+    render(<ProjectDetailPage />);
+    expect(await screen.findByRole("heading", { name: "시간" })).toBeInTheDocument();
+  });
+
+  it("예약 상태에는 제목이 없고 '지금 시작'과 상태 배지가 남는다", async () => {
+    const scheduled = { status: "SCHEDULED", remainingSeconds: 3600, scheduledStartAt: "2099-01-01T00:00:00.000Z" };
+    stubApi({ timers: [{ ...timer, ...scheduled }], goals: [], me: owner, detail: detailOf("SCHEDULED", scheduled) });
+    render(<ProjectDetailPage />);
+    expect(await screen.findByRole("button", { name: "지금 시작" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "시간" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "시간" })).toBeInTheDocument();
+    expect(screen.getByText("예약됨")).toBeInTheDocument();
+  });
+
+  it("만료 상태에도 제목이 없고 '만료' 배지는 남는다", async () => {
+    stubApi({ timers: [timer], goals: [], me: owner });
+    render(<ProjectDetailPage />);
+    await screen.findByRole("region", { name: "시간" });
+    expect(screen.queryByRole("heading", { name: "시간" })).not.toBeInTheDocument();
+    expect(screen.getAllByText("만료").length).toBeGreaterThan(0);
   });
 });

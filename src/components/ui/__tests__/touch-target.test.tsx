@@ -103,7 +103,6 @@ describe("터치 타깃 44px (pointer-coarse)", () => {
   it("size=\"sm\"는 허용된 곳에만 있다", () => {
     const allowed: Record<string, number> = {
       "src/components/timer/OverlaySettings.tsx": 3, // 프리셋 칩·밀집 저장 줄(min-h-11 함께)
-      "src/app/projects/[id]/page.tsx": 1, // '새 목표' → W25에서 md
     };
     const found: Record<string, number> = {};
     const walk = (dir: string) => {

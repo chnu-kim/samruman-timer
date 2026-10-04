@@ -28,7 +28,7 @@ function expectFlexibleNumberInputs(inputs: HTMLElement[]) {
 }
 
 describe("모바일 리플로우·숫자 키보드", () => {
-  it("시간 조작: 시·분·초가 줄 폭을 나눠 쓰고 닉네임 칸은 자동완성을 끈다", () => {
+  it("시간 변경: 시·분·초가 줄 폭을 나눠 쓰고 닉네임 칸은 자동완성을 끈다", () => {
     render(
       <ToastProvider>
         <TimerControls timerId="t1" status="RUNNING" selectedAction="ADD" onActionChange={() => {}} />
@@ -38,7 +38,7 @@ describe("모바일 리플로우·숫자 키보드", () => {
     expect(screen.getByLabelText("시청자 닉네임")).toHaveAttribute("autocomplete", "off");
   });
 
-  it("시간 조작: 하단 바 버튼은 minmax(0,1fr) 세 칸이라 좁은 폭에서도 바 밖으로 밀리지 않는다", () => {
+  it("시간 변경: 하단 바 버튼은 minmax(0,1fr) 세 칸이라 좁은 폭에서도 바 밖으로 밀리지 않는다", () => {
     const { container } = render(
       <ToastProvider>
         <TimerControls timerId="t1" status="RUNNING" selectedAction="ADD" onActionChange={() => {}} />

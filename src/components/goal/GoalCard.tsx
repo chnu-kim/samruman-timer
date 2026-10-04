@@ -154,7 +154,7 @@ export function GoalCard({ goal, projectId, isOwner, onUpdate, compact = false }
 
   if (isCompact) {
     return (
-      <div className="flex items-center rounded-lg border border-accent/20 bg-accent-light/5 transition-colors hover:bg-accent-light/15">
+      <div className="flex items-center border-b border-border py-1 transition-colors last:border-b-0 hover:bg-foreground/5">
         <button
           type="button"
           onClick={() => setExpanded(true)}
@@ -177,7 +177,7 @@ export function GoalCard({ goal, projectId, isOwner, onUpdate, compact = false }
   const isDeadline = goal.type === "DEADLINE";
 
   return (
-    <div className="rounded-xl border border-accent/30 bg-accent-light/10 p-4">
+    <div className="border-b border-border py-4 last:border-b-0">
       <div className="flex items-center gap-2">
         {compact ? (
           <button

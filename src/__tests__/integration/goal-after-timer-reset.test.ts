@@ -12,8 +12,8 @@ import { POST as createTimerRoute } from "@/app/api/projects/[id]/timers/route";
 import { DELETE as deleteTimerRoute } from "@/app/api/timers/[id]/route";
 import { GET as listGoalsRoute, POST as createGoalRoute } from "@/app/api/projects/[id]/goals/route";
 
-// '타이머 초기화(목표 기록 유지)'의 실제 범위를 고정한다.
-// 목표 행은 남지만 진행률은 현재 타이머의 변경 기록으로 계산하므로, 진행 중인 목표는 0부터 다시 쌓인다.
+// '타이머 초기화(목표 유지)'의 실제 범위를 고정한다.
+// 목표 행은 남지만 진행률은 현재 타이머의 기록으로 계산하므로, 진행 중인 목표는 0부터 다시 쌓인다.
 // 확인창 문구(src/app/projects/[id]/page.tsx)가 이 동작을 근거로 안내한다.
 
 const OWNER = "user-1";

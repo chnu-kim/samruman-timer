@@ -90,7 +90,7 @@ describe("TimerControls", () => {
     expect([...container.querySelectorAll("[aria-keyshortcuts]")]).toEqual(radios);
   });
 
-  // C031: 예약 타이머는 시간 조작 대신 '지금 시작' 하나만 둔다
+  // C031: 예약 타이머는 시간 변경 대신 '지금 시작' 하나만 둔다
   it("SCHEDULED에서는 안내 한 줄과 '지금 시작' 버튼만 보인다", () => {
     render(<Harness timerId={timerId} status="SCHEDULED" />);
     expect(screen.getByText(/시작 시각까지 기다리거나 지금 시작할 수 있습니다/)).toBeInTheDocument();

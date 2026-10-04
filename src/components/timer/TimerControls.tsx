@@ -570,8 +570,10 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
             ref={actionWrapperRef}
             onFocus={() => { actionFocusedRef.current = true; }}
             onBlur={handleActionBlur}
+            // 라벨은 스크린리더용이다. 옆 닉네임 입력란의 라벨 줄(text-sm 20px + gap 6px)만큼 내려 입력 칸과 높이를 맞춘다
+            className="md:mt-[1.625rem]"
           >
-            <span id={actionGroupLabelId} className="mb-1.5 block text-sm font-medium text-foreground">변경 유형</span>
+            <span id={actionGroupLabelId} className="sr-only">변경 유형</span>
             <SegmentedControl
               options={ACTION_OPTIONS}
               value={selectedAction}
