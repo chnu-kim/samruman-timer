@@ -44,7 +44,7 @@ export function ErrorState({
             <button
               type="button"
               onClick={onRetry}
-              className="rounded-md px-1.5 py-1 pointer-coarse:min-h-11 font-medium text-accent hover:bg-accent-light transition-colors"
+              className="rounded-control px-1.5 py-1 pointer-coarse:min-h-11 font-medium text-accent hover:bg-accent-light transition-colors"
             >
               다시 시도
             </button>

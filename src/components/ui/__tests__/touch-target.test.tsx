@@ -104,9 +104,6 @@ describe("터치 타깃 44px (pointer-coarse)", () => {
     const allowed: Record<string, number> = {
       "src/components/timer/OverlaySettings.tsx": 3, // 프리셋 칩·밀집 저장 줄(min-h-11 함께)
       "src/app/projects/[id]/page.tsx": 1, // '새 목표' → W25에서 md
-      "src/components/timer/CreateTimerForm.tsx": 1, // 제출 → W36에서 md
-      "src/components/goal/GoalForm.tsx": 1, // 제출 → W36에서 md
-      "src/components/layout/Header.tsx": 1, // 로그아웃 → W37에서 md
     };
     const found: Record<string, number> = {};
     const walk = (dir: string) => {
