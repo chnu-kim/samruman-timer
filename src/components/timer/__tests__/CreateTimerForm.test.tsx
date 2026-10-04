@@ -39,7 +39,7 @@ describe("CreateTimerForm", () => {
     expect(submit).toBeDisabled();
     expect(submit).toHaveAccessibleDescription("초기 시간을 입력하면 만들 수 있습니다.");
 
-    fireEvent.change(screen.getByRole("spinbutton", { name: "시간" }), { target: { value: "2" } });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "시" }), { target: { value: "2" } });
     expect(submit).toBeEnabled();
     expect(screen.queryByText("초기 시간을 입력하면 만들 수 있습니다.")).not.toBeInTheDocument();
   });
@@ -48,7 +48,7 @@ describe("CreateTimerForm", () => {
   it("분 90은 1시간 30분으로 올린다", () => {
     render(<CreateTimerForm projectId="p1" defaultTitle="주말 서브어톤" />);
     fireEvent.change(screen.getByRole("spinbutton", { name: "분" }), { target: { value: "90" } });
-    expect(screen.getByRole("spinbutton", { name: "시간" })).toHaveValue(1);
+    expect(screen.getByRole("spinbutton", { name: "시" })).toHaveValue(1);
     expect(screen.getByRole("spinbutton", { name: "분" })).toHaveValue(30);
     expect(screen.getByRole("spinbutton", { name: "분" })).not.toHaveAttribute("max");
   });
@@ -68,12 +68,12 @@ describe("CreateTimerForm", () => {
   // R13: 시간 칸은 빈 값으로 시작하고(placeholder '0'), 지우면 '0'이 다시 채워지지 않는다
   it("시·분·초 칸은 비어 있고 지우면 빈 칸으로 남는다", () => {
     render(<CreateTimerForm projectId="p1" defaultTitle="주말 서브어톤" />);
-    for (const name of ["시간", "분", "초"]) {
+    for (const name of ["시", "분", "초"]) {
       const input = screen.getByRole("spinbutton", { name });
       expect(input).toHaveValue(null);
       expect(input).toHaveAttribute("placeholder", "0");
     }
-    const hours = screen.getByRole("spinbutton", { name: "시간" });
+    const hours = screen.getByRole("spinbutton", { name: "시" });
     fireEvent.change(hours, { target: { value: "3" } });
     fireEvent.change(hours, { target: { value: "" } });
     expect(hours).toHaveValue(null);
@@ -99,7 +99,7 @@ describe("CreateTimerForm", () => {
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
       vi.setSystemTime(new Date(2026, 9, 4, 17, 59, 0));
       render(<CreateTimerForm projectId="p1" defaultTitle="주말 서브어톤" />);
-      fireEvent.change(screen.getByRole("spinbutton", { name: "시간" }), { target: { value: "2" } });
+      fireEvent.change(screen.getByRole("spinbutton", { name: "시" }), { target: { value: "2" } });
       fireEvent.click(screen.getByRole("radio", { name: "예약 시작" }));
       // 오늘 18:00 = 1분 뒤
       fireEvent.change(screen.getByRole("combobox", { name: "시" }), { target: { value: "18" } });
@@ -124,7 +124,7 @@ describe("CreateTimerForm", () => {
 
     it("다른 이유와 함께면 한 문장으로 알린다", () => {
       const submit = renderScheduledInOneMinute();
-      fireEvent.change(screen.getByRole("spinbutton", { name: "시간" }), { target: { value: "" } });
+      fireEvent.change(screen.getByRole("spinbutton", { name: "시" }), { target: { value: "" } });
       act(() => {
         vi.advanceTimersByTime(60_000);
       });

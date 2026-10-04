@@ -62,7 +62,7 @@ describe("세션 만료 안내", () => {
     mockMe(401);
     search = `next=${encodeURIComponent("/projects/abc")}&expired=1`;
     render(<LoginPage />);
-    expect(screen.getByText(LINE)).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(LINE);
     expect(screen.getByRole("link", { name: "CHZZK로 로그인" })).toHaveAttribute(
       "href",
       `/api/auth/login?next=${encodeURIComponent("/projects/abc")}`

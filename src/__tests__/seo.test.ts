@@ -8,7 +8,7 @@ import { metadata as statsMetadata } from "@/app/timers/[id]/stats/layout";
 import { metadata as projectsMetadata } from "@/app/projects/layout";
 import { generateMetadata as projectDetailMetadata } from "@/app/projects/[id]/layout";
 import { metadata as timerMetadata } from "@/app/timers/[id]/layout";
-import { SITE_URL, TITLE_TEMPLATE } from "@/lib/site";
+import { SITE_NAME, SITE_URL, TITLE_SEPARATOR, TITLE_TEMPLATE, pageTitle } from "@/lib/site";
 
 // 루트 layout의 next/font는 Next 빌드 밖에서 동작하지 않는다
 vi.mock("next/font/google", () => ({
@@ -45,6 +45,12 @@ describe("SEO", () => {
     for (const m of [projectsMetadata, timerMetadata]) {
       expect(m.title).toMatchObject({ template: TITLE_TEMPLATE });
     }
+  });
+
+  it("제목 구분자는 '|' 하나이고 클라이언트가 바꾸는 탭 제목도 같은 모양이다", () => {
+    expect(TITLE_SEPARATOR).toBe("|");
+    expect(TITLE_TEMPLATE).toBe(`%s | ${SITE_NAME}`);
+    expect(pageTitle("찾을 수 없음")).toBe("찾을 수 없음 | 삼루먼타이머");
   });
 
   it("프로젝트 상세는 목록 canonical을 물려받지 않고 자기 주소를 쓴다", async () => {

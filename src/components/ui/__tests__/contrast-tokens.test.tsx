@@ -137,6 +137,31 @@ describe("입력 경계 토큰을 쓰는 호출부", () => {
   });
 });
 
+// C078: OS 대비 높이기. 세 테마 정의(라이트·OS 다크·수동 다크)를 모두 덮고, 값은 기본보다 진하다
+describe("prefers-contrast: more", () => {
+  function moreBlock(media: string, selector: string): string {
+    const start = css.indexOf(`@media ${media} {`);
+    expect(start).toBeGreaterThanOrEqual(0);
+    const sel = css.indexOf(`${selector} {`, start);
+    expect(sel).toBeGreaterThan(start);
+    return css.slice(sel, css.indexOf("}", sel));
+  }
+
+  const cases = [
+    [":root", "(prefers-contrast: more)", ":root"],
+    [":root:not(.light)", "(prefers-contrast: more) and (prefers-color-scheme: dark)", ":root:not(.light)"],
+    ["html.dark", "(prefers-contrast: more)", "html.dark"],
+  ] as const;
+
+  it.each(cases)("%s: 경계 알파 0.3, 보조 글자는 기본보다 대비가 높다", (base, media, selector) => {
+    const more = moreBlock(media, selector);
+    const normal = block(base);
+    const bg = token(normal, "background");
+    expect(parseColor(token(more, "border"))[3]).toBe(0.3);
+    expect(contrast(token(more, "muted-foreground"), bg)).toBeGreaterThan(contrast(token(normal, "muted-foreground"), bg));
+  });
+});
+
 describe("글자 대비", () => {
   // 흰 글자에 green-600은 3.2:1, green-700은 5.0:1
   it("모바일 하단 바의 추가 버튼은 green-700 배경이다", () => {

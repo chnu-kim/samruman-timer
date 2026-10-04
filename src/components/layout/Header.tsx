@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClassName } from "@/components/ui/Button";
 import { LogoIcon, LogOutIcon } from "@/components/ui/Icons";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { loginUrlWithNext } from "@/lib/safe-redirect";
@@ -15,7 +15,7 @@ interface HeaderProps {
   initialUser?: MeResponse | null;
 }
 
-/** 헤더 오른쪽 액션(로그인·로그아웃) 크기. Button md(h-10 px-4, 터치 min-h-11)에 맞추고 테마 토글과 같은 높이다: 데스크톱 40, 터치 44. 로그인 링크는 Button이 아니라 min-h-11을 직접 단다 */
+/** 헤더 오른쪽 액션(로그인·로그아웃)의 Button 위 보강. Button md(h-10 px-4, 터치 min-h-11)가 테마 토글과 같은 높이를 낸다: 데스크톱 40, 터치 44 */
 const HEADER_ACTION = "text-sm pointer-coarse:min-w-11";
 
 export function Header({ initialUser }: HeaderProps = {}) {
@@ -93,14 +93,11 @@ export function Header({ initialUser }: HeaderProps = {}) {
               </Button>
             </>
           ) : onLoginPage ? null : (
-            // 공용 Button secondary와 같은 모양·높이의 링크
+            // 로그아웃 Button과 같은 클래스를 쓰는 링크(스타일이 갈라지지 않게 buttonClassName으로 만든다)
             <Link
               href="/login"
               onClick={handleLoginClick}
-              className={cn(
-                "inline-flex h-10 pointer-coarse:min-h-11 items-center justify-center rounded-lg border border-border bg-transparent px-4 font-medium hover:bg-foreground/5 transition-colors",
-                HEADER_ACTION,
-              )}
+              className={buttonClassName({ variant: "secondary", className: HEADER_ACTION })}
             >
               로그인
             </Link>

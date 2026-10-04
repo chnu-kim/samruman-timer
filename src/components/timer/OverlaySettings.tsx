@@ -646,7 +646,6 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
         <div className="flex items-center justify-between flex-wrap gap-2 border-t border-border px-6 py-4 max-md:py-3 max-md:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <span
             role="status"
-            aria-live="polite"
             className={cn(
               "text-xs font-medium text-amber-700 dark:text-amber-400 transition-opacity duration-200",
               isDirty ? "opacity-100" : "opacity-0 pointer-events-none",

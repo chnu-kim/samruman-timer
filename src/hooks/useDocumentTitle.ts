@@ -2,8 +2,6 @@
 
 import { useEffect } from "react";
 
-export const APP_TITLE = "삼루먼타이머";
-
 /**
  * 브라우저 탭 제목을 바꾸고, 언마운트되거나 제목이 바뀌면 이전 제목으로 되돌린다.
  * 루트 레이아웃의 metadata는 클라이언트 이동 때 다시 적용되지 않으므로 복원하지 않으면

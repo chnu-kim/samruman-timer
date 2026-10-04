@@ -92,6 +92,7 @@ describe("오류 화면", () => {
   it("없는 경로(not-found)는 한국어 h1과 프로젝트 목록 링크 하나", () => {
     render(<NotFound />);
     expectNoticeScreen("페이지를 찾을 수 없습니다", { name: "프로젝트 목록으로", href: "/projects" });
+    expect(screen.getByText("삭제되었거나 주소가 잘못되었습니다.")).toBeInTheDocument();
   });
 
   it("없는 프로젝트는 같은 틀로 목록 링크를 준다", async () => {
@@ -99,6 +100,7 @@ describe("오류 화면", () => {
     render(<ProjectDetailPage />);
     await screen.findByRole("heading", { level: 1, name: "프로젝트를 찾을 수 없습니다" });
     expectNoticeScreen("프로젝트를 찾을 수 없습니다", { name: "프로젝트 목록으로", href: "/projects" });
+    expect(document.title).toBe("찾을 수 없음 | 삼루먼타이머");
     expect(screen.getByText("삭제되었거나 주소가 잘못되었습니다.")).toBeInTheDocument();
   });
 

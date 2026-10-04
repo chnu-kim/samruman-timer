@@ -143,12 +143,13 @@ export function EditableText({
       >
         {value || <span className="text-muted-foreground">{placeholder}</span>}
       </Tag>
-      {/* 보이는 크기(22px)는 그대로 두고 터치 기기에서만 ::before로 누르는 영역을 44px로 넓힌다. 버튼을 키우면 제목 줄이 높아진다 */}
+      {/* 데스크톱 히트 영역은 30px(p-2, 24px 기준 통과). 줄 높이와 아이콘 위치가 그대로이도록 -ml-1 -mb-1로 넓어진 만큼을 되돌린다.
+          터치 기기에서는 ::before로 44px까지 넓힌다(30 + 7×2). 제목 전체를 누르는 영역으로 만들지는 않는다 */}
       <button
         ref={editButtonRef}
         type="button"
         onClick={() => setEditing(true)}
-        className="relative pointer-coarse:before:absolute pointer-coarse:before:-inset-[11px] mt-1 rounded-control p-1 text-muted-foreground opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:bg-foreground/10 transition-[opacity,background-color]"
+        className="relative pointer-coarse:before:absolute pointer-coarse:before:-inset-[7px] -mb-1 -ml-1 rounded-control p-2 text-muted-foreground opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:bg-foreground/10 transition-[opacity,background-color]"
         aria-label={Tag === "h1" ? "제목 편집" : "설명 편집"}
       >
         <PencilIcon className="w-3.5 h-3.5" />

@@ -157,6 +157,8 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   useEffect(() => () => clearTimeout(barCooldownTimerRef.current), []);
   const actionGroupLabelId = useId();
   const timeGroupLabelId = useId();
+  const timeFieldId = useId();
+  const timeInputId = (unit: "hours" | "minutes" | "seconds") => `${timeFieldId}-${unit}`;
   const submitHintId = useId();
   const disconnectedHintId = useId();
   const nicknamePromptId = useId();
@@ -620,9 +622,9 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
               onChange={(e) => changeTime("hours", e.target.value)}
               className="w-full text-center"
               placeholder="0"
-              aria-label="시"
+              id={timeInputId("hours")}
             />
-            <span className="text-sm text-muted-foreground">시</span>
+            <label htmlFor={timeInputId("hours")} className="text-sm text-muted-foreground">시</label>
             <Input
               type="number"
               inputMode="numeric"
@@ -631,9 +633,9 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
               onChange={(e) => changeTime("minutes", e.target.value)}
               className="w-full text-center"
               placeholder="0"
-              aria-label="분"
+              id={timeInputId("minutes")}
             />
-            <span className="text-sm text-muted-foreground">분</span>
+            <label htmlFor={timeInputId("minutes")} className="text-sm text-muted-foreground">분</label>
             <Input
               type="number"
               inputMode="numeric"
@@ -642,9 +644,9 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
               onChange={(e) => changeTime("seconds", e.target.value)}
               className="w-full text-center"
               placeholder="0"
-              aria-label="초"
+              id={timeInputId("seconds")}
             />
-            <span className="text-sm text-muted-foreground">초</span>
+            <label htmlFor={timeInputId("seconds")} className="text-sm text-muted-foreground">초</label>
           </div>
         </div>
         {/* 확인 버튼이 비활성인 이유. 값을 넣으면 사라지고 버튼 라벨이 적용될 양을 보여 준다 */}

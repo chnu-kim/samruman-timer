@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo, type ReactNode } from "react";
+import { useState, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useAnnounce } from "@/components/ui/Toast";
 import { cn, formatDateTime, formatEndTime } from "@/lib/utils";
 import type { TimerStatus } from "@/types";
 
@@ -79,6 +80,18 @@ export function CountdownDisplay({
   const isUrgent = isRunning && displayed < 300; // 5분 미만
   const isCritical = isRunning && displayed < 60; // 1분 미만
 
+  // 임박(5분 미만)·긴급(1분 미만) 단계로 올라갈 때 한 번만 스크린리더에 알린다. 색·깜박임은 보이지 않는 사용자에게
+  // 전해지지 않고, 매초 바뀌는 숫자는 live region에 넣을 수 없어서다. 처음 그릴 때 이미 그 단계이거나 단계가 내려갈 때는 알리지 않는다
+  const announce = useAnnounce();
+  const level = isCritical ? 2 : isUrgent ? 1 : 0;
+  const prevLevelRef = useRef(level);
+  useEffect(() => {
+    const prev = prevLevelRef.current;
+    prevLevelRef.current = level;
+    if (size !== "large" || level <= prev) return;
+    announce(level === 2 ? "남은 시간이 1분 미만입니다" : "남은 시간이 5분 미만입니다");
+  }, [level, size, announce]);
+
   // 생성 시각부터 잰 경과는 만료 후 다시 시작한 타이머에서 실제 진행 시간과 어긋나므로 종료 예정 시각만 보여 준다.
   // 오버레이의 종료 예정 줄과 같은 포맷(formatEndTime)을 쓴다
   const endTimeText = isRunning && endAtMs !== null
@@ -92,11 +105,12 @@ export function CountdownDisplay({
           role="timer"
           className={cn(
             size === "large"
-              ? "text-5xl sm:text-6xl font-mono font-bold tracking-tight"
+              // 모바일은 폭에 비례해 키운다(390px에서 약 66px로 화면 폭의 약 80%). 가장 작은 폭에서도 한 줄에 들어가게 아래를 3rem으로 막는다
+              ? "text-[length:clamp(3rem,17vw,4.25rem)] leading-none sm:text-6xl font-mono font-bold tracking-tight"
               : "text-lg font-mono font-semibold",
             isExpired && "text-muted-foreground",
             isScheduled && "text-purple-600 dark:text-purple-400",
-            isCritical && "text-red-600 dark:text-red-400 animate-pulse-urgent-fast",
+            isCritical && "text-red-800 dark:text-red-400 animate-pulse-urgent-fast",
             isUrgent && !isCritical && "text-amber-700 dark:text-amber-400 animate-pulse-urgent-slow",
             className,
           )}

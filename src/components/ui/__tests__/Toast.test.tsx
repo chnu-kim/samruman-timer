@@ -45,7 +45,8 @@ describe("Toast", () => {
       </ToastProvider>,
     );
     const region = screen.getByRole("status");
-    expect(region).toHaveAttribute("aria-live", "polite");
+    // role=status가 이미 polite라 aria-live를 중복해서 달지 않는다(C136)
+    expect(region).not.toHaveAttribute("aria-live");
     expect(region).toBeEmptyDOMElement();
 
     fireEvent.click(screen.getByRole("button", { name: "알림" }));

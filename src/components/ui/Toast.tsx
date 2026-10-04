@@ -28,6 +28,8 @@ interface ToastItem {
 
 interface ToastContextValue {
   toast: (message: string, variant?: ToastVariant, options?: ToastOptions) => void;
+  /** 화면에 아무것도 띄우지 않고 스크린리더에만 polite로 한 번 알린다(임박 알림 등) */
+  announce: (message: string) => void;
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
@@ -43,6 +45,16 @@ export function useToast() {
   if (!ctx) throw new Error("useToast must be used within ToastProvider");
   return ctx;
 }
+
+/**
+ * 토스트 없이 스크린리더 알림만 낸다. 제공자 밖(스토리·단독 렌더)에서는 아무 일도 하지 않아
+ * 알림이 필요한 컴포넌트가 제공자 유무에 얽매이지 않는다
+ */
+export function useAnnounce(): (message: string) => void {
+  return useContext(ToastContext)?.announce ?? noopAnnounce;
+}
+
+function noopAnnounce() {}
 
 const variantStyles: Record<ToastVariant, string> = {
   success: "border-green-500/30 bg-green-50 text-green-800 dark:bg-green-950/50 dark:text-green-300",
@@ -61,6 +73,8 @@ const iconPaths: Record<ToastVariant, string> = {
  */
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [current, setCurrent] = useState<ToastItem | null>(null);
+  const [announcement, setAnnouncement] = useState<{ id: number; message: string } | null>(null);
+  const announceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const removeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -90,6 +104,18 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => clearTimers, [clearTimers]);
 
+  const announce = useCallback((message: string) => {
+    if (announceTimerRef.current) clearTimeout(announceTimerRef.current);
+    const id = ++toastId;
+    setAnnouncement({ id, message });
+    // 읽힌 뒤에는 비워 둔다(영역 자체는 상시 렌더)
+    announceTimerRef.current = setTimeout(() => setAnnouncement((prev) => (prev?.id === id ? null : prev)), DEFAULT_DURATION_MS);
+  }, []);
+
+  useEffect(() => () => {
+    if (announceTimerRef.current) clearTimeout(announceTimerRef.current);
+  }, []);
+
   function dismiss() {
     clearTimers();
     setCurrent(null);
@@ -105,7 +131,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <ToastContext.Provider value={{ toast }}>
+    <ToastContext.Provider value={{ toast, announce }}>
       {children}
       {/* 컨테이너는 탭을 아래(모바일 하단 빠른 액션 바 등)로 통과시킨다. 버튼이 있는 토스트만 포인터를 받는다.
           모바일 하단 바가 있으면 그 바로 위(--quick-bar-h, globals.css)에, 없거나 낮은 화면에서 바가 문서 흐름에 놓이면(0px)
@@ -165,12 +191,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           </div>
         )}
       </div>
-      {/* 성공·정보 토스트용 live region. 토스트와 함께 새로 삽입된 role=status 노드는
+      {/* 성공·정보 토스트와 임박 알림용 live region. role=status가 이미 polite라 aria-live는 따로 달지 않는다. 토스트와 함께 새로 삽입된 role=status 노드는
           스크린리더가 읽지 않을 수 있으므로 영역은 항상 렌더하고 내용만 바꾼다 */}
-      <div role="status" aria-live="polite" className="sr-only">
+      <div role="status" className="sr-only">
         {current && current.variant !== "error" && (
           <p key={current.id}>{current.message}</p>
         )}
+        {announcement && <p key={announcement.id}>{announcement.message}</p>}
       </div>
     </ToastContext.Provider>
   );

@@ -11,7 +11,8 @@ import { CumulativeChart } from "@/components/graph/CumulativeChart";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { ChevronLeftIcon } from "@/components/ui/Icons";
 import { StatsPageSkeleton } from "@/components/ui/Skeleton";
-import { useDocumentTitle, APP_TITLE } from "@/hooks/useDocumentTitle";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { pageTitle } from "@/lib/site";
 import { fireSessionExpired } from "@/lib/session-expired";
 import type {
   ApiErrorResponse,
@@ -30,7 +31,7 @@ type Notice = {
   documentTitle: string;
 };
 
-const BLOCKED_TITLE = `통계를 볼 수 없음 | ${APP_TITLE}`;
+const BLOCKED_TITLE = pageTitle("통계를 볼 수 없음");
 
 function backLink(projectId: string | null) {
   return projectId
@@ -116,7 +117,7 @@ export default function TimerStatsPage() {
           title: "타이머를 찾을 수 없습니다",
           message: "삭제되었거나 주소가 잘못되었습니다.",
           action: { href: "/projects", label: "프로젝트 목록으로" },
-          documentTitle: `찾을 수 없음 | ${APP_TITLE}`,
+          documentTitle: pageTitle("찾을 수 없음"),
         });
         return;
       }
@@ -147,7 +148,7 @@ export default function TimerStatsPage() {
     fetchData();
   }, [fetchData]);
 
-  useDocumentTitle(timer ? `${timer.projectName} 통계 · ${APP_TITLE}` : (notice?.documentTitle ?? null));
+  useDocumentTitle(timer ? pageTitle(`${timer.projectName} 통계`) : (notice?.documentTitle ?? null));
 
   if (loading) {
     return (

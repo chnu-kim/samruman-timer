@@ -49,12 +49,13 @@ describe("터치 타깃 44px (pointer-coarse)", () => {
     expect(cls).not.toContain("py-2");
   });
 
-  it("편집 연필은 보이는 크기를 두고 ::before로만 누르는 영역을 넓힌다", () => {
+  it("편집 연필은 데스크톱 30px(p-2)이고 터치에서는 ::before로 44px까지 넓힌다", () => {
     render(<EditableText value="제목" onSave={noopSave} editable as="h1" />);
     const cls = screen.getByRole("button", { name: "제목 편집" }).className;
     expect(cls).toContain("relative");
     expect(cls).toContain("pointer-coarse:before:absolute");
-    expect(cls).toContain("pointer-coarse:before:-inset-[11px]");
+    expect(cls).toContain("p-2");
+    expect(cls).toContain("pointer-coarse:before:-inset-[7px]");
   });
 
   it("편집 중 저장·취소는 겹치지 않게 상자 자체를 44px로 키운다", () => {
@@ -73,6 +74,19 @@ describe("터치 타깃 44px (pointer-coarse)", () => {
     const cls = screen.getByRole("link", { name: "로그인" }).className;
     expect(cls).toContain("h-10");
     expect(cls).toContain("pointer-coarse:min-h-11");
+  });
+
+  // C129: 로그인 링크와 로그아웃 버튼은 같은 secondary 모양이다
+  it("헤더 로그인 링크와 로그아웃 버튼은 같은 클래스를 쓴다", () => {
+    const { unmount } = render(<Header initialUser={null} />);
+    const login = screen.getByRole("link", { name: "로그인" }).className.split(" ");
+    unmount();
+    render(<Header initialUser={{ id: "u1", chzzkUserId: "c1", nickname: "스트리머", profileImageUrl: null }} />);
+    const logout = screen.getByRole("button", { name: "로그아웃" }).className.split(" ");
+    for (const cls of ["rounded-control", "border-border", "h-10", "px-4", "hover:bg-foreground/5", "pointer-coarse:min-h-11"]) {
+      expect(login, cls).toContain(cls);
+      expect(logout, cls).toContain(cls);
+    }
   });
 
   // W33: 목록 검색·정렬, 폼의 select도 공용 Input과 같은 높이 규칙을 쓴다

@@ -64,6 +64,6 @@ describe("다이얼로그 셸", () => {
         </FormDialog>
       </ToastProvider>,
     );
-    expect(document.activeElement).toBe(screen.getByRole("spinbutton", { name: "시간" }));
+    expect(document.activeElement).toBe(screen.getByRole("spinbutton", { name: "시" }));
   });
 });

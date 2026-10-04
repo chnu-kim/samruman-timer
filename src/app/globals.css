@@ -83,6 +83,29 @@ html.dark {
   --shadow-dialog: 0 8px 30px -4px rgba(0, 0, 0, 0.5);
 }
 
+/* OS '대비 높이기'(prefers-contrast: more): 카드 경계를 알파 0.3으로 또렷하게, 보조 글자는 한 단계 진하게.
+   토큰만 바꾸므로 컴포넌트는 그대로다. 라이트·OS 다크·수동 다크 세 정의를 모두 덮는다(위 세 블록과 같은 선택자) */
+@media (prefers-contrast: more) {
+  :root {
+    --muted-foreground: #525252;
+    --border: rgba(23, 23, 23, 0.3);
+  }
+}
+
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --muted-foreground: #c4c4c4;
+    --border: rgba(237, 237, 237, 0.3);
+  }
+}
+
+@media (prefers-contrast: more) {
+  html.dark {
+    --muted-foreground: #c4c4c4;
+    --border: rgba(237, 237, 237, 0.3);
+  }
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
