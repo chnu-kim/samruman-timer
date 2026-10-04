@@ -8,8 +8,15 @@ const sampleProject: ProjectListItem = {
   description: "치지직 방송에서 사용하는 타이머 관리 프로젝트입니다.",
   ownerNickname: "삼루먼",
   timerCount: 1,
+  timerStatus: "RUNNING",
+  remainingSeconds: 2 * 3600 + 14 * 60,
+  scheduledStartAt: null,
   createdAt: "2026-03-01T12:00:00Z",
 };
+
+const noTimer = { timerCount: 0, timerStatus: null, remainingSeconds: null, scheduledStartAt: null } as const;
+const scheduled = { timerStatus: "SCHEDULED", remainingSeconds: 3600, scheduledStartAt: "2026-10-05T08:30:00Z" } as const;
+const expired = { timerStatus: "EXPIRED", remainingSeconds: 0, scheduledStartAt: null } as const;
 
 const meta = {
   title: "Project/ProjectCard",
@@ -23,6 +30,7 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
+/** 실행 중 타이머가 있는 카드 */
 export const Default: Story = {};
 
 export const NoDescription: Story = {
@@ -34,31 +42,30 @@ export const NoDescription: Story = {
   },
 };
 
-export const WithTimer: Story = {
-  args: {
-    project: {
-      ...sampleProject,
-      timerCount: 1,
-    },
-  },
+export const Scheduled: Story = {
+  args: { project: { ...sampleProject, ...scheduled } },
+};
+
+export const Expired: Story = {
+  args: { project: { ...sampleProject, ...expired } },
 };
 
 export const NoTimer: Story = {
-  args: {
-    project: {
-      ...sampleProject,
-      timerCount: 0,
-    },
-  },
+  args: { project: { ...sampleProject, ...noTimer } },
+};
+
+/** '내 프로젝트' 탭: 소유자 이름을 숨긴다 */
+export const WithoutOwner: Story = {
+  args: { showOwner: false },
 };
 
 export const Grid: Story = {
   render: () => {
     const projects: ProjectListItem[] = [
       sampleProject,
-      { ...sampleProject, id: "2", name: "두 번째 프로젝트", description: null, timerCount: 0 },
-      { ...sampleProject, id: "3", name: "세 번째 프로젝트", description: "아주 긴 설명이 들어가는 프로젝트입니다. 이 설명은 두 줄을 넘기면 잘리도록 설계되어 있습니다. 충분히 긴 텍스트를 넣어서 테스트합니다.", timerCount: 1 },
-      { ...sampleProject, id: "4", name: "네 번째 프로젝트", ownerNickname: "다른유저", timerCount: 1 },
+      { ...sampleProject, id: "2", name: "두 번째 프로젝트", description: null, ...noTimer },
+      { ...sampleProject, id: "3", name: "세 번째 프로젝트", description: "아주 긴 설명이 들어가는 프로젝트입니다. 이 설명은 두 줄을 넘기면 잘리도록 설계되어 있습니다. 충분히 긴 텍스트를 넣어서 테스트합니다.", ...scheduled },
+      { ...sampleProject, id: "4", name: "네 번째 프로젝트", ownerNickname: "다른유저", ...expired },
     ];
     return (
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

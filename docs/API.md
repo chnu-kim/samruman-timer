@@ -101,6 +101,10 @@ CHZZK OAuth 콜백을 처리한다.
   - `limit` (number, 기본값 12, 1~50으로 보정)
   - `sort` (string, 선택): `name`이면 이름순, 그 외에는 최신순(`created_at DESC`)
 - 삭제된(`DELETED`) 프로젝트는 제외한다. `timerCount`는 비삭제 타이머 수, `totalPages`는 최소 1
+- 타이머 상태(`timerStatus`·`remainingSeconds`·`scheduledStartAt`)는 프로젝트의 비삭제 타이머(최대 1개)를 조인해 **조회 시점 기준으로 계산한 값**이다. 저장된 상태가 `RUNNING`이어도 잔여 0이면 `EXPIRED`, 시작 시각이 지난 `SCHEDULED`는 그 시각부터 흐른 `RUNNING`(또는 `EXPIRED`)으로 내려 준다. 목록 조회는 상태 전이를 DB에 쓰지 않는다(전이는 타이머 조회 때 기록된다)
+  - `timerStatus`: `RUNNING` | `SCHEDULED` | `EXPIRED` | `null`(타이머 없음)
+  - `remainingSeconds`: 조회 시점 잔여초, 타이머가 없으면 `null`
+  - `scheduledStartAt`: `SCHEDULED`일 때 시작 시각, 그 외 `null`
 - **응답**:
 ```json
 {
@@ -112,6 +116,9 @@ CHZZK OAuth 콜백을 처리한다.
         "description": "설명",
         "ownerNickname": "소유자 닉네임",
         "timerCount": 1,
+        "timerStatus": "RUNNING",
+        "remainingSeconds": 8040,
+        "scheduledStartAt": null,
         "createdAt": "2025-01-01T00:00:00Z"
       }
     ],
@@ -170,6 +177,9 @@ CHZZK OAuth 콜백을 처리한다.
         "description": "설명",
         "ownerNickname": "소유자 닉네임",
         "timerCount": 1,
+        "timerStatus": "RUNNING",
+        "remainingSeconds": 8040,
+        "scheduledStartAt": null,
         "createdAt": "2025-01-01T00:00:00Z"
       }
     ],
@@ -200,6 +210,9 @@ CHZZK OAuth 콜백을 처리한다.
         "description": "설명",
         "ownerNickname": "소유자 닉네임",
         "timerCount": 1,
+        "timerStatus": "RUNNING",
+        "remainingSeconds": 8040,
+        "scheduledStartAt": null,
         "createdAt": "2025-01-01T00:00:00Z"
       }
     ],

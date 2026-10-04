@@ -57,6 +57,56 @@ describe("프로젝트 목록 tabpanel (UX-44)", () => {
   });
 });
 
+describe("탭 개수 로딩 (C148)", () => {
+  it("개수 응답 전에는 '(0)'을 보이지 않고, 응답 뒤에 '(n)'을 보인다", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => { release = r; });
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/api/auth/me")) {
+        return jsonResponse({ id: "u1", chzzkUserId: "c1", nickname: "삼루먼", profileImageUrl: null });
+      }
+      await gate;
+      return jsonResponse({ projects: [], pagination: { page: 1, limit: 12, total: 5, totalPages: 1 } });
+    }) as typeof fetch;
+
+    render(<ProjectsPage />);
+    const mine = await screen.findByRole("tab", { name: /내 프로젝트/ });
+    const others = screen.getByRole("tab", { name: /다른 프로젝트/ });
+    expect(mine).toHaveTextContent(/^내 프로젝트$/);
+    expect(others).toHaveTextContent(/^다른 프로젝트$/);
+
+    release();
+    await screen.findByRole("tab", { name: "내 프로젝트 (5)" });
+    expect(screen.getByRole("tab", { name: "다른 프로젝트 (5)" })).toBeInTheDocument();
+  });
+});
+
+describe("카드 소유자 표시 (C099)", () => {
+  const card = {
+    id: "p1", name: "주말 방송", description: null, ownerNickname: "삼루먼", timerCount: 0,
+    timerStatus: null, remainingSeconds: null, scheduledStartAt: null, createdAt: "2026-03-01T12:00:00Z",
+  };
+  beforeEach(() => {
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/api/auth/me")) {
+        return jsonResponse({ id: "u1", chzzkUserId: "c1", nickname: "삼루먼", profileImageUrl: null });
+      }
+      return jsonResponse({ projects: [card], pagination: { page: 1, limit: 12, total: 1, totalPages: 1 } });
+    }) as typeof fetch;
+  });
+
+  it("내 프로젝트 탭에서는 소유자 이름을 숨기고, 다른 프로젝트 탭에서는 보인다", async () => {
+    render(<ProjectsPage />);
+    await screen.findByRole("link", { name: "주말 방송" });
+    expect(screen.queryByText("삼루먼")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: /다른 프로젝트/ }));
+    expect(await screen.findByText("삼루먼")).toBeInTheDocument();
+  });
+});
+
 describe("신규 유저의 검색·정렬 (UX-46)", () => {
   function stubProjects(mineTotal: number, loggedIn = true) {
     global.fetch = vi.fn(async (input: RequestInfo | URL) => {
