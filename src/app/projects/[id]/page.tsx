@@ -236,6 +236,8 @@ export default function ProjectDetailPage() {
   const [showOverlaySettings, setShowOverlaySettings] = useState(false);
   const [goals, setGoals] = useState<GoalResponse[] | null>(null);
   const [goalsError, setGoalsError] = useState(false);
+  // 목표가 많이 늦으면(타이머 쪽을 다 받고도 0.5초) 기다리지 않는다. 방송 중 시간 조작을 부가 정보 때문에 막지 않기 위해서다
+  const [goalsWaitOver, setGoalsWaitOver] = useState(false);
   const [showGoalForm, setShowGoalForm] = useState(false);
 
   const fetchProject = useCallback(async () => {
@@ -373,9 +375,15 @@ export default function ProjectDetailPage() {
     }
   }, [flowReady, ownsProject, hasTimer]);
 
+  useEffect(() => {
+    if (!timersLoaded) return;
+    const id = setTimeout(() => setGoalsWaitOver(true), 500);
+    return () => clearTimeout(id);
+  }, [timersLoaded]);
+
   // 화면 모양을 정하는 것(프로젝트, 소유자인지, 타이머와 콘솔 첫 데이터, 목표가 있는지)을 모두 받은 뒤 한 번에 그린다.
   // 요청은 함께 떠나므로 기다림은 가장 늦은 하나만큼이고, 골격 → 본문 사이에 헤더 버튼·목표 영역이 뒤늦게 끼어들어 아래를 밀지 않는다
-  if (loading || !timersLoaded || !authChecked || (goals === null && !goalsError)) {
+  if (loading || !timersLoaded || !authChecked || (goals === null && !goalsError && !goalsWaitOver)) {
     return <ProjectDetailSkeleton />;
   }
 

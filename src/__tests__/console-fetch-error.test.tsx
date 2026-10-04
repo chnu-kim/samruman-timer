@@ -157,6 +157,9 @@ describe("콘솔 조회 실패 표시 (W31)", () => {
     expect(screen.queryByRole("heading", { name: "최근 기록" })).not.toBeInTheDocument();
     expect(screen.queryByText(EMPTY_TEXT)).not.toBeInTheDocument();
     expect(screen.queryByText(/\(0\)/)).not.toBeInTheDocument();
+    // 목표가 계속 오지 않아도 시간 카드를 막지 않는다(타이머 쪽을 받은 뒤 0.5초까지만 기다린다)
+    expect(await screen.findByRole("region", { name: "시간" }, { timeout: 1500 })).toBeInTheDocument();
+    expect(within(goalSection()).queryByText(EMPTY_TEXT)).not.toBeInTheDocument();
     unmount();
 
     // 기록은 섹션 안에서 기다린다. 빈 문구 없이 자리만 둔다
