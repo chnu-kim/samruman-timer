@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useState } from "react";
 import { useOverlayRecovery } from "@/hooks/useOverlayRecovery";
+import { pageTitle } from "@/lib/site";
 
 // 루트 레이아웃(Header·Provider)에서 난 렌더 오류 경계. 루트 레이아웃을 대신하므로 자체 html/body를 갖고,
 // 전역 CSS가 적용되지 않아 스타일은 인라인으로 둔다.
@@ -43,7 +44,7 @@ export default function GlobalError({
   return (
     <html lang="ko" suppressHydrationWarning>
       <head>
-        <title>오류 · 삼루먼타이머</title>
+        <title>{pageTitle("오류")}</title>
         <script dangerouslySetInnerHTML={{ __html: overlayScript }} />
         <style>{styles}</style>
       </head>

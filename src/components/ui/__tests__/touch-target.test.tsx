@@ -58,6 +58,9 @@ describe("터치 타깃 44px (pointer-coarse)", () => {
     expect(cls).toContain("pointer-coarse:before:-inset-[7px]");
     // 아래 설명 연필의 영역과 겹치므로 제목 연필이 위에 놓인다
     expect(cls).toContain("z-10");
+    // W30: hover 배경 상자가 글자에 붙지 않게 왼쪽을 음수 여백으로 당기지 않고 간격 4px를 둔다
+    expect(cls).not.toContain("-ml-1");
+    expect(screen.getByRole("button", { name: "제목 편집" }).parentElement).toHaveClass("gap-1");
   });
 
   it("설명 연필은 제목 연필 영역을 덮지 않도록 위로 넓히지 않고 아래로만 넓힌다", () => {

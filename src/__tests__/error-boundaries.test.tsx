@@ -54,6 +54,8 @@ describe("전역 오류 경계 (global-error.tsx)", () => {
     expect(html).toContain("123456789");
     expect(html).toContain("다시 시도");
     expect(html).not.toContain("boom");
+    // 탭 제목 구분자는 다른 화면과 같은 '|'(site.ts)
+    expect(html).toContain("<title>오류 | 삼루먼타이머</title>");
   });
 
   it("서버 렌더 마크업은 오버레이 경로이면 data-overlay를 붙이는 스크립트와 숨김 CSS를 담는다", () => {

@@ -135,7 +135,7 @@ export function EditableText({
   }
 
   return (
-    <div className="group flex items-start gap-1.5">
+    <div className="group flex items-start gap-1">
       {/* heading 의미를 지키려고 Tag에는 role을 주지 않는다. 클릭은 마우스 편의이고, 키보드는 옆 편집 버튼을 쓴다 */}
       <Tag
         className={cn(className, TEXT_WRAP, "cursor-pointer")}
@@ -143,7 +143,8 @@ export function EditableText({
       >
         {value || <span className="text-muted-foreground">{placeholder}</span>}
       </Tag>
-      {/* 데스크톱 히트 영역은 30px(p-2, 24px 기준 통과). 줄 높이와 아이콘 위치가 그대로이도록 -ml-1 -mb-1로 넓어진 만큼을 되돌린다.
+      {/* 데스크톱 히트 영역은 30px(p-2, 24px 기준 통과). 줄 높이가 그대로이도록 -mb-1로 넓어진 만큼을 되돌린다.
+          왼쪽은 되돌리지 않고 간격(gap-1) 4px를 둔다. hover 배경 상자가 글자에 붙어 보이지 않게 하려는 것이고, 그만큼 버튼 자리가 2px 넓다.
           터치 기기에서는 ::before로 44px까지 넓힌다(30 + 7×2). 제목 전체를 누르는 영역으로 만들지는 않는다.
           제목 연필 바로 아래에 설명 연필이 붙어 있어 두 44px 영역이 겹친다. 제목 연필을 위에(z-10) 두고, 설명 연필은 위쪽으로 넓히지 않고 아래로만 넓혀(30 + 21 - 겹침) 둘 다 44px 이상을 확보한다 */}
       <button
@@ -151,7 +152,7 @@ export function EditableText({
         type="button"
         onClick={() => setEditing(true)}
         className={cn(
-          "relative pointer-coarse:before:absolute -mb-1 -ml-1 rounded-control p-2 text-muted-foreground opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:bg-foreground/10 transition-[opacity,background-color]",
+          "relative pointer-coarse:before:absolute -mb-1 rounded-control p-2 text-muted-foreground opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:bg-foreground/10 transition-[opacity,background-color]",
           Tag === "h1"
             ? "z-10 pointer-coarse:before:-inset-[7px]"
             : "pointer-coarse:before:-inset-x-[7px] pointer-coarse:before:top-0 pointer-coarse:before:-bottom-[21px]",
