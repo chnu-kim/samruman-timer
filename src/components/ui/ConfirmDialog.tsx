@@ -64,7 +64,7 @@ export function ConfirmDialog({
       style={{ animation: open ? "fade-in 0.15s ease-out" : undefined }}
     >
       <div className="p-6">
-        <h3 id={titleId} className="text-lg font-bold text-foreground">{title}</h3>
+        <h2 id={titleId} className="text-lg font-bold text-foreground">{title}</h2>
         {description && (
           <p className="mt-2 text-sm text-muted-foreground">{description}</p>
         )}

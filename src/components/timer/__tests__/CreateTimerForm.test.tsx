@@ -52,4 +52,17 @@ describe("CreateTimerForm", () => {
     expect(screen.getByRole("spinbutton", { name: "분" })).toHaveValue(30);
     expect(screen.getByRole("spinbutton", { name: "분" })).not.toHaveAttribute("max");
   });
+
+  // C004·C003: 시작 방식은 공용 세그먼트, 푸터는 주 동작 하나(닫기는 다이얼로그 X)
+  it("시작 방식은 세그먼트이고 취소 버튼 없이 주 동작 하나로 끝난다", () => {
+    render(<CreateTimerForm projectId="p1" />);
+    expect(screen.getByRole("radiogroup", { name: "시작 방식" })).toBeInTheDocument();
+    const now = screen.getByRole("radio", { name: "즉시 시작" });
+    expect(now).toHaveAttribute("aria-checked", "true");
+    fireEvent.keyDown(now, { key: "ArrowRight" });
+    expect(screen.getByRole("radio", { name: "예약 시작" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("combobox", { name: "연도" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "취소" })).not.toBeInTheDocument();
+  });
 });
+

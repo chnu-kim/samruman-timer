@@ -28,4 +28,20 @@ describe("GoalForm", () => {
     );
     expect(screen.getByRole("radio", { name: "방송 시간 목표" })).toBeInTheDocument();
   });
+
+  // C004·C003: 목표 유형은 공용 세그먼트(선택 항목만 Tab 정지점), 푸터는 주 동작 하나(닫기는 다이얼로그 X)
+  it("목표 유형은 세그먼트이고 취소 버튼 없이 주 동작 하나로 끝난다", () => {
+    render(
+      <ToastProvider>
+        <GoalForm projectId="p1" />
+      </ToastProvider>,
+    );
+    const group = screen.getByRole("radiogroup", { name: "목표 유형" });
+    const radios = screen.getAllByRole("radio");
+    expect(group).toContainElement(radios[0]);
+    expect(radios.map((r) => r.tabIndex)).toEqual([0, -1]);
+    fireEvent.keyDown(radios[0], { key: "ArrowRight" });
+    expect(screen.getByRole("radio", { name: "데드라인 목표" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.queryByRole("button", { name: "취소" })).not.toBeInTheDocument();
+  });
 });

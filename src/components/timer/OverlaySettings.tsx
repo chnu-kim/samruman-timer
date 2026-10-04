@@ -360,21 +360,21 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
           <div className="mt-1.5 flex flex-wrap gap-2">
             {PRESETS.map((preset) => {
               const active = matchesPreset(config, preset);
+              // 누르면 값을 한꺼번에 바꾸는 즉시 적용 버튼이다. 선택 컨트롤(세그먼트)처럼 칠하지 않고,
+              // 현재 값과 같은 프리셋에만 체크 표시를 둔다(C004)
               return (
-                <button
+                <Button
                   key={preset.name}
                   type="button"
+                  variant="secondary"
+                  size="sm"
                   onClick={() => applyPreset(preset)}
                   aria-pressed={active}
-                  className={cn(
-                    "rounded-lg border px-3 py-2 min-h-11 text-sm font-medium transition-colors",
-                    active
-                      ? "border-accent bg-accent-light text-foreground"
-                      : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground",
-                  )}
+                  className="min-h-11"
                 >
+                  {active && <CheckIcon className="w-4 h-4 mr-1" />}
                   {preset.name}
-                </button>
+                </Button>
               );
             })}
           </div>

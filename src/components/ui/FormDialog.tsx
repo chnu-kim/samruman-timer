@@ -56,12 +56,12 @@ export function FormDialog({ open, title, onClose, children }: FormDialogProps) 
       style={{ animation: open ? "fade-in 0.15s ease-out" : undefined }}
     >
       <div className="flex items-center justify-between gap-4 p-6 pb-0">
-        <h3 id={titleId} className="text-lg font-bold text-foreground">{title}</h3>
+        <h2 id={titleId} className="text-lg font-bold text-foreground">{title}</h2>
         <button
           type="button"
           onClick={onClose}
           aria-label="닫기"
-          className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-colors"
+          className="shrink-0 -my-1.5 -mr-1.5 rounded-lg p-1.5 min-h-11 min-w-11 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-colors"
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true">
             <path d="M18 6L6 18M6 6l12 12" />
