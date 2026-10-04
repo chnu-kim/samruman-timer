@@ -737,8 +737,8 @@ OBS 오버레이 설정을 저장한다.
   ]
 }
 ```
-- `type=DURATION`의 progress: `{ percentage, currentSeconds, remainingToTarget }` (`percentage` 최대 999)
-- `type=DEADLINE`의 progress: `{ percentage, timerSurvivesDeadline, deadlineIn }` (`percentage` 최대 100)
+- `type=DURATION`의 progress: `{ percentage, currentSeconds, remainingToTarget }` (`percentage` 최대 999). `COMPLETED`이면 달성 뒤 늘어난 소비 시간과 무관하게 `percentage=100`, `currentSeconds=targetSeconds`, `remainingToTarget=0`
+- `type=DEADLINE`의 progress: `{ percentage, timerSurvivesDeadline, deadlineIn, deadlineAfterTimerEnd }` (`percentage` 최대 100, `COMPLETED`이면 100). `deadlineAfterTimerEnd`: 지금 잔여대로면 타이머가 마감 전에 끝나는지(RUNNING은 지금+잔여, SCHEDULED는 시작 예정+잔여를 종료 예정으로 본다. 타이머가 없거나 만료면 false)
 - `status`: `ACTIVE` | `COMPLETED` | `FAILED` | `CANCELLED`
 - 정렬: `created_at DESC`
 - CANCELLED 상태의 목표도 포함해 반환한다
@@ -788,15 +788,16 @@ OBS 오버레이 설정을 저장한다.
 
 ### DELETE /api/projects/[id]/goals/[goalId]
 
-목표를 삭제한다. 행을 지우지 않고 status를 `CANCELLED`로 바꾼다 (ACTIVE뿐 아니라 COMPLETED·FAILED 목표도 대상). 목표 카드(`GoalCard`)의 삭제 버튼이 호출한다.
+실패·취소로 끝난 목표(`FAILED`·`CANCELLED`)의 행을 실제로 지운다. 종료 탭 목표 카드(`GoalCard`)의 더보기 '삭제'가 호출한다. 진행 중인 목표는 먼저 취소(PATCH)하고, 달성한 목표(`COMPLETED`)는 기록으로 남기므로 지울 수 없다.
 
 - **인증**: 필요 (프로젝트 소유자만)
 - **요청 본문**: 없음
+- **동작**: `DELETE ... WHERE status IN ('FAILED','CANCELLED')`로 지워, 조회와 삭제 사이에 상태가 바뀐 경우에는 지우지 않는다. 다른 테이블이 목표를 참조하지 않으므로 마이그레이션 없이 행 삭제가 가능하다
 - **에러**:
-  - `400`: 이미 CANCELLED인 목표
+  - `409 CONFLICT`: `ACTIVE`(먼저 취소) 또는 `COMPLETED`(달성 기록 보호)인 목표
   - `401`: 인증 없음
   - `403`: 소유자 아님
-  - `404`: 프로젝트 없음, 목표 없음
+  - `404`: 프로젝트 없음, 목표 없음(이미 지워진 목표 포함)
 - **응답**: `200 OK`
 ```json
 {
