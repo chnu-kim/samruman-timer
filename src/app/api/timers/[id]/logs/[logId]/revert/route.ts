@@ -3,7 +3,7 @@ import { getDB, withErrorHandler } from "@/lib/db";
 import { calculateRemaining, detectExpiry, detectScheduledActivation, revertTimerLog, TimerStateError } from "@/lib/timer";
 import type { Timer } from "@/types";
 
-const LOG_ID_PATTERN = /^[0-9a-f]{32}$/;
+const ID_PATTERN = /^[0-9a-f]{32}$/;
 
 /**
  * 시간 변경 기록 하나를 되돌린다(로그 취소 처리).
@@ -22,9 +22,9 @@ export const POST = withErrorHandler(async (
       { status: 401 }
     );
   }
-  if (!LOG_ID_PATTERN.test(logId)) {
+  if (!ID_PATTERN.test(id) || !ID_PATTERN.test(logId)) {
     return NextResponse.json(
-      { error: { code: "BAD_REQUEST", message: "유효하지 않은 기록 ID입니다" } },
+      { error: { code: "BAD_REQUEST", message: "유효하지 않은 ID입니다" } },
       { status: 400 }
     );
   }

@@ -11,8 +11,9 @@ import { POST } from "@/app/api/timers/[id]/logs/[logId]/revert/route";
 
 // 상태 전이·집계 제외는 실제 SQLite로 검증한다(integration/timer-revert.test.ts). 여기서는 입구의 거절 경로만 본다
 const LOG_ID = "c".repeat(32);
+const TIMER_ID = "d".repeat(32);
 const TIMER_ROW = {
-  id: "timer-1",
+  id: TIMER_ID,
   project_id: "proj-1",
   title: "타이머",
   description: null,
@@ -26,9 +27,9 @@ const TIMER_ROW = {
   owner_user_id: "user-1",
 };
 
-function call(logId = LOG_ID, headers: Record<string, string> = { "x-user-id": "user-1" }) {
-  const req = createPostRequest(`/api/timers/timer-1/logs/${logId}/revert`, {}, headers);
-  return POST(req as never, { params: Promise.resolve({ id: "timer-1", logId }) } as never);
+function call(logId = LOG_ID, headers: Record<string, string> = { "x-user-id": "user-1" }, timerId = TIMER_ID) {
+  const req = createPostRequest(`/api/timers/${timerId}/logs/${logId}/revert`, {}, headers);
+  return POST(req as never, { params: Promise.resolve({ id: timerId, logId }) } as never);
 }
 
 describe("POST /api/timers/[id]/logs/[logId]/revert", () => {
@@ -47,6 +48,11 @@ describe("POST /api/timers/[id]/logs/[logId]/revert", () => {
     const res = await call("bad-id");
     expect(res.status).toBe(400);
     expect((await parseJson(res)).error.code).toBe("BAD_REQUEST");
+    expect(db.prepare).not.toHaveBeenCalled();
+  });
+
+  it("32자 hex가 아닌 타이머 ID → 400", async () => {
+    expect((await call(LOG_ID, { "x-user-id": "user-1" }, "timer-1")).status).toBe(400);
     expect(db.prepare).not.toHaveBeenCalled();
   });
 

@@ -20,6 +20,7 @@ paths:
   - `RUNNING → EXPIRED`: remaining ≤ 0 → `EXPIRE` 로그 (만료 시각 기준으로 기록)
   - `EXPIRED → RUNNING`: ADD로 remaining > 0 → `REOPEN` + `ADD`
   - SUBTRACT로 remaining ≤ 0 → `SUBTRACT` + `EXPIRE`
+  - 되돌리기(`revertTimerLog`, 로그 취소 처리): 그 기록의 변경량만 현재 잔여에서 되돌리고 `reverted_at`을 채운다. 보정 행 없음. ADD 되돌리기로 ≤ 0 → `EXPIRE`, SUBTRACT 되돌리기로 만료 상태에서 > 0 → `REOPEN`. 통계·그래프·목표 집계는 `reverted_at IS NULL`만 쓴다
   - 이미 `EXPIRED`이거나 remaining이 0인 타이머의 SUBTRACT는 `400`, 상태·로그 변경 없음
   - 삭제 → `DELETED` + `DELETE` 로그 (before = 삭제 시점 잔여, after = 0)
   - `SCHEDULED`에서는 시간 변경 불가

@@ -95,9 +95,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setCurrent(null);
   }
 
-  // 버튼이 있는 토스트는 마우스를 올리거나 포커스가 들어간 동안 닫지 않는다(시간 제한 안에 누를 수 있게)
+  // 버튼이 있는 토스트는 마우스를 올리거나 포커스가 들어간 동안 닫지 않는다(시간 제한 안에 누를 수 있게).
+  // 이미 사라지는 중(exiting)이면 멈추지 않는다. 제거 타이머까지 지우면 보이지 않는 토스트가 남는다
   function pause() {
-    if (current?.action) clearTimers();
+    if (current?.action && !current.exiting) clearTimers();
   }
   function resume() {
     if (current?.action && !current.exiting) scheduleHide(current.id, current.duration);
@@ -107,8 +108,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={{ toast }}>
       {children}
       {/* 컨테이너는 탭을 아래(모바일 하단 빠른 액션 바 등)로 통과시킨다. 버튼이 있는 토스트만 포인터를 받는다.
-          모바일 하단 바가 있으면 그 바로 위(--quick-bar-h, globals.css)에 띄워 바와 입력부를 가리지 않는다 */}
-      <div className="fixed left-4 right-4 bottom-[calc(var(--quick-bar-h,0px)+0.5rem)] md:bottom-4 z-50 flex flex-col items-stretch gap-2 pointer-events-none md:left-auto md:items-end">
+          모바일 하단 바가 있으면 그 바로 위(--quick-bar-h, globals.css)에, 없으면 홈 인디케이터(safe-area) 위에 띄운다 */}
+      <div className="fixed left-4 right-4 bottom-[calc(var(--quick-bar-h,env(safe-area-inset-bottom,0px))+0.5rem)] md:bottom-4 z-50 flex flex-col items-stretch gap-2 pointer-events-none md:left-auto md:items-end">
         {current && (
           // 바깥은 불투명 배경(다크의 반투명 틴트 아래로 콘텐츠가 비치지 않게), 안쪽이 변형 색
           <div
@@ -119,8 +120,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 ? `toast-out ${EXIT_MS / 1000}s ease-in forwards`
                 : `toast-in ${EXIT_MS / 1000}s ease-out`,
             }}
-            onMouseEnter={pause}
-            onMouseLeave={resume}
+            // 터치의 탭은 mouseenter만 흉내 내고 leave가 없어 멈춘 채 남는다. 마우스 포인터일 때만 멈춘다
+            onPointerEnter={(e) => e.pointerType === "mouse" && pause()}
+            onPointerLeave={(e) => e.pointerType === "mouse" && resume()}
             onFocus={pause}
             onBlur={resume}
             // 오류는 개별 alert로 즉시 읽힌다. 성공·정보는 아래 상시 live region이 읽는다

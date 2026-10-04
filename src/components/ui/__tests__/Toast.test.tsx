@@ -112,11 +112,36 @@ describe("Toast", () => {
       expect(screen.getByRole("button", { name: "되돌리기" })).toBeInTheDocument();
 
       const item = screen.getByRole("button", { name: "되돌리기" }).parentElement!.parentElement!;
-      fireEvent.mouseEnter(item);
+      fireEvent.pointerEnter(item, { pointerType: "mouse" });
       act(() => vi.advanceTimersByTime(20000));
       expect(screen.getByRole("button", { name: "되돌리기" })).toBeInTheDocument();
 
-      fireEvent.mouseLeave(item);
+      fireEvent.pointerLeave(item, { pointerType: "mouse" });
+      act(() => vi.advanceTimersByTime(6300));
+      expect(screen.queryByRole("button", { name: "되돌리기" })).not.toBeInTheDocument();
+    });
+
+    it("사라지는 중에 마우스가 들어와도 제거된다", () => {
+      render(
+        <ToastProvider>
+          <ActionTrigger onUndo={vi.fn()} />
+        </ToastProvider>,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "추가" }));
+      act(() => vi.advanceTimersByTime(6050)); // 6초 뒤 퇴장 애니메이션(200ms) 중
+      fireEvent.pointerEnter(screen.getByRole("button", { name: "되돌리기" }).parentElement!.parentElement!, { pointerType: "mouse" });
+      act(() => vi.advanceTimersByTime(300));
+      expect(screen.queryByRole("button", { name: "되돌리기" })).not.toBeInTheDocument();
+    });
+
+    it("터치 탭(마우스가 아닌 포인터)은 자동 닫힘을 멈추지 않는다", () => {
+      render(
+        <ToastProvider>
+          <ActionTrigger onUndo={vi.fn()} />
+        </ToastProvider>,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "추가" }));
+      fireEvent.pointerEnter(screen.getByRole("button", { name: "되돌리기" }).parentElement!.parentElement!, { pointerType: "touch" });
       act(() => vi.advanceTimersByTime(6300));
       expect(screen.queryByRole("button", { name: "되돌리기" })).not.toBeInTheDocument();
     });

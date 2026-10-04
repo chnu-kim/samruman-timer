@@ -10,7 +10,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { FormDialog } from "@/components/ui/FormDialog";
 import { useToast } from "@/components/ui/Toast";
-import { cn, formatDateTime, displayActorName } from "@/lib/utils";
+import { cn, formatDateTime, displayActorName, formatDeltaSeconds } from "@/lib/utils";
 import { RemainingChart } from "@/components/graph/RemainingChart";
 import { useKeyboardShortcuts, SHORTCUT_HELP } from "@/hooks/useKeyboardShortcuts";
 import { usePolling } from "@/hooks/usePolling";
@@ -55,19 +55,6 @@ const FILTER_ACTIONS: ActionType[] = ["CREATE", "ADD", "SUBTRACT", "EXPIRE", "RE
 // 접힌 기록은 방금 일어난 일만 확인하는 용도라 몇 건만 보여 준다. 펼치면 필터와 페이지가 생긴다
 const RECENT_LOG_LIMIT = 5;
 const FULL_LOG_LIMIT = 20;
-
-function formatSeconds(s: number): string {
-  const abs = Math.abs(s);
-  const h = Math.floor(abs / 3600);
-  const m = Math.floor((abs % 3600) / 60);
-  const sec = abs % 60;
-
-  const parts: string[] = [];
-  if (h > 0) parts.push(`${h}시간`);
-  if (m > 0) parts.push(`${m}분`);
-  if (sec > 0 || parts.length === 0) parts.push(`${sec}초`);
-  return parts.join(" ");
-}
 
 interface TimerConsoleProps {
   timerId: string;
@@ -475,7 +462,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                           : log.actionType === "ADD" ? "text-green-700 dark:text-green-400" : log.actionType === "SUBTRACT" ? "text-red-600 dark:text-red-400" : "",
                       )}>
                         {log.actionType === "ADD" ? "+" : log.actionType === "SUBTRACT" ? "-" : ""}
-                        {formatSeconds(log.deltaSeconds)}
+                        {formatDeltaSeconds(log.deltaSeconds)}
                       </span>
                     ) : (
                       <span className="text-right font-mono text-xs text-muted-foreground">—</span>
@@ -484,7 +471,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                     <div className="col-span-3 flex flex-wrap items-baseline justify-between gap-x-3 font-mono text-xs text-muted-foreground">
                       <span className="whitespace-nowrap">{formatDateTime(log.createdAt)}</span>
                       <span className="ml-auto whitespace-nowrap text-right">
-                        {formatSeconds(log.beforeSeconds)} → <span className="text-foreground">{formatSeconds(log.afterSeconds)}</span>
+                        {formatDeltaSeconds(log.beforeSeconds)} → <span className="text-foreground">{formatDeltaSeconds(log.afterSeconds)}</span>
                       </span>
                     </div>
                   </li>

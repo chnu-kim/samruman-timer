@@ -226,7 +226,7 @@ status = DELETED
 ```
 consumed = max(0, 초기값(CREATE.after_seconds) + Σ ADD.delta - Σ SUBTRACT.delta - 현재 잔여)
 ```
-- Σ는 되돌리지 않은(`reverted_at IS NULL`) 기록만. 되돌리기는 잔여도 같은 양만큼 되돌리므로 consumed는 그대로다. 되돌린 +10시간을 합에 남기면 consumed가 10시간 뛰어 목표가 잘못 달성 처리된다
+- Σ는 되돌리지 않은(`reverted_at IS NULL`) 기록만. 되돌리기는 잔여도 같은 양만큼 되돌리므로 consumed는 그대로다(예외: 추가를 되돌려 잔여가 0에서 잘리면 잘린 만큼 consumed가 줄어든다). 되돌린 +10시간을 합에 남기면 consumed가 10시간 뛰어 목표가 잘못 달성 처리된다
 - 현재 잔여: `RUNNING`이면 계산값, `EXPIRED`면 0, `SCHEDULED`면 baseRemainingSeconds
 - 타이머가 없으면 0
 
