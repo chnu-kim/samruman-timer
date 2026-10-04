@@ -16,6 +16,11 @@ export const LoadFailed: Story = {
   args: { message: "프로젝트를 불러오지 못했습니다.", onRetry: fn() },
 };
 
+/** 섹션 본문만 실패했을 때의 한 줄 양식(콘솔의 목표·기록·그래프) */
+export const Compact: Story = {
+  args: { compact: true, message: "기록을 불러오지 못했습니다.", onRetry: fn() },
+};
+
 /** 찾을 수 없음·권한 없음 안내: 중립 아이콘, h1, 돌아갈 링크 하나 */
 export const NotFound: Story = {
   args: {

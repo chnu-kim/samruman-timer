@@ -31,6 +31,8 @@ import type {
 
 function GoalSection({
   goals,
+  error,
+  onRetry,
   projectId,
   isOwner,
   hasTimer,
@@ -40,7 +42,11 @@ function GoalSection({
   onGoalUpdate,
   className,
 }: {
-  goals: GoalResponse[];
+  /** null은 아직 받지 못한 상태. 빈 배열(받았는데 0건)과 구분한다 */
+  goals: GoalResponse[] | null;
+  /** 목록을 받지 못했다. 빈 상태 문구 대신 오류 한 줄을 보인다 */
+  error: boolean;
+  onRetry: () => void;
   projectId: string;
   isOwner: boolean;
   hasTimer: boolean;
@@ -53,8 +59,10 @@ function GoalSection({
   const [goalTab, setGoalTab] = useState<"active" | "completed">("active");
   const [goalFormKey, setGoalFormKey] = useState(0);
 
-  const activeGoals = goals.filter((g) => g.status === "ACTIVE");
-  const inactiveGoals = goals.filter((g) => g.status !== "ACTIVE");
+  const activeGoals = (goals ?? []).filter((g) => g.status === "ACTIVE");
+  const inactiveGoals = (goals ?? []).filter((g) => g.status !== "ACTIVE");
+  // 개수는 받은 결과가 있을 때만. 실패·로딩 중 '(0)'은 목표가 없다는 거짓말이 된다
+  const showCounts = goals !== null && !error;
 
   const tabClass = (active: boolean) =>
     `px-4 py-2 pointer-coarse:min-h-11 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-lg ${
@@ -112,7 +120,7 @@ function GoalSection({
           onKeyDown={handleGoalTabKeyDown}
           className={tabClass(goalTab === "active")}
         >
-          진행 중 ({activeGoals.length})
+          진행 중{showCounts && ` (${activeGoals.length})`}
         </button>
         <button
           role="tab"
@@ -124,7 +132,7 @@ function GoalSection({
           onKeyDown={handleGoalTabKeyDown}
           className={tabClass(goalTab === "completed")}
         >
-          종료 ({inactiveGoals.length})
+          종료{showCounts && ` (${inactiveGoals.length})`}
         </button>
       </div>
 
@@ -136,7 +144,11 @@ function GoalSection({
         aria-labelledby={goalTab === "active" ? "goal-tab-active" : "goal-tab-completed"}
         tabIndex={0}
       >
-        {goalTab === "active" ? (
+        {error ? (
+          <ErrorState compact message="목표를 불러오지 못했습니다." onRetry={onRetry} />
+        ) : goals === null ? (
+          <div className="h-21" />
+        ) : goalTab === "active" ? (
           activeGoals.length > 0 ? (
             activeGoals.map((goal) => (
               <GoalCard
@@ -206,7 +218,8 @@ export default function ProjectDetailPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showTimerDeleteDialog, setShowTimerDeleteDialog] = useState(false);
   const [showOverlaySettings, setShowOverlaySettings] = useState(false);
-  const [goals, setGoals] = useState<GoalResponse[]>([]);
+  const [goals, setGoals] = useState<GoalResponse[] | null>(null);
+  const [goalsError, setGoalsError] = useState(false);
   const [showGoalForm, setShowGoalForm] = useState(false);
 
   const fetchProject = useCallback(async () => {
@@ -225,17 +238,24 @@ export default function ProjectDetailPage() {
     }
   }, [projectId]);
 
-  const fetchGoals = useCallback(async () => {
+  // silent: 30초 주기·시간 변경·연결 복구 때의 백그라운드 갱신. 실패해도 보이던 목록(또는 오류 줄)을 그대로 둔다.
+  // 직접 부른 조회(첫 로드·다시 시도·목표 변경 뒤)가 실패하면 오류 줄을 띄운다. 비-ok 응답과 예외는 같은 실패다.
+  // 401은 세션 만료 안내가 맡는다(이 GET은 공개라 보통 오지 않는다)
+  const fetchGoals = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     try {
-      const res = await fetch(`/api/projects/${projectId}/goals`);
+      const res = await authFetch(`/api/projects/${projectId}/goals`);
       if (res.ok) {
         const json = (await res.json()) as ApiSuccessResponse<GoalResponse[]>;
         setGoals(json.data);
+        setGoalsError(false);
+      } else if (!silent && res.status !== 401) {
+        setGoalsError(true);
       }
     } catch {
-      // ignore
+      if (!silent) setGoalsError(true);
     }
   }, [projectId]);
+  const refreshGoalsSilently = useCallback(() => fetchGoals({ silent: true }), [fetchGoals]);
 
   // 타이머가 있는지와 그 ID만 쓴다. 남은 시간과 상태의 폴링은 TimerConsole이 한 곳에서 한다
   const fetchTimers = useCallback(async () => {
@@ -271,13 +291,14 @@ export default function ProjectDetailPage() {
       .finally(() => setAuthChecked(true));
   }, [projectId, fetchProject, fetchTimers, fetchGoals]);
 
-  // ACTIVE 목표가 있으면 30초 간격으로도 맞춘다. 시간이 바뀐 직후의 갱신은 TimerConsole의 onTimeChanged가 한다
+  // ACTIVE 목표가 있거나 목록을 받지 못했으면 30초 간격으로도 맞춘다(오류 줄이 저절로 풀린다).
+  // 시간이 바뀐 직후·연결이 돌아온 직후의 갱신은 TimerConsole의 onTimeChanged가 한다
+  const hasActiveGoal = !!goals?.some((g) => g.status === "ACTIVE");
   useEffect(() => {
-    const hasActiveGoal = goals.some((g) => g.status === "ACTIVE");
-    if (!hasActiveGoal) return;
-    const interval = setInterval(fetchGoals, 30_000);
+    if (!hasActiveGoal && !goalsError) return;
+    const interval = setInterval(refreshGoalsSilently, 30_000);
     return () => clearInterval(interval);
-  }, [goals, fetchGoals]);
+  }, [hasActiveGoal, goalsError, refreshGoalsSilently]);
 
   async function handleCopyLink() {
     try {
@@ -414,13 +435,15 @@ export default function ProjectDetailPage() {
   const goalSection = (className?: string) => (
     <GoalSection
       goals={goals}
+      error={goalsError}
+      onRetry={() => fetchGoals()}
       projectId={projectId}
       isOwner={isOwner}
       hasTimer={!!timer}
       showGoalForm={showGoalForm}
       onShowGoalForm={() => setShowGoalForm(true)}
       onHideGoalForm={() => setShowGoalForm(false)}
-      onGoalUpdate={fetchGoals}
+      onGoalUpdate={() => fetchGoals()}
       className={className}
     />
   );
@@ -495,11 +518,12 @@ export default function ProjectDetailPage() {
             key={timer.id}
             timerId={timer.id}
             isOwner={isOwner}
-            onTimeChanged={fetchGoals}
+            onTimeChanged={refreshGoalsSilently}
             onTimerRemoved={handleTimerRemoved}
             aside={
-              // 시청자에게 빈 목표 영역은 의미가 없으므로 목표가 있을 때만 보여 준다
-              isOwner || goals.length > 0
+              // 시청자에게 빈 목표 영역은 의미가 없으므로 목표가 있을 때만 보여 준다.
+              // 받지 못했으면 있는지 모르므로 오류 줄을 보인다(실패를 '목표 없음'으로 가리지 않는다)
+              isOwner || goalsError || (goals?.length ?? 0) > 0
                 ? goalSection("rounded-xl border border-border p-5")
                 : undefined
             }
@@ -528,7 +552,7 @@ export default function ProjectDetailPage() {
               )}
             </div>
             {/* 타이머를 삭제한 뒤에도 남은 목표 기록은 볼 수 있게 목표가 있으면 보여 준다 */}
-            {goals.length > 0 && goalSection("mt-6")}
+            {(goalsError || (goals?.length ?? 0) > 0) && goalSection("mt-6")}
           </>
         )}
       </div>
@@ -554,7 +578,7 @@ export default function ProjectDetailPage() {
         title="타이머 초기화"
         // 목표 진행률은 지금 타이머의 변경 기록으로 계산한다(src/lib/goal.ts). 목표 행은 남아도 진행 중인 목표는 0부터 다시 쌓이므로 그 사실을 알린다
         description={`지금 타이머와 변경 기록이 지워지고 방송 화면의 오버레이가 사라집니다. 되돌릴 수 없으며 목표 기록은 남습니다.${
-          goals.some((g) => g.status === "ACTIVE") ? " 진행 중인 목표의 진행률은 새 타이머 기준으로 처음부터 다시 쌓입니다." : ""
+          hasActiveGoal ? " 진행 중인 목표의 진행률은 새 타이머 기준으로 처음부터 다시 쌓입니다." : ""
         } 새 타이머는 오버레이 주소가 달라서 OBS 브라우저 소스에 새 주소를 다시 넣어야 합니다.`}
         confirmLabel="타이머 초기화"
         variant="danger"
