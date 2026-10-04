@@ -404,7 +404,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
             {/* 슬라이딩 인디케이터 */}
             <div
               className={cn(
-                "absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-lg bg-foreground shadow-sm transition-transform duration-200 ease-out pointer-events-none",
+                "absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-lg bg-foreground shadow-sm transition-transform duration-200 ease-out motion-reduce:transition-none pointer-events-none",
                 selectedAction === "SUBTRACT" && "translate-x-[calc(100%+8px)]",
               )}
             />

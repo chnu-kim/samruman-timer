@@ -450,7 +450,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
               type="button"
               onClick={toggleLogsExpanded}
               aria-expanded={logsExpanded}
-              className="min-h-11 rounded-md px-2 text-sm font-medium text-accent hover:bg-accent-light transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="min-h-11 rounded-md px-2 text-sm font-medium text-accent hover:bg-accent-light transition-colors"
             >
               {logsExpanded ? "접기" : "전체 기록"}
             </button>
@@ -466,7 +466,6 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                   aria-pressed={isFilterOn(actions)}
                   className={cn(
                     "rounded-full px-3 py-2 min-h-11 text-xs font-medium transition-colors",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     isFilterOn(actions)
                       ? "bg-accent text-accent-foreground"
                       : "border border-border text-muted-foreground hover:bg-foreground/5",
@@ -563,7 +562,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                 <p className="text-sm">그래프를 불러오지 못했습니다.</p>
                 <button
                   onClick={() => fetchGraph()}
-                  className="rounded-md px-3 py-1.5 pointer-coarse:min-h-11 text-xs font-medium text-accent hover:bg-accent-light transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="rounded-md px-3 py-1.5 pointer-coarse:min-h-11 text-xs font-medium text-accent hover:bg-accent-light transition-colors"
                 >
                   다시 시도
                 </button>

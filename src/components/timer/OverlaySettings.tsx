@@ -321,7 +321,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
           <button
             onClick={handleClose}
             aria-label="닫기"
-            className="rounded-lg p-1.5 min-h-11 min-w-11 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="rounded-lg p-1.5 min-h-11 min-w-11 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-colors"
           >
             <XIcon className="w-5 h-5" />
           </button>
@@ -367,7 +367,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                   onClick={() => applyPreset(preset)}
                   aria-pressed={active}
                   className={cn(
-                    "rounded-lg border px-3 py-2 min-h-11 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    "rounded-lg border px-3 py-2 min-h-11 text-sm font-medium transition-colors",
                     active
                       ? "border-accent bg-accent-light text-foreground"
                       : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground",
@@ -425,7 +425,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                     setConfig((prev) => ({ ...prev, fontSize: clamped }));
                   }
                 }}
-                className="w-16 text-center rounded border border-border-input bg-background px-2 py-1 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="w-16 text-center rounded border border-border-input bg-background px-2 py-1 text-sm text-foreground"
                 aria-label="폰트 크기 입력"
               />
               <span className="text-sm text-muted-foreground">px</span>
@@ -545,7 +545,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                   type="button"
                   onClick={() => setConfig((prev) => ({ ...prev, position: pos }))}
                   className={cn(
-                    "rounded border text-xs transition-colors min-h-[40px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    "rounded border text-xs transition-colors min-h-[40px]",
                     // 고르지 않은 칸도 누를 수 있는 자리로 보이게 입력 경계 토큰으로 윤곽을 상시 둔다(bg-muted 대비 3:1 이상)
                     config.position === pos
                       ? "border-accent bg-accent text-accent-foreground"

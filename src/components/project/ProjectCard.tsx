@@ -55,7 +55,7 @@ export function ProjectCard({ project, showOwner = true, className }: ProjectCar
       href={`/projects/${project.id}`}
       aria-labelledby={titleId}
       aria-describedby={metaId}
-      className="flex rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      className="flex rounded-xl"
     >
       <article
         className={cn(

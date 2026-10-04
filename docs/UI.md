@@ -21,7 +21,8 @@
 - 프로젝트 이름·설명. 소유자는 인라인 편집(`EditableText`). 시청자에게는 소유자 닉네임을 함께 보여 준다
 - 소유자: `OBS 오버레이`(→ `OverlaySettings` 모달)·`통계`(`/timers/[id]/stats`) 글자 버튼(타이머가 있을 때)과 더보기 버튼(`MoreMenu`: 링크 복사, 타이머 삭제, 프로젝트 삭제)
 - 시청자: 링크 복사 아이콘 버튼만
-- 더보기는 `aria-expanded` disclosure 패턴이다(`role="menu"` 아님). Escape·바깥 클릭으로 닫히고 포커스는 트리거로 돌아간다
+- 더보기는 `aria-expanded` disclosure 패턴이다(`role="menu"` 아님). Escape·바깥 클릭으로 닫히고 포커스는 트리거로 돌아간다. Tab으로 메뉴 밖에 포커스가 가도 닫힌다. 파괴적 항목 묶음 앞에 구분선 하나를 둔다
+- 이름·설명 인라인 편집을 Enter·Esc·저장/취소 버튼으로 끝내면 포커스가 편집 버튼으로 돌아온다(다른 곳을 눌러 끝낸 경우는 그 자리에 둔다)
 - 타이머만 삭제하면 화면에 남아 '타이머 없음' 상태가 되고 목표 기록은 그대로 보인다
 
 #### 타이머가 없을 때
@@ -250,6 +251,10 @@ RootLayout (ThemeProvider, ToastProvider, SessionExpiredHandler)
 - 시맨틱 HTML 사용 (button, nav, main, section)
 - 색상만으로 상태를 구분하지 않음 (뱃지 텍스트 병행)
 - 키보드 네비게이션 지원
+- 포커스 링은 `globals.css`의 `:focus-visible` 규칙 하나(`--ring` 2px outline, 간격 2px)다. 컴포넌트에 `focus-visible:ring-*`·`outline-none`을 달지 않는다(`focus-motion.test.ts`가 확인한다)
+- `FormDialog`는 열린 뒤 자식의 `data-autofocus` 요소로 포커스를 옮긴다(새 목표=제목, 새 타이머=시간 칸). 닫힌 `<dialog>` 안에 미리 렌더된 자식의 React `autoFocus`는 showModal 전에 소모되어 듣지 않는다
+- 탭(프로젝트 목록·목표)은 화살표 키로 선택과 포커스를 함께 옮긴다
+- `prefers-reduced-motion: reduce`에서는 카운트다운 맥동을 끄고, `fade-in`·`toast-in`·`toast-out` 키프레임을 투명도만 바꾸는 것으로 다시 정의한다(다이얼로그·토스트·목록 카드가 이동 없이 나타난다). 추가/차감 세그먼트 썸은 미끄러지지 않고 바로 옮겨 간다. 스켈레톤 맥동은 그대로 둔다
 - 적절한 aria-label 사용
 - 터치 타깃: 터치 기기(`pointer-coarse:`, 폰과 가로 태블릿 모두)에서 누르는 대상은 높이 44px 이상이다. 화면 폭(`max-md:`)이 아니라 입력 방식으로 가른다. 마우스 환경의 밀도는 그대로 둔다
   - 테두리·배경이 없는 대상(로고·내비 링크, 탭, 체크박스 행, 편집 중 저장·취소)은 `pointer-coarse:min-h-11`로 상자를 키운다. 보이는 모양은 같다

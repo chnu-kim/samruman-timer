@@ -155,7 +155,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                     dismiss();
                     action?.onClick();
                   }}
-                  className="min-h-11 shrink-0 rounded-md px-3 font-semibold underline underline-offset-2 hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="min-h-11 shrink-0 rounded-md px-3 font-semibold underline underline-offset-2 hover:bg-foreground/10"
                 >
                   {current.action.label}
                 </button>
