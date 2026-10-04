@@ -151,7 +151,7 @@ describe("CountdownDisplay", () => {
     );
     const timer = screen.getByRole("timer");
     // C140: 모바일은 clamp()로 폭에 비례(390px에서 약 66px), sm부터 60px
-    expect(timer.className).toContain("text-[length:clamp(3rem,17vw,4.25rem)]");
+    expect(timer.className).toContain("text-[length:clamp(3rem,17vw,3.75rem)]");
     expect(timer.className).toContain("sm:text-6xl");
   });
 
