@@ -4,7 +4,7 @@ export function Footer() {
       <p>© 2026 삼루먼타이머</p>
       <p className="mt-1">
         문의:{" "}
-        <a href="mailto:chanuuuu@naver.com" className="underline hover:text-foreground">
+        <a href="mailto:chanuuuu@naver.com" className="underline hover:text-foreground pointer-coarse:inline-block pointer-coarse:-my-3 pointer-coarse:py-3">
           chanuuuu@naver.com
         </a>
       </p>

@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { cn, durationAxisTicks, formatDuration, formatDurationTick } from "@/lib/utils";
 import type { DailyActivity } from "@/types";
+import { chartTooltipStyle } from "@/components/graph/tooltip-style";
 
 interface DailyActivityChartProps {
   data: DailyActivity[];
@@ -138,14 +139,7 @@ export function DailyActivityChart({ data, className }: DailyActivityChartProps)
                 ? [`+${formatDuration(Number(value))}`, "추가"]
                 : [`-${formatDuration(Math.abs(Number(value)))}`, "차감"]
             }
-            contentStyle={{
-              backgroundColor: "var(--color-background)",
-              border: "1px solid var(--color-border)",
-              borderRadius: "8px",
-              fontSize: "12px",
-              color: "var(--color-foreground)",
-              opacity: 0.9,
-            }}
+            {...chartTooltipStyle}
           />
           <Legend
             formatter={(value: string) => (value === "added" ? "+ 추가" : "- 차감")}

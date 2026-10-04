@@ -148,6 +148,15 @@ describe("신규 유저의 검색·정렬 (UX-46)", () => {
     expect(screen.getByRole("textbox", { name: "프로젝트 검색" })).toBeInTheDocument();
   });
 
+  // W06: 검색창·정렬 경계는 배경 대비 3:1 이상인 입력 경계 토큰
+  it("검색창과 정렬 select는 입력 경계 토큰을 쓴다", async () => {
+    stubProjects(3);
+    render(<ProjectsPage />);
+    await screen.findByRole("tab", { name: /내 프로젝트 \(3\)/ });
+    expect(screen.getByRole("textbox", { name: "프로젝트 검색" })).toHaveClass("border-border-input");
+    expect(screen.getByRole("combobox", { name: "정렬 기준" })).toHaveClass("border-border-input");
+  });
+
   it("로그인하지 않았으면 검색창을 보여 준다", async () => {
     stubProjects(0, false);
     render(<ProjectsPage />);

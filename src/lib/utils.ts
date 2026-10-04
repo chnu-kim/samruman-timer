@@ -170,6 +170,21 @@ export function formatDateTime(iso: string): string {
   });
 }
 
+/**
+ * 변경 기록 행의 시각. 오늘이면 'HH:mm'만, 오늘이 아니면 'MM. DD. HH:mm', 다른 해면 연도까지 붙인다.
+ * 방송 중에는 대부분 오늘 기록이라 날짜·초를 매 행 반복하지 않는다(초까지의 전체 시각은 title로).
+ * toLocaleString은 엔진에 따라 '오전'이나 '24:05'를 내므로 직접 맞춘다
+ */
+export function formatLogTime(iso: string, now: Date = new Date()): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const sameYear = d.getFullYear() === now.getFullYear();
+  if (sameYear && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()) return time;
+  const date = `${pad(d.getMonth() + 1)}. ${pad(d.getDate())}.`;
+  return sameYear ? `${date} ${time}` : `${d.getFullYear()}. ${date} ${time}`;
+}
+
 /** 상대 날짜 포맷 ("오늘", "어제", "3일 전", 또는 로컬 날짜) */
 export function formatRelativeDate(iso: string): string {
   const date = new Date(iso);

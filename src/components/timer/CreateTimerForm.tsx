@@ -47,7 +47,7 @@ function range(start: number, end: number): number[] {
 }
 
 const selectClass =
-  "appearance-none border border-border rounded-lg px-3 py-2 bg-background text-foreground text-center outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors cursor-pointer";
+  "appearance-none border border-border-input rounded-lg px-3 py-2 bg-background text-foreground text-center outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors cursor-pointer";
 
 interface SelectFieldProps {
   value: number;
@@ -255,10 +255,10 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess, onCan
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      {/* 화면에서는 프로젝트 이름을 쓰므로 타이머 제목은 오버레이의 '타이틀 표시'에만 나온다 */}
+      {/* 화면에서는 프로젝트 이름을 쓰므로 타이머 제목은 오버레이의 '제목 표시'에만 나온다 */}
       <div>
         <Input
-          label="오버레이 제목 (필수)"
+          label="제목 (필수)"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           required
@@ -267,7 +267,7 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess, onCan
           aria-describedby={titleHintId}
         />
         <p id={titleHintId} className="mt-1 text-xs text-muted-foreground">
-          OBS 오버레이 설정에서 &lsquo;타이틀 표시&rsquo;를 켜면 방송 화면에 보입니다.
+          OBS 오버레이 설정에서 &lsquo;제목 표시&rsquo;를 켜면 방송 화면에 보입니다.
         </p>
       </div>
 
@@ -443,7 +443,7 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess, onCan
           // 320px 모달에서 라벨이 '만들/기'로 꺾여 버튼 높이를 넘지 않게 한 줄로 두고 취소 버튼이 줄어든다
           className="flex-1 whitespace-nowrap"
         >
-          {loading ? "생성 중..." : "타이머 만들기"}
+          {loading ? "생성 중…" : "타이머 만들기"}
         </Button>
       </div>
     </form>

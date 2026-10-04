@@ -57,7 +57,7 @@ function GoalSection({
   const inactiveGoals = goals.filter((g) => g.status !== "ACTIVE");
 
   const tabClass = (active: boolean) =>
-    `px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+    `px-4 py-2 pointer-coarse:min-h-11 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
       active
         ? "border-accent text-accent"
         : "border-transparent text-muted-foreground hover:text-foreground"
@@ -444,7 +444,7 @@ export default function ProjectDetailPage() {
               editable={isOwner}
               as="p"
               className="mt-1 text-muted-foreground"
-              placeholder="설명 추가..."
+              placeholder="설명 추가…"
             />
           )}
           {!isOwner && (
@@ -511,7 +511,12 @@ export default function ProjectDetailPage() {
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-muted">
                 <TimerIcon className="w-8 h-8 text-muted-foreground" />
               </div>
-              <p className="mt-4 text-muted-foreground">아직 타이머가 없습니다.</p>
+              {/* 만들 수 있는 소유자에게는 만들면 생기는 것을, 시청자에게는 지금 상태만 한 문장으로 */}
+              <p className="mt-4 text-muted-foreground">
+                {isOwner
+                  ? "타이머를 만들면 방송 화면에 띄울 카운트다운과 OBS 주소가 생깁니다."
+                  : "아직 타이머가 없습니다."}
+              </p>
               {isOwner && (
                 <Button
                   size="sm"
@@ -562,8 +567,8 @@ export default function ProjectDetailPage() {
       <ConfirmDialog
         open={showDeleteDialog}
         title="프로젝트 삭제"
-        description="정말로 이 프로젝트를 삭제하시겠습니까? 하위 타이머도 함께 삭제됩니다."
-        confirmLabel="삭제"
+        description="타이머·목표·변경 기록이 함께 지워지고 되돌릴 수 없습니다."
+        confirmLabel="프로젝트 삭제"
         variant="danger"
         onConfirm={handleDelete}
         onCancel={() => setShowDeleteDialog(false)}

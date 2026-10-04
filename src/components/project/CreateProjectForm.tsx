@@ -73,7 +73,7 @@ export function CreateProjectForm({ onSuccess }: CreateProjectFormProps) {
       />
       {error && <p className="text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>}
       <Button type="submit" disabled={loading || !name.trim()}>
-        {loading ? "생성 중..." : "프로젝트 만들기"}
+        {loading ? "생성 중…" : "프로젝트 만들기"}
       </Button>
     </form>
   );

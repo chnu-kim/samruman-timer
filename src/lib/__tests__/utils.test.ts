@@ -7,6 +7,7 @@ import {
   formatTimeTicks,
   formatTimestampShort,
   formatHourShort,
+  formatLogTime,
   displayActorName,
   timeAxisTicks,
 } from "@/lib/utils";
@@ -30,6 +31,27 @@ describe("formatTimestampShort", () => {
     // 타임존에 따라 다를 수 있으므로 형식만 검증
     expect(typeof result).toBe("string");
     expect(result.length).toBeGreaterThan(0);
+  });
+});
+
+describe("formatLogTime", () => {
+  // 로컬 시각으로 만들어 실행 환경의 타임존과 무관하게 검증한다
+  const now = new Date(2026, 9, 4, 14, 30);
+  const iso = (...args: [number, number, number, number, number, number?]) => new Date(...args).toISOString();
+
+  it("오늘 기록은 HH:mm 5자만 보인다", () => {
+    expect(formatLogTime(iso(2026, 9, 4, 6, 44, 27), now)).toBe("06:44");
+    expect(formatLogTime(iso(2026, 9, 4, 0, 5), now)).toBe("00:05");
+    expect(formatLogTime(iso(2026, 9, 4, 0, 1), now)).toHaveLength(5);
+  });
+
+  it("오늘이 아니면 날짜를 붙인다(자정 직전은 어제)", () => {
+    expect(formatLogTime(iso(2026, 9, 3, 23, 59), now)).toBe("10. 03. 23:59");
+    expect(formatLogTime(iso(2026, 2, 13, 9, 7), now)).toBe("03. 13. 09:07");
+  });
+
+  it("다른 해면 연도까지 붙인다", () => {
+    expect(formatLogTime(iso(2025, 9, 4, 14, 30), now)).toBe("2025. 10. 04. 14:30");
   });
 });
 

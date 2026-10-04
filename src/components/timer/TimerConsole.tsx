@@ -10,7 +10,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { FormDialog } from "@/components/ui/FormDialog";
 import { useToast } from "@/components/ui/Toast";
-import { cn, formatDateTime, displayActorName, formatDeltaSeconds } from "@/lib/utils";
+import { cn, formatDateTime, formatLogTime, displayActorName, formatDeltaSeconds } from "@/lib/utils";
 import { RemainingChart } from "@/components/graph/RemainingChart";
 import { useKeyboardShortcuts, SHORTCUT_HELP } from "@/hooks/useKeyboardShortcuts";
 import { usePolling } from "@/hooks/usePolling";
@@ -51,7 +51,12 @@ const ACTION_TYPE_BADGE_VARIANT: Record<ActionType, "create" | "add" | "subtract
   DELETE: "delete",
 };
 
-const FILTER_ACTIONS: ActionType[] = ["CREATE", "ADD", "SUBTRACT", "EXPIRE", "REOPEN", "ACTIVATE", "DELETE"];
+// 필터는 보는 사람이 찾는 단위로 세 묶음만 둔다. 삭제(DELETE)된 타이머는 기록 자체를 볼 수 없어 칩이 필요 없다
+const FILTER_GROUPS: { label: string; actions: ActionType[] }[] = [
+  { label: "추가", actions: ["ADD"] },
+  { label: "차감", actions: ["SUBTRACT"] },
+  { label: "기타", actions: ["CREATE", "EXPIRE", "REOPEN", "ACTIVATE"] },
+];
 
 // 접힌 기록은 방금 일어난 일만 확인하는 용도라 몇 건만 보여 준다. 펼치면 필터와 페이지가 생긴다
 const RECENT_LOG_LIMIT = 5;
@@ -307,7 +312,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
         toast("시간 변경에 실패했습니다.", "error");
       }
     } else {
-      toast("시청자 닉네임을 입력하거나 기본 닉네임을 설정하면 숫자키로 즉시 적용됩니다", "info");
+      toast("시청자 닉네임을 입력하면 숫자키로 즉시 적용됩니다. 닉네임 입력 후 ‘기본 닉네임으로 설정’을 누르면 다음부터 입력 없이 적용됩니다", "info");
     }
     // handleModified가 읽는 기록 상태(필터, 펼침)가 바뀌면 다시 만들어 오래된 값으로 기록을 불러오지 않게 한다
   }, [isOwner, timer, toast, showModifiedToast, timerId, selectedAction, activeFilters, logsExpanded]);
@@ -323,8 +328,9 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
     onTimeChanged?.();
   }, [fetchTimer, fetchLogs, fetchGraph, onTimeChanged, logPage, activeFilters, logsExpanded]);
 
+  const shortcutsEnabled = isOwner && !!timer && timer.status !== "SCHEDULED";
   const { showHelp, setShowHelp } = useKeyboardShortcuts({
-    enabled: isOwner && !!timer && timer.status !== "SCHEDULED",
+    enabled: shortcutsEnabled,
     onPreset: handleKeyboardPreset,
     onToggleAction: handleToggleAction,
     onRefresh: handleRefresh,
@@ -333,13 +339,15 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
   // 카운트다운이 0에 닿으면 다음 폴링을 기다리지 않고 배지를 '만료'로 보여 준다
   const countdownEnded = useCountdownEnded(timer?.remainingSeconds, timer?.status);
 
-  function toggleFilter(action: ActionType) {
+  const isFilterOn = (actions: ActionType[]) => actions.every((a) => activeFilters.has(a));
+
+  function toggleFilter(actions: ActionType[]) {
     setActiveFilters((prev) => {
       const next = new Set(prev);
-      if (next.has(action)) {
-        next.delete(action);
-      } else {
-        next.add(action);
+      const on = actions.every((a) => next.has(a));
+      for (const a of actions) {
+        if (on) next.delete(a);
+        else next.add(a);
       }
       return next;
     });
@@ -399,7 +407,21 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
         <div className={cn("grid gap-5", isOwner && !!aside && "lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start")}>
           {isOwner && (
             <section aria-labelledby="timer-controls-heading" className="rounded-xl border border-accent/30 bg-accent-light/20 p-5">
-              <h2 id="timer-controls-heading" className="text-sm font-bold text-foreground">시간 조작</h2>
+              {/* 단축키가 있다는 사실을 '?'를 몰라도 알 수 있게, 도움말로 가는 진입점을 제목 줄에 하나만 둔다.
+                  키보드가 있는 포인터 기기에서만 보인다(터치 기기에서는 단축키를 쓸 수 없다) */}
+              <div className="flex items-center justify-between gap-3">
+                <h2 id="timer-controls-heading" className="text-sm font-bold text-foreground">시간 조작</h2>
+                {shortcutsEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => setShowHelp(true)}
+                    aria-haspopup="dialog"
+                    className="hidden pointer-fine:inline-flex -my-1 -mr-2 rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    단축키
+                  </button>
+                )}
+              </div>
               <TimerControls
                 timerId={timerId}
                 status={timer.status}
@@ -437,20 +459,20 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
           {/* 필터 */}
           {logsExpanded && (
             <div className="mt-3 flex flex-wrap gap-1.5">
-              {FILTER_ACTIONS.map((action) => (
+              {FILTER_GROUPS.map(({ label, actions }) => (
                 <button
-                  key={action}
-                  onClick={() => toggleFilter(action)}
-                  aria-pressed={activeFilters.has(action)}
+                  key={label}
+                  onClick={() => toggleFilter(actions)}
+                  aria-pressed={isFilterOn(actions)}
                   className={cn(
                     "rounded-full px-3 py-2 min-h-11 text-xs font-medium transition-colors",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    activeFilters.has(action)
+                    isFilterOn(actions)
                       ? "bg-accent text-accent-foreground"
                       : "border border-border text-muted-foreground hover:bg-foreground/5",
                   )}
                 >
-                  {ACTION_TYPE_LABELS[action]}
+                  {label}
                 </button>
               ))}
               {activeFilters.size > 0 && (
@@ -504,7 +526,10 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                     )}
                     {/* 좁은 화면에서 변경 전→후가 길면 날짜가 둘로 쪼개지지 않고 전→후가 다음 줄로 내려간다 */}
                     <div className="col-span-3 flex flex-wrap items-baseline justify-between gap-x-3 font-mono text-xs text-muted-foreground">
-                      <span className="whitespace-nowrap">{formatDateTime(log.createdAt)}</span>
+                      {/* 오늘이면 'HH:mm'만, 날짜는 오늘이 아닐 때만. 초까지의 전체 시각은 title로 */}
+                      <time dateTime={log.createdAt} title={formatDateTime(log.createdAt)} className="whitespace-nowrap">
+                        {formatLogTime(log.createdAt)}
+                      </time>
                       <span className="ml-auto whitespace-nowrap text-right">
                         {formatDeltaSeconds(log.beforeSeconds)} → <span className="text-foreground">{formatDeltaSeconds(log.afterSeconds)}</span>
                       </span>
@@ -535,10 +560,10 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
               </div>
             ) : graphError ? (
               <div className="flex h-64 flex-col items-center justify-center gap-2 text-muted-foreground">
-                <p className="text-sm">그래프를 불러오는데 실패했습니다.</p>
+                <p className="text-sm">그래프를 불러오지 못했습니다.</p>
                 <button
                   onClick={() => fetchGraph()}
-                  className="rounded-md px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent-light transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="rounded-md px-3 py-1.5 pointer-coarse:min-h-11 text-xs font-medium text-accent hover:bg-accent-light transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   다시 시도
                 </button>
@@ -567,6 +592,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
             </div>
             <p className="mt-4 text-xs text-muted-foreground">
               입력 필드에 포커스가 없을 때만 동작합니다. 숫자키는 입력한 시청자 닉네임(비어 있으면 기본 닉네임)으로 즉시 적용됩니다.
+              기본 닉네임은 닉네임 입력 후 &lsquo;기본 닉네임으로 설정&rsquo;을 누르면 정해집니다.
             </p>
           </>
         )}
