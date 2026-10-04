@@ -237,7 +237,7 @@ describe("빈 목록의 만들기 버튼 (C103)", () => {
       return new Response(null, { status: 500 });
     }) as typeof fetch;
     render(<ProjectsPage />);
-    await screen.findByText("프로젝트를 불러오는데 실패했습니다.");
+    await screen.findByText("프로젝트를 불러오지 못했습니다.");
     await screen.findByRole("tab", { name: /내 프로젝트 \(0\)/ });
     expect(screen.getByRole("button", { name: /새 프로젝트/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /첫 프로젝트 만들기/ })).not.toBeInTheDocument();
