@@ -6,7 +6,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
 import { CopyIcon, XIcon, CheckIcon } from "@/components/ui/Icons";
 import { useToast } from "@/components/ui/Toast";
-import { authFetch } from "@/lib/auth-fetch";
+import { authFetch, isSessionExpired } from "@/lib/auth-fetch";
 import { cn } from "@/lib/utils";
 import { HEX_COLOR } from "@/lib/overlay-style";
 
@@ -26,6 +26,9 @@ interface OverlayConfig {
   position: Position;
   animation: boolean;
 }
+
+/** 저장 요청 중 하나가 세션 만료였다. 세션 만료 안내(로그인 화면으로 이동)만 남도록 이 창은 아무것도 알리지 않는다 */
+const SAVE_SESSION_EXPIRED = Symbol("session-expired");
 
 const PRESETS: { name: string; config: Partial<OverlayConfig> }[] = [
   {
@@ -207,8 +210,8 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
   const titleOnly = titleDirty && !configDirty;
 
   // 제목과 설정은 서로 무관한 요청이라 함께 보내고, 하나가 실패해도 다른 하나는 저장한다.
-  // 실패가 있으면 첫 실패 사유를, 모두 성공하면 null을 돌려준다
-  const save = useCallback(async (trimmedTitle: string | null): Promise<string | null> => {
+  // 실패가 있으면 첫 실패 사유를, 모두 성공하면 null을, 세션 만료가 있으면 SAVE_SESSION_EXPIRED를 돌려준다
+  const save = useCallback(async (trimmedTitle: string | null): Promise<string | null | typeof SAVE_SESSION_EXPIRED> => {
     const failMessage = async (res: Response, fallback: string) => {
       const json = await res.json().catch(() => null) as { error?: { message?: string } } | null;
       return json?.error?.message ?? fallback;
@@ -221,6 +224,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ title: trimmedTitle }),
         });
+        if (isSessionExpired(res)) throw SAVE_SESSION_EXPIRED;
         if (!res.ok) throw new Error(await failMessage(res, "제목을 저장하지 못했습니다"));
         setSavedTitle(trimmedTitle);
         setTitle(trimmedTitle);
@@ -234,11 +238,14 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(snapshot),
         });
+        if (isSessionExpired(res)) throw SAVE_SESSION_EXPIRED;
         if (!res.ok) throw new Error(await failMessage(res, "설정을 저장하지 못했습니다"));
         setSavedConfig(snapshot);
       })());
     }
-    const failed = (await Promise.allSettled(tasks)).find((r) => r.status === "rejected");
+    const results = await Promise.allSettled(tasks);
+    if (results.some((r) => r.status === "rejected" && r.reason === SAVE_SESSION_EXPIRED)) return SAVE_SESSION_EXPIRED;
+    const failed = results.find((r) => r.status === "rejected");
     if (!failed) return null;
     return failed.reason instanceof Error ? failed.reason.message : "저장하지 못했습니다";
   }, [timerId, config, configDirty]);
@@ -261,11 +268,15 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
     let saveError: string | null = null;
     if (needsSave) {
       setSaving(true);
+      let result: Awaited<ReturnType<typeof save>>;
       try {
-        saveError = await save(titleToSave);
+        result = await save(titleToSave);
       } finally {
         setSaving(false);
       }
+      // 세션 만료 안내가 곧 로그인 화면으로 보낸다. 토스트 자리는 하나라 저장·복사 결과를 알리면 그 안내를 덮는다
+      if (result === SAVE_SESSION_EXPIRED) return;
+      saveError = result;
     }
 
     if (copying === null) {

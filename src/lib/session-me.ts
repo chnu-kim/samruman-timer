@@ -1,4 +1,5 @@
 import { onSessionExpired } from "@/lib/session-expired";
+import { rememberSignedIn } from "@/lib/auth-hint";
 import type { MeResponse } from "@/types";
 
 /**
@@ -26,6 +27,8 @@ export function fetchMe(): Promise<MeResponse | null> {
     settledAt: null,
   };
   const settle = (value: MeResponse | null, definitive: boolean) => {
+    // 확정 결과(200·401)만 다음 로드의 골격 힌트로 남긴다. 500·네트워크 오류는 로그인 여부를 말해 주지 않는다
+    if (definitive) rememberSignedIn(value !== null);
     if (cached === entry) {
       if (definitive) entry.settledAt = Date.now();
       else cached = null;

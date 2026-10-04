@@ -258,6 +258,14 @@ describe("프로젝트 콘솔", () => {
     expect(screen.getByRole("button", { name: "링크 복사" })).toBeInTheDocument();
   });
 
+  // 골격은 설명 줄을 항상 그리므로, 설명이 없는 프로젝트의 시청자 화면도 같은 높이를 비워 카운트다운이 골격→본문 전환에서 밀리지 않는다
+  it("설명이 없으면 시청자 헤더 아래에 설명 줄 높이만큼 자리를 비워 둔다", async () => {
+    stubApi({ timers: [timer], goals: [] });
+    render(<ProjectDetailPage />);
+    await screen.findByRole("heading", { name: "잔여 시간 추이" });
+    expect(screen.getByRole("heading", { name: "테스트 프로젝트" }).parentElement!.querySelector(".h-6[aria-hidden=true]")).toBeInTheDocument();
+  });
+
   // UX-73: 만료 로그의 행위자를 'system' 대신 '자동'으로 보여 준다
   it("시스템이 남긴 만료 로그의 행위자를 '자동'으로 표시한다", async () => {
     stubApi({ timers: [timer], goals: [] });
@@ -463,42 +471,44 @@ describe("프로젝트 콘솔", () => {
       expect(mockToast).not.toHaveBeenCalled();
     });
 
-    // W34: 세션 만료가 아닌 401(로그아웃 상태 등)은 일반 실패처럼 서버 문구를 알린다
-    it("'1'이 SESSION_EXPIRED가 아닌 401이면 서버 문구 토스트 한 건", async () => {
+    // G2: 로그인이 풀린 401(UNAUTHORIZED, 다른 탭에서 로그아웃 등)도 쓰기 요청이면 세션 만료 안내(로그인 화면으로 이동)에 맡긴다
+    it("'1'이 로그인이 풀린 401(UNAUTHORIZED)이면 자기 알림을 띄우지 않는다", async () => {
       mockToast.mockReset();
-      stubApi({ timers: [timer], goals: [], me: owner, modifyStatus: 401, modifyCode: "UNAUTHORIZED" });
+      const calls = stubApi({ timers: [timer], goals: [], me: owner, modifyStatus: 401, modifyCode: "UNAUTHORIZED" });
       render(<ProjectDetailPage />);
       await waitFor(() => expect(screen.getByLabelText("시청자 닉네임")).toHaveValue("기본냥"));
 
       fireEvent.keyDown(window, { key: "1", code: "Digit1" });
-      await waitFor(() => expect(mockToast).toHaveBeenCalledWith("서버 원문", "error"));
-      expect(mockToast).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(calls.some((c) => c.url === "/api/timers/t1/modify")).toBe(true));
+      await new Promise((r) => setTimeout(r, 50));
+      expect(mockToast).not.toHaveBeenCalled();
     });
 
-    // R25: 차감을 고른 뒤 카운트다운이 0에 닿으면(폴링 전) 숫자키도 '추가'로 적용한다
+    // R25: 차감을 고른 뒤 카운트다운이 0에 닿으면(폴링 전) 숫자키도 '추가'로 적용한다.
+    // 잔여는 몇 초 둔다. 1초면 부하로 첫 화면이 늦을 때 'x'를 누르기 전에 이미 만료돼 세그먼트가 없다(첫 값은 기다린 시간만큼 줄여 그린다)
     it("차감 선택 후 만료되면 '1'은 ADD로 적용한다", async () => {
-      const running = { ...timerDetail, status: "RUNNING", remainingSeconds: 1 };
-      const calls = stubApi({ timers: [{ ...timer, status: "RUNNING", remainingSeconds: 1 }], goals: [], me: owner, detail: running });
+      const running = { ...timerDetail, status: "RUNNING", remainingSeconds: 3 };
+      const calls = stubApi({ timers: [{ ...timer, status: "RUNNING", remainingSeconds: 3 }], goals: [], me: owner, detail: running });
       render(<ProjectDetailPage />);
       await waitFor(() => expect(screen.getByLabelText("시청자 닉네임")).toHaveValue("기본냥"));
       fireEvent.keyDown(window, { key: "x", code: "KeyX" });
       expect(screen.getByRole("radio", { name: "차감" })).toHaveAttribute("aria-checked", "true");
 
-      // 잔여 1초가 지나 만료로 보이면 세그먼트가 사라진다
-      await waitFor(() => expect(screen.queryAllByRole("radio")).toHaveLength(0), { timeout: 3000 });
+      // 잔여가 지나 만료로 보이면 세그먼트가 사라진다
+      await waitFor(() => expect(screen.queryAllByRole("radio")).toHaveLength(0), { timeout: 6000 });
       fireEvent.keyDown(window, { key: "1", code: "Digit1" });
       await waitFor(() => {
         const modify = calls.find((c) => c.url === "/api/timers/t1/modify" && c.method === "POST");
         expect(JSON.parse(modify!.body!)).toMatchObject({ action: "ADD", deltaSeconds: 3600 });
       });
-    });
+    }, 15_000);
 
     // 만료 중에는 토글이 보이지 않으므로 X가 숨은 선택을 바꾸면 안 된다. 만료로 들어가면 선택은 '추가'로 되돌아가
     // 재시작 직후 같은 자리 바 버튼이 '−'로 바뀌어 연달은 두 번째 입력이 방금 더한 시간을 빼지 않게 한다
     it("차감 선택 후 만료되면 선택이 추가로 돌아가, 추가로 재시작한 뒤 두 번째 '1'도 ADD다", async () => {
-      const running = { ...timerDetail, status: "RUNNING", remainingSeconds: 1 };
+      const running = { ...timerDetail, status: "RUNNING", remainingSeconds: 3 };
       const calls = stubApi({
-        timers: [{ ...timer, status: "RUNNING", remainingSeconds: 1 }],
+        timers: [{ ...timer, status: "RUNNING", remainingSeconds: 3 }],
         goals: [],
         me: owner,
         detail: running,
@@ -509,7 +519,7 @@ describe("프로젝트 콘솔", () => {
       fireEvent.keyDown(window, { key: "x", code: "KeyX" });
       expect(screen.getByRole("radio", { name: "차감" })).toHaveAttribute("aria-checked", "true");
 
-      await waitFor(() => expect(screen.queryAllByRole("radio")).toHaveLength(0), { timeout: 3000 });
+      await waitFor(() => expect(screen.queryAllByRole("radio")).toHaveLength(0), { timeout: 6000 });
       fireEvent.keyDown(window, { key: "x", code: "KeyX" });
       fireEvent.keyDown(window, { key: "1", code: "Digit1" });
       await waitFor(() => {
@@ -528,7 +538,7 @@ describe("프로젝트 콘솔", () => {
         expect(modifies).toHaveLength(2);
         expect(JSON.parse(modifies[1].body!)).toMatchObject({ action: "ADD", deltaSeconds: 3600 });
       });
-    });
+    }, 15_000);
 
     it("목표 폼이 열려 있으면 '1'이 뒤쪽 타이머를 바꾸지 않는다", async () => {
       const calls = stubApi({ timers: [timer], goals: [], me: owner });
@@ -860,5 +870,73 @@ describe("목표 탭", () => {
     } finally {
       localStorage.removeItem("defaultActorName");
     }
+  });
+});
+
+// G2: 프로젝트 이름 수정 실패는 한 줄 알리고, 세션 만료면 그 안내(로그인 화면으로 이동)만 남긴다
+describe("프로젝트 이름 수정 실패", () => {
+  function stubPatch(response: () => Response) {
+    stubApi({ timers: [], goals: [], me: owner });
+    const inner = global.fetch;
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/projects/p1" && init?.method === "PATCH") return response();
+      return inner(input, init);
+    }) as typeof fetch;
+  }
+
+  async function rename() {
+    render(<ProjectDetailPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "제목 편집" }));
+    // 편집 칸은 열리면서 포커스를 받는다(타이머 만들기 폼의 기본 제목 칸도 같은 값이라 포커스로 고른다)
+    await waitFor(() => expect(document.activeElement).toHaveValue("테스트 프로젝트"));
+    const input = document.activeElement as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "새 이름" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    // 실패하면 이전 이름으로 돌아간다
+    expect(await screen.findByRole("heading", { name: "테스트 프로젝트" })).toBeInTheDocument();
+  }
+
+  it("500이면 이전 이름으로 되돌리고 오류 한 줄을 알린다", async () => {
+    mockToast.mockReset();
+    stubPatch(() => new Response(JSON.stringify({ error: { code: "INTERNAL_ERROR", message: "서버 오류" } }), { status: 500 }));
+    await rename();
+    expect(mockToast).toHaveBeenCalledTimes(1);
+    expect(mockToast).toHaveBeenCalledWith("프로젝트 이름을 수정하지 못했습니다", "error");
+  });
+
+  it("세션 만료(401 SESSION_EXPIRED)면 자기 오류를 띄우지 않는다", async () => {
+    mockToast.mockReset();
+    stubPatch(() => new Response(JSON.stringify({ error: { code: "SESSION_EXPIRED", message: "유효하지 않은 세션입니다" } }), { status: 401 }));
+    await rename();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mockToast).not.toHaveBeenCalled();
+  });
+});
+
+// G1·W29 이월: 간격 구조
+describe("콘솔 간격", () => {
+  it("'새 목표' 버튼이 제목 줄 아래로 넘친 만큼 padding으로 받아 탭 줄과 12px을 남긴다", async () => {
+    stubApi({ timers: [timer], goals: [goal], me: owner });
+    render(<ProjectDetailPage />);
+    const header = (await screen.findByRole("heading", { name: "목표" })).parentElement!;
+    expect(header).toHaveClass("pb-2", "pointer-coarse:pb-2.5");
+    // 버튼의 음수 여백(넘침)과 같은 양이다
+    expect(within(header).getByRole("button", { name: /새 목표/ }).parentElement).toHaveClass("-my-2", "pointer-coarse:-my-2.5");
+  });
+
+  it("시청자의 목표 제목 줄은 버튼이 없어 아래 여백을 더하지 않는다", async () => {
+    stubApi({ timers: [timer], goals: [goal], me: null });
+    render(<ProjectDetailPage />);
+    const header = (await screen.findByRole("heading", { name: "목표" })).parentElement!;
+    expect(header).not.toHaveClass("pb-2");
+  });
+
+  it("닫힌 단축키 도움말 dialog는 콘솔 간격 묶음(space-y-8) 밖에 있어 기록·그래프 행 아래 여백을 남기지 않는다", async () => {
+    stubApi({ timers: [timer], goals: [], me: owner });
+    render(<ProjectDetailPage />);
+    await screen.findByRole("heading", { name: "최근 기록" });
+    const stack = screen.getByRole("timer").closest(".space-y-8")!;
+    expect(stack.querySelector(":scope > dialog")).not.toBeInTheDocument();
+    expect(stack.nextElementSibling?.tagName).toBe("DIALOG");
   });
 });

@@ -9,6 +9,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { FormDialog } from "@/components/ui/FormDialog";
+import { ConsoleSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import { cn, formatDateTime, formatLogTime, displayActorName, formatDeltaSeconds } from "@/lib/utils";
 import { RemainingChart } from "@/components/graph/RemainingChart";
@@ -83,8 +84,11 @@ function ConnectionLostBadge({ lastSyncedAtMs, className }: { lastSyncedAtMs: nu
 /** 오류 상태인 기록·그래프를 폴링 성공 때 다시 불러오는 최소 간격(목표의 30초 재요청과 같다) */
 const ERROR_RETRY_INTERVAL_MS = 30_000;
 
-/** 폴링 한 번의 응답 대기 한도. 넘으면 실패 1회로 센다 */
-const POLL_TIMEOUT_MS = 10_000;
+/**
+ * 타이머 상세 한 번의 응답 대기 한도(첫 조회·폴링 공통). 응답 없이 멈춘 요청(연결은 살아 있는데 패킷이 안 오는 경우)도
+ * 실패로 끝내 첫 화면은 오류와 '다시 시도'로, 폴링은 실패 1회로 넘어가게 한다
+ */
+const DETAIL_TIMEOUT_MS = 10_000;
 
 /** 첫 화면에서 기록·그래프를 타이머 상세 뒤로 더 기다리는 한도. 넘으면 시간 카드를 먼저 그리고 콘솔이 다시 부른다 */
 const SNAPSHOT_EXTRA_WAIT_MS = 500;
@@ -92,10 +96,35 @@ const SNAPSHOT_EXTRA_WAIT_MS = 500;
 /** 콘솔이 첫 화면에 그리는 데이터. 상위 화면이 미리 받아 넘기면 골격 다음 한 번에 그린다(기록·그래프가 뒤늦게 채워지지 않게) */
 export interface ConsoleSnapshot {
   timer: TimerDetailResponse;
+  /** 상세를 받은 시각(ms). 기록·그래프·목표를 기다리느라 그리기까지 흐른 시간을 실행 중 잔여에서 뺀다 */
+  receivedAtMs: number;
   /** 접힌 '최근 기록'의 첫 페이지. 받지 못했으면 null이고 콘솔이 다시 부른다 */
   logs: TimerLogsResponse | null;
   /** 잔여 시간 추이. 받지 못했으면 null이고 콘솔이 다시 부른다 */
   graph: GraphResponse | null;
+}
+
+/**
+ * 타이머 상세 조회. 본문까지 DETAIL_TIMEOUT_MS 안에 받지 못하면 중단하고 예외를 던진다(네트워크 오류와 같은 실패).
+ * data는 2xx일 때만 채운다
+ */
+async function fetchTimerDetail(timerId: string): Promise<{ status: number; data: TimerDetailResponse | null }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DETAIL_TIMEOUT_MS);
+  try {
+    const res = await fetch(`/api/timers/${timerId}`, { signal: controller.signal });
+    if (!res.ok) return { status: res.status, data: null };
+    return { status: res.status, data: ((await res.json()) as ApiSuccessResponse<TimerDetailResponse>).data };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/** 받은 뒤 흐른 시간만큼 실행 중 잔여를 줄인다. 초 단위로 반올림해 오차를 0.5초 안으로 둔다 */
+function catchUpSnapshot(timer: TimerDetailResponse, receivedAtMs: number): TimerDetailResponse {
+  if (timer.status !== "RUNNING") return timer;
+  const elapsed = Math.round((Date.now() - receivedAtMs) / 1000);
+  return elapsed > 0 ? { ...timer, remainingSeconds: Math.max(0, timer.remainingSeconds - elapsed) } : timer;
 }
 
 function recentLogsQuery() {
@@ -104,10 +133,10 @@ function recentLogsQuery() {
 
 /**
  * 콘솔 첫 화면 데이터를 함께 받는다. 세 요청은 함께 떠나 보통 같이 도착한다.
- * 타이머가 없으면(404) "removed", 상세를 받지 못하면 null(콘솔이 직접 다시 부르고 실패하면 오류를 보인다).
+ * 타이머가 없으면(404) "removed", 상세를 받지 못하면(5xx·네트워크·응답 없음 10초) "failed"(콘솔이 같은 요청을 또 걸지 않고 바로 오류와 '다시 시도'를 보인다).
  * 기록·그래프가 상세보다 많이 늦으면 기다리지 않는다. 방송 중 주 조작(시간 카드)을 부가 정보 때문에 늦추지 않기 위해서다
  */
-export async function loadConsoleSnapshot(timerId: string): Promise<ConsoleSnapshot | "removed" | null> {
+export async function loadConsoleSnapshot(timerId: string): Promise<ConsoleSnapshot | "removed" | "failed"> {
   const data = async <T,>(request: Promise<Response>): Promise<T | null> => {
     try {
       const res = await request;
@@ -118,24 +147,26 @@ export async function loadConsoleSnapshot(timerId: string): Promise<ConsoleSnaps
   };
   const logs = data<TimerLogsResponse>(authFetch(`/api/timers/${timerId}/logs?${recentLogsQuery()}`));
   const graph = data<GraphResponse>(authFetch(`/api/timers/${timerId}/graph?mode=remaining`));
-  let res: Response;
+  let detail: Awaited<ReturnType<typeof fetchTimerDetail>>;
   try {
-    res = await fetch(`/api/timers/${timerId}`);
+    detail = await fetchTimerDetail(timerId);
   } catch {
-    return null;
+    return "failed";
   }
-  if (res.status === 404) return "removed";
-  if (!res.ok) return null;
-  const timer = ((await res.json()) as ApiSuccessResponse<TimerDetailResponse>).data;
+  if (detail.status === 404) return "removed";
+  if (!detail.data) return "failed";
+  const receivedAtMs = Date.now();
   const late = new Promise<null>((resolve) => setTimeout(() => resolve(null), SNAPSHOT_EXTRA_WAIT_MS));
   const [firstLogs, firstGraph] = await Promise.all([Promise.race([logs, late]), Promise.race([graph, late])]);
-  return { timer, logs: firstLogs, graph: firstGraph };
+  return { timer: detail.data, receivedAtMs, logs: firstLogs, graph: firstGraph };
 }
 
 interface TimerConsoleProps {
   timerId: string;
   /** 상위 화면이 `loadConsoleSnapshot`으로 미리 받은 첫 화면 데이터. 있으면 그 부분은 다시 부르지 않고 바로 그린다. 없으면 직접 불러온다 */
   initialSnapshot?: ConsoleSnapshot | null;
+  /** 상위 화면이 상세를 받지 못했다(`loadConsoleSnapshot`이 "failed"). 같은 요청을 다시 걸지 않고 바로 오류 화면을 그린다 */
+  initialFailed?: boolean;
   isOwner: boolean;
   /** 시간 카드 옆(소유자가 아니면 카운트다운 아래)에 둘 영역. 프로젝트 화면은 목표를 넣는다 */
   aside?: ReactNode;
@@ -145,16 +176,18 @@ interface TimerConsoleProps {
   onTimerRemoved?: () => void;
 }
 
-export function TimerConsole({ timerId, initialSnapshot, isOwner, aside, onTimeChanged, onTimerRemoved }: TimerConsoleProps) {
+export function TimerConsole({ timerId, initialSnapshot, initialFailed = false, isOwner, aside, onTimeChanged, onTimerRemoved }: TimerConsoleProps) {
   const { toast } = useToast();
   // 마운트 때의 값만 쓴다(상위가 나중에 넘기는 값으로 상태를 덮거나 다시 부르지 않는다)
   const [snapshot] = useState(initialSnapshot ?? null);
 
-  const [timer, setTimer] = useState<TimerDetailResponse | null>(snapshot?.timer ?? null);
-  // 시간 추가·차감(낙관적 반영 포함)·되돌리기로 스냅샷이 바뀐 횟수. 응답에 updatedAt이 없어 종료 예정 시각을 다시 잡는 신호로 쓴다
+  const [timer, setTimer] = useState<TimerDetailResponse | null>(() =>
+    snapshot ? catchUpSnapshot(snapshot.timer, snapshot.receivedAtMs) : null,
+  );
+  // 시간 추가·차감(낙관적 반영 포함)·되돌리기로 스냅샷이 바뀐 횟수. 낙관적 반영에는 updatedAt이 없어 종료 예정 시각을 다시 잡는 신호로 쓴다
   const [modifySeq, setModifySeq] = useState(0);
-  const [loading, setLoading] = useState(!snapshot);
-  const [error, setError] = useState(false);
+  const [loading, setLoading] = useState(!snapshot && !initialFailed);
+  const [error, setError] = useState(initialFailed);
 
   // 기록
   const [logsExpanded, setLogsExpanded] = useState(false);
@@ -185,20 +218,20 @@ export function TimerConsole({ timerId, initialSnapshot, isOwner, aside, onTimeC
   const onTimerRemovedRef = useRef(onTimerRemoved);
   onTimerRemovedRef.current = onTimerRemoved;
 
+  // 실패(5xx·네트워크·응답 없음 10초)는 오류 화면과 '다시 시도'로 넘긴다
   const fetchTimer = useCallback(async () => {
     try {
-      const res = await fetch(`/api/timers/${timerId}`);
+      const { status, data } = await fetchTimerDetail(timerId);
       // 목록을 받은 뒤 첫 조회 전에 다른 곳에서 삭제됐을 수 있다. 오류 화면 대신 '타이머 없음'으로 보낸다
-      if (res.status === 404 && onTimerRemovedRef.current) {
+      if (status === 404 && onTimerRemovedRef.current) {
         onTimerRemovedRef.current();
         return;
       }
-      if (!res.ok) {
+      if (!data) {
         setError(true);
         return;
       }
-      const json = (await res.json()) as ApiSuccessResponse<TimerDetailResponse>;
-      setTimer(json.data);
+      setTimer(data);
       setError(false);
     } catch {
       setError(true);
@@ -279,13 +312,13 @@ export function TimerConsole({ timerId, initialSnapshot, isOwner, aside, onTimeC
 
   // 상위가 넘긴 데이터가 있으면 그 부분의 첫 조회를 건너뛴다
   useEffect(() => {
-    if (snapshot) return;
+    if (snapshot || initialFailed) return;
     async function load() {
       await fetchTimer();
       setLoading(false);
     }
     load();
-  }, [snapshot, fetchTimer]);
+  }, [snapshot, initialFailed, fetchTimer]);
 
   // 조건(페이지·필터·펼침)이 바뀔 때 부른다. 마지막으로 부른 조건과 같으면 다시 부르지 않는다
   // (넘겨받은 첫 기록과 같은 조건의 첫 실행, 개발 모드에서 effect가 두 번 도는 경우)
@@ -305,11 +338,12 @@ export function TimerConsole({ timerId, initialSnapshot, isOwner, aside, onTimeC
   // 폴링: 서버 동기화
   const pollInterval = timer?.status === "RUNNING" ? 5000 : 15000;
 
-  // 화면에 마지막으로 반영한 값과 그 시각. 폴링 값이 다른 기기의 변경인지 판단하는 기준이다
-  const syncedRef = useRef<SyncedTimerSnapshot | null>(null);
+  // 화면에 마지막으로 반영한 값과 그 시각, 그 값의 updatedAt. 폴링 값이 다른 기기의 변경인지 판단하는 기준이다.
+  // 이 화면의 조작은 응답의 updatedAt까지 반영하므로(handleModified) 다음 폴링이 같은 변경을 외부 변경으로 보지 않는다
+  const syncedRef = useRef<(SyncedTimerSnapshot & { updatedAt: string }) | null>(null);
   useEffect(() => {
     syncedRef.current = timer
-      ? { status: timer.status, remainingSeconds: timer.remainingSeconds, syncedAtMs: Date.now() }
+      ? { status: timer.status, remainingSeconds: timer.remainingSeconds, syncedAtMs: Date.now(), updatedAt: timer.updatedAt }
       : null;
   }, [timer]);
 
@@ -317,37 +351,35 @@ export function TimerConsole({ timerId, initialSnapshot, isOwner, aside, onTimeC
   // 연속 실패 횟수는 usePolling이 세어 연결 상태로 돌려준다
   const errorRetryAtRef = useRef(0);
   const pollTimer = useCallback(async () => {
-    // 응답 없이 멈춘 요청(연결은 살아 있는데 패킷이 안 오는 경우)도 실패로 세도록 시간 제한을 둔다
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), POLL_TIMEOUT_MS);
-    let res: Response;
-    try {
-      res = await fetch(`/api/timers/${timerId}`, { signal: controller.signal });
-    } finally {
-      clearTimeout(timeout);
-    }
-    if (res.status === 404) {
+    // 응답 없이 멈춘 요청도 시간 제한(fetchTimerDetail)에 걸려 실패로 센다
+    const { status, data: serverData } = await fetchTimerDetail(timerId);
+    if (status === 404) {
       onTimerRemovedRef.current?.();
       return;
     }
     // 5xx 등은 서버 값을 받지 못한 것이라 실패로 알린다. 연속 실패가 쌓이면 배지가 '연결 끊김'으로 바뀐다
-    if (!res.ok) throw new Error(`poll ${res.status}`);
-    const json = (await res.json()) as ApiSuccessResponse<TimerDetailResponse>;
-    const serverData = json.data;
+    if (!serverData) throw new Error(`poll ${status}`);
     const synced = syncedRef.current;
-    const externalChange = !!synced && hasExternalChange(synced, serverData, Date.now());
+    // 이 화면이 이미 반영한 것보다 옛 상태다(조작 직전에 떠난 폴링이 조작 응답 뒤에 도착). 화면을 되돌리지 않고 버린다.
+    // 시각으로 바꿔 비교한다(밀리초 유무 등 표기가 달라도 글자 순서가 아니라 시간 순서로). 읽을 수 없는 값이면 버리지 않는다
+    if (synced && Date.parse(serverData.updatedAt) < Date.parse(synced.updatedAt)) return;
+    // updatedAt이 다르면 1~2초짜리 변경이어도 다른 기기의 조작으로 본다. 3초 임계(hasExternalChange)는 상태 전이와
+    // updatedAt이 같은 채로 값만 어긋난 경우를 잡는다. 타이머 제목 수정(오버레이 설정)도 updatedAt을 올려 같은 길을 타는데,
+    // 그때는 기록·그래프·목표를 한 번 조용히 다시 받을 뿐이라(깜빡임 없음) 따로 막지 않는다
+    const externalChange = !!synced && (synced.updatedAt !== serverData.updatedAt || hasExternalChange(synced, serverData, Date.now()));
 
     setTimer((prev) => {
       if (!prev) return prev;
       if (prev.status !== serverData.status) {
         return serverData;
       }
-      if (prev.status === "RUNNING") {
-        const diff = Math.abs(prev.remainingSeconds - serverData.remainingSeconds);
-        // updatedAt이 바뀌었으면(다른 기기의 시간 조작) 작은 차이여도 스냅샷을 받아 종료 예정 시각을 다시 잡게 한다
-        if (diff >= 2 || prev.updatedAt !== serverData.updatedAt) {
-          return { ...prev, remainingSeconds: serverData.remainingSeconds, updatedAt: serverData.updatedAt };
-        }
+      // updatedAt이 바뀌었으면 작은 차이여도 스냅샷을 받아 종료 예정 시각을 다시 잡게 한다. 만료·예약처럼 값이 그대로인 상태에서도
+      // 새 updatedAt을 저장해야 다음 폴링이 같은 변경을 또 외부 변경으로 보고 매번 다시 불러오지 않는다
+      if (prev.updatedAt !== serverData.updatedAt) {
+        return { ...prev, remainingSeconds: serverData.remainingSeconds, updatedAt: serverData.updatedAt };
+      }
+      if (prev.status === "RUNNING" && Math.abs(prev.remainingSeconds - serverData.remainingSeconds) >= 2) {
+        return { ...prev, remainingSeconds: serverData.remainingSeconds };
       }
       return prev;
     });
@@ -392,9 +424,10 @@ export function TimerConsole({ timerId, initialSnapshot, isOwner, aside, onTimeC
 
   function handleModified(data: TimerModifyResponse) {
     setModifySeq((n) => n + 1);
+    // 서버 응답이면 updatedAt도 저장해, 다음 폴링이 이 조작을 다른 기기의 변경으로 보고 기록·그래프·목표를 또 부르지 않게 한다
     setTimer((prev) =>
       prev
-        ? { ...prev, remainingSeconds: data.remainingSeconds, status: data.status }
+        ? { ...prev, remainingSeconds: data.remainingSeconds, status: data.status, ...(data.updatedAt && { updatedAt: data.updatedAt }) }
         : prev,
     );
     // optimistic 호출(log.id 없음)에서는 기록·그래프·목표 갱신 생략
@@ -506,9 +539,9 @@ export function TimerConsole({ timerId, initialSnapshot, isOwner, aside, onTimeC
   }
 
   // 보통은 상위 화면이 상세를 넘겨 이 단계가 없다(골격은 상위의 ProjectDetailSkeleton 하나).
-  // 상위가 받지 못했을 때만 여기서 불러오며, 그동안 두 번째 골격을 그리지 않고 자리만 둔다
+  // 상위가 받지 못했을 때(5xx·시간 초과)만 여기서 다시 불러오며, 그동안 상위 골격의 콘솔 부분을 그대로 두어 자리 높이를 지킨다
   if (loading) {
-    return <div aria-busy="true" />;
+    return <ConsoleSkeleton busy shape={isOwner ? "owner" : "viewer"} />;
   }
 
   if (error || !timer) {
@@ -535,6 +568,9 @@ export function TimerConsole({ timerId, initialSnapshot, isOwner, aside, onTimeC
   const statusLabel = displayStatus === "SCHEDULED" ? "예약됨" : displayStatus === "RUNNING" ? "실행 중" : "만료";
 
   return (
+    // 닫힌 도움말 <dialog>는 간격 묶음 밖에 둔다. space-y는 마지막이 아닌 자식에 아래 여백을 주므로, 안에 두면
+    // 보이지 않는 dialog 때문에 기록·그래프 행 아래에 32px이 남는다
+    <>
     <div className="space-y-8">
       {/* 카운트다운 */}
       {/* 배지는 숫자와 같은 행에 둔다. 좁은 폭에서 줄바꿈돼도 숫자 바로 아래, 보조 문구('종료 예정')보다 위에 붙는다 */}
@@ -744,6 +780,7 @@ export function TimerConsole({ timerId, initialSnapshot, isOwner, aside, onTimeC
           </div>
         </section>
       </div>
+    </div>
 
       {/* 단축키 도움말. 다른 다이얼로그와 같은 FormDialog(닫기 버튼, Escape, 배경 클릭)를 쓴다.
           본문은 열렸을 때만 렌더한다 */}
@@ -766,6 +803,6 @@ export function TimerConsole({ timerId, initialSnapshot, isOwner, aside, onTimeC
           </>
         )}
       </FormDialog>
-    </div>
+    </>
   );
 }

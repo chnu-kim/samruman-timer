@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fetchMe, resetMeCache } from "../session-me";
 import { fireSessionExpired } from "../session-expired";
+import { AUTH_HINT_INIT_SCRIPT } from "../auth-hint";
 
 const me = { id: "u1", chzzkUserId: "c1", nickname: "삼루먼", profileImageUrl: null };
 
@@ -80,5 +81,35 @@ describe("fetchMe", () => {
     fireSessionExpired();
     expect(await fetchMe()).toBeNull();
     expect(after).toHaveBeenCalledTimes(1);
+  });
+});
+
+// W29: 다음 로드의 첫 골격(로그인 확인 전)이 로그아웃 방문자에게 시청자 모양을 보이도록 확정 결과를 힌트로 남긴다
+describe("로그인 힌트 (auth-hint)", () => {
+  afterEach(() => localStorage.clear());
+
+  it("200이면 로그인, 401이면 로그아웃으로 남기고 500은 그대로 둔다", async () => {
+    vi.stubGlobal("fetch", respond(200));
+    await fetchMe();
+    expect(localStorage.getItem("signedIn")).toBe("1");
+
+    resetMeCache();
+    vi.stubGlobal("fetch", respond(500));
+    await fetchMe();
+    expect(localStorage.getItem("signedIn")).toBe("1");
+
+    resetMeCache();
+    vi.stubGlobal("fetch", respond(401));
+    await fetchMe();
+    expect(localStorage.getItem("signedIn")).toBeNull();
+  });
+
+  it("첫 페인트 전 스크립트는 힌트가 없으면(첫 방문) out, 로그인으로 남았으면 in을 html에 붙인다", () => {
+    const run = () => new Function(AUTH_HINT_INIT_SCRIPT)();
+    run();
+    expect(document.documentElement.getAttribute("data-auth")).toBe("out");
+    localStorage.setItem("signedIn", "1");
+    run();
+    expect(document.documentElement.getAttribute("data-auth")).toBe("in");
   });
 });

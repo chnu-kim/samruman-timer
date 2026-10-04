@@ -1030,14 +1030,20 @@ describe("TimerControls", () => {
       expect(cardButton(/시간 추가/)).toHaveTextContent("1시간");
     });
 
-    it("세션 만료가 아닌 401은 일반 실패처럼 서버 문구를 인라인으로 알린다", async () => {
+    // G2: 로그인이 풀린 401(UNAUTHORIZED, 다른 탭에서 로그아웃 등)도 쓰기 요청이면 세션 만료 안내(로그인 화면으로 이동)에 맡긴다.
+    // '인증이 필요합니다'만 알리면 로그인으로 돌아갈 길이 없다
+    it("로그인이 풀린 401(UNAUTHORIZED)도 세션 만료처럼 자기 알림 없이 화면 값·입력만 되돌린다", async () => {
       mockFetch.mockResolvedValueOnce(unauthorized("UNAUTHORIZED"));
       const onModified = renderAndFill();
       fireEvent.click(cardButton(/시간 추가/));
 
-      await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("인증이 필요합니다"));
-      expect(onModified).toHaveBeenLastCalledWith(expect.objectContaining({ remainingSeconds: 7200 }));
+      await waitFor(() =>
+        expect(onModified).toHaveBeenLastCalledWith(expect.objectContaining({ remainingSeconds: 7200 })),
+      );
+      await act(async () => {});
       expect(mockToast).not.toHaveBeenCalled();
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.queryByText("인증이 필요합니다")).toBeNull();
       expect(cardButton(/시간 추가/)).toHaveTextContent("1시간");
     });
 
@@ -1051,12 +1057,13 @@ describe("TimerControls", () => {
       expect(screen.queryByRole("alert")).toBeNull();
     });
 
-    it("하단 바의 세션 만료가 아닌 401은 서버 문구 토스트 한 건", async () => {
+    it("하단 바도 로그인이 풀린 401(UNAUTHORIZED)이면 알리지 않는다", async () => {
       mockFetch.mockResolvedValueOnce(unauthorized("UNAUTHORIZED"));
       renderAndFill(vi.fn(), { pickPreset: false });
       fireEvent.click(quickBar().getByRole("button", { name: "+1시간" }));
-      await waitFor(() => expect(mockToast).toHaveBeenCalledWith("인증이 필요합니다", "error"));
-      expect(mockToast).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+      await act(async () => {});
+      expect(mockToast).not.toHaveBeenCalled();
     });
 
     it("'지금 시작'이 세션 만료면 버튼 아래 오류를 띄우지 않는다", async () => {
@@ -1068,11 +1075,13 @@ describe("TimerControls", () => {
       expect(screen.queryByRole("alert")).toBeNull();
     });
 
-    it("'지금 시작'의 세션 만료가 아닌 401은 버튼 아래 서버 문구로 알린다", async () => {
+    it("'지금 시작'도 로그인이 풀린 401(UNAUTHORIZED)이면 버튼 아래 오류를 띄우지 않는다", async () => {
       mockFetch.mockResolvedValueOnce(unauthorized("UNAUTHORIZED"));
       render(<Harness timerId={timerId} status="SCHEDULED" />);
       await confirmActivate();
-      expect(await screen.findByRole("alert")).toHaveTextContent("인증이 필요합니다");
+      await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+      await act(async () => {});
+      expect(screen.queryByRole("alert")).toBeNull();
     });
 
     it("닉네임 없이 제출하면 통일된 문구 하나만 인라인으로", async () => {

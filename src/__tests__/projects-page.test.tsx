@@ -348,6 +348,29 @@ describe("목록 탭·빈 상태·로딩 골격 (W29)", () => {
     expect(screen.queryByRole("button", { name: /첫 프로젝트 만들기/ })).not.toBeInTheDocument();
   });
 
+  // W29 이월: 로그인 확인 전 골격에도 로그아웃 방문자로 보이면(html[data-auth=out]) 소개 줄을 CSS로 미리 그리고,
+  // 본문이 되면 같은 요소를 그대로 이어 써 검색줄·카드를 밀지 않는다
+  it("소개 줄은 골격 단계부터 로그아웃 힌트로만 보이는 같은 요소이고, 로그아웃 본문에서 그대로 남는다", async () => {
+    let releaseMe: () => void = () => {};
+    const meGate = new Promise<void>((r) => { releaseMe = r; });
+    stub({ mine: 0, others: 3, loggedIn: false });
+    const inner = global.fetch;
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).startsWith("/api/auth/me")) await meGate;
+      return inner(input, init);
+    }) as typeof fetch;
+    render(<ProjectsPage />);
+    const early = screen.getByText(SITE_DESCRIPTION);
+    expect(early).toHaveClass("hidden", "signed-out:block");
+    expect(document.querySelector("[aria-busy=true]")).toBeInTheDocument();
+
+    releaseMe();
+    await screen.findByRole("link", { name: "프로젝트 0" });
+    const late = screen.getByText(SITE_DESCRIPTION);
+    expect(late).toBe(early);
+    expect(late).not.toHaveClass("hidden");
+  });
+
   it("로그아웃 목록이 비어 있으면 '공개된 프로젝트가 없습니다'다", async () => {
     stub({ mine: 0, others: 0, loggedIn: false });
     render(<ProjectsPage />);

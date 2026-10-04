@@ -10,6 +10,7 @@ import { isOverlayBackground, isOverlayColor } from "@/lib/overlay-style";
 import { applyOverlayMode } from "@/lib/overlay-mode";
 import { classifyFailedResponse, nextPollDelay, type PollOutcome } from "@/lib/overlay-polling";
 import { RECOVERY_STABLE_MS, clearRecovery } from "@/lib/overlay-recovery";
+import { pageTitle } from "@/lib/site";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import type { ApiSuccessResponse, TimerDetailResponse } from "@/types";
 
@@ -66,7 +67,8 @@ export default function TimerOverlayPage() {
     warnedRef.current = key;
     console.warn(message);
   }, []);
-  useDocumentTitle(timer ? `OBS 오버레이 · ${timer.title}` : null);
+  // 다른 화면과 같은 '이름 | 삼루먼타이머' 모양(통계는 '… 통계', 여기는 '… 오버레이')
+  useDocumentTitle(timer ? pageTitle(`${timer.title} 오버레이`) : null);
 
   useEffect(() => {
     setMounted(true);

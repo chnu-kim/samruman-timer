@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, cleanup, act } from "@testing-library/react";
+import { render, screen, cleanup, act, waitFor } from "@testing-library/react";
 import type { TimerStatus } from "@/types";
 import TimerOverlayPage from "@/app/timers/[id]/overlay/page";
 import OverlayError from "@/app/timers/[id]/overlay/error";
@@ -56,6 +56,14 @@ describe("오버레이 긴급·만료 펄스 (UX-24)", () => {
     cleanup();
     vi.unstubAllGlobals();
     search = "";
+  });
+
+  // W30: 탭 제목은 다른 화면과 같은 '이름 | 삼루먼타이머' 모양이다
+  it("탭 제목은 '{제목} 오버레이 | 삼루먼타이머'", async () => {
+    stubTimer("RUNNING", 600);
+    render(<TimerOverlayPage />);
+    await screen.findByRole("timer");
+    await waitFor(() => expect(document.title).toBe("테스트 타이머 오버레이 | 삼루먼타이머"));
   });
 
   it("기본값에서는 만료된 숫자와 '만료됨'이 깜빡인다", async () => {

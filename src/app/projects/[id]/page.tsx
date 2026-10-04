@@ -103,9 +103,10 @@ function GoalSection({
 
   return (
     <section className={cn("space-y-3", className)} aria-label="목표">
-      {/* 헤더 — 제목 + 추가 버튼. 버튼(데스크톱 40px·터치 44px)이 줄을 키우지 않게 음수 여백으로 제목 높이(24px)에 맞춘다.
-          시간 카드·기록·그래프의 제목 줄과 같은 높이라 제목→내용 간격이 12px로 같다 */}
-      <div className="flex items-center justify-between gap-4">
+      {/* 헤더 — 제목 + 추가 버튼. 버튼(데스크톱 40px·터치 44px)이 제목 줄(24px)의 위아래로 8px(터치 10px)씩 넘친다.
+          음수 여백으로 제목 위치는 시간 카드의 제목 줄과 맞추고, 아래로 넘친 만큼은 padding으로 받아 버튼과 아래 탭·안내 사이에도
+          다른 섹션의 제목→내용 간격(12px)이 그대로 남게 한다(넘친 채로 두면 탭 줄과 4px만 남았다) */}
+      <div className={cn("flex items-center justify-between gap-4", newGoalButton && "pb-2 pointer-coarse:pb-2.5")}>
         <h2 className="text-base font-semibold">목표</h2>
         {newGoalButton && <div className="-my-2 pointer-coarse:-my-2.5">{newGoalButton}</div>}
       </div>
@@ -223,6 +224,7 @@ export default function ProjectDetailPage() {
   const [timersLoaded, setTimersLoaded] = useState(false);
   // 콘솔의 첫 화면을 골격 다음 한 번에 그리려고 타이머 상세·최근 기록·그래프의 첫 조회도 목록과 이어서 여기서 한다(이후 폴링·갱신은 TimerConsole)
   const [consoleSnapshot, setConsoleSnapshot] = useState<ConsoleSnapshot | null>(null);
+  const [consoleFailed, setConsoleFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   // 404는 다시 시도해도 같으므로 일시적 오류와 구분한다
@@ -284,13 +286,16 @@ export default function ProjectDetailPage() {
         const json = (await res.json()) as ApiSuccessResponse<TimerListItem[]>;
         let list = json.data;
         let snapshot: ConsoleSnapshot | null = null;
+        let failed = false;
         if (list[0]) {
           const loaded = await loadConsoleSnapshot(list[0].id);
           // 목록을 받은 직후 다른 곳에서 삭제됐다. 보지도 못한 타이머라 알림 없이 '타이머 없음'으로 그린다
           if (loaded === "removed") list = [];
+          else if (loaded === "failed") failed = true;
           else snapshot = loaded;
         }
         setConsoleSnapshot(snapshot);
+        setConsoleFailed(failed);
         setTimers(list);
       }
     } catch {
@@ -334,29 +339,32 @@ export default function ProjectDetailPage() {
     }
   }
 
-  async function handleSaveName(name: string) {
-    const res = await authFetch(`/api/projects/${projectId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
-    if (!res.ok) throw new Error();
+  // 이름·설명 수정. 실패하면 EditableText가 이전 값으로 되돌리고, 여기서 한 줄 알린다.
+  // 세션 만료(로그인이 풀린 경우 포함)는 그 안내가 로그인 화면으로 보내므로 따로 알리지 않는다(토스트 자리는 하나다)
+  async function patchProject(patch: { name: string } | { description: string }, label: "이름" | "설명") {
+    const failed = `프로젝트 ${label}을 수정하지 못했습니다`;
+    let res: Response;
+    try {
+      res = await authFetch(`/api/projects/${projectId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+    } catch (err) {
+      toast(failed, "error");
+      throw err;
+    }
+    if (!res.ok) {
+      if (!isSessionExpired(res)) toast(failed, "error");
+      throw new Error(failed);
+    }
     const json = (await res.json()) as ApiSuccessResponse<ProjectDetailResponse>;
     setProject(json.data);
-    toast("프로젝트 이름이 수정되었습니다", "success");
+    toast(`프로젝트 ${label}이 수정되었습니다`, "success");
   }
 
-  async function handleSaveDescription(description: string) {
-    const res = await authFetch(`/api/projects/${projectId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ description }),
-    });
-    if (!res.ok) throw new Error();
-    const json = (await res.json()) as ApiSuccessResponse<ProjectDetailResponse>;
-    setProject(json.data);
-    toast("프로젝트 설명이 수정되었습니다", "success");
-  }
+  const handleSaveName = (name: string) => patchProject({ name }, "이름");
+  const handleSaveDescription = (description: string) => patchProject({ description }, "설명");
 
   // 못 찾은 화면도 탭 제목이 이전 화면 것으로 남지 않게 바꾼다(서버 layout의 '프로젝트 상세'는 클라이언트 이동 때 다시 적용되지 않는다)
   useDocumentTitle(project ? pageTitle(project.name) : notFound ? pageTitle("찾을 수 없음") : null);
@@ -509,6 +517,8 @@ export default function ProjectDetailPage() {
               {project.owner.nickname}
             </p>
           )}
+          {/* 시청자는 설명이 없으면 그 줄이 없다. 골격(ProjectDetailSkeleton)은 설명 줄을 항상 그리므로 같은 높이를 닉네임 아래에 비워 두어 카운트다운이 밀리지 않게 한다 */}
+          {!isOwner && !project.description && <div aria-hidden="true" className="mt-1 h-6" />}
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           {isOwner && timer && (
@@ -551,6 +561,7 @@ export default function ProjectDetailPage() {
             key={timer.id}
             timerId={timer.id}
             initialSnapshot={consoleSnapshot?.timer.id === timer.id ? consoleSnapshot : null}
+            initialFailed={consoleFailed}
             isOwner={isOwner}
             onTimeChanged={refreshGoalsSilently}
             onTimerRemoved={handleTimerRemoved}

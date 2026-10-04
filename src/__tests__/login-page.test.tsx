@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import LoginPage from "@/app/(auth)/login/page";
 import { Header } from "@/components/layout/Header";
-import { resetMeCache } from "@/lib/session-me";
+import { fetchMe, resetMeCache } from "@/lib/session-me";
 import { SITE_SUMMARY, SITE_TAGLINE } from "@/lib/site";
 
 const replace = vi.fn();
@@ -51,6 +51,23 @@ describe("로그인 화면 문구", () => {
       "href",
       `/api/auth/login?next=${encodeURIComponent("/timers/abc")}`
     );
+  });
+});
+
+// FU: 로그인 흐름의 첫 로드(callback → 돌아갈 화면)가 로그아웃 골격을 그려 이동이 생기지 않게, 버튼을 누를 때 힌트를 남긴다
+describe("로그인 힌트", () => {
+  it("로그인 버튼을 누르면 다음 로드의 로그인 힌트를 남기고, 헤더 확인이 401이면 다시 지운다", async () => {
+    localStorage.removeItem("signedIn");
+    mockMe(401);
+    render(<LoginPage />);
+    const cta = screen.getByRole("link", { name: "CHZZK로 로그인" });
+    cta.addEventListener("click", (e) => e.preventDefault());
+    fireEvent.click(cta);
+    expect(localStorage.getItem("signedIn")).toBe("1");
+    // 실패해 /login으로 돌아온 첫 로드: 헤더 fetchMe가 401을 받아 지운다
+    resetMeCache();
+    await fetchMe();
+    expect(localStorage.getItem("signedIn")).toBeNull();
   });
 });
 

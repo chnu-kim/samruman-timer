@@ -131,6 +131,7 @@ describe("POST /api/timers/[id]/activate", () => {
       },
     });
     expect(body.data.log.id).toMatch(/^[0-9a-f]{32}$/);
+    expect(body.data.updatedAt).toEqual(expect.any(String));
 
     expect(db.batch).toHaveBeenCalledTimes(1);
     const { sqls, binds, updateIdx } = batchCalls(db);

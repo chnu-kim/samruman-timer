@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
 @custom-variant dark (&:is(.dark *));
+/* 로그아웃 방문자로 보이는 첫 로드(html[data-auth=out], src/lib/auth-hint.ts). 로그인 확인 전 골격의 모양만 가른다 */
+@custom-variant signed-out (&:where([data-auth=out] *));
 
 :root {
   /* 네이티브 요소(dialog의 CanvasText, select, 스크롤바)가 테마를 따르게 한다 */
@@ -84,11 +86,13 @@ html.dark {
 }
 
 /* OS '대비 높이기'(prefers-contrast: more): 카드 경계를 알파 0.3으로 또렷하게, 보조 글자는 한 단계 진하게.
+   입력 경계도 함께 올려 카드(장식)와 입력(조작) 경계의 단차를 기본 테마만큼 남긴다(0.3 → 0.7/0.6).
    토큰만 바꾸므로 컴포넌트는 그대로다. 라이트·OS 다크·수동 다크 세 정의를 모두 덮는다(위 세 블록과 같은 선택자) */
 @media (prefers-contrast: more) {
   :root {
     --muted-foreground: #525252;
     --border: rgba(23, 23, 23, 0.3);
+    --border-input: rgba(23, 23, 23, 0.7);
   }
 }
 
@@ -96,6 +100,7 @@ html.dark {
   :root:not(.light) {
     --muted-foreground: #c4c4c4;
     --border: rgba(237, 237, 237, 0.3);
+    --border-input: rgba(237, 237, 237, 0.6);
   }
 }
 
@@ -103,6 +108,7 @@ html.dark {
   html.dark {
     --muted-foreground: #c4c4c4;
     --border: rgba(237, 237, 237, 0.3);
+    --border-input: rgba(237, 237, 237, 0.6);
   }
 }
 

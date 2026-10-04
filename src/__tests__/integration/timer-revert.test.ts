@@ -97,6 +97,8 @@ describe("되돌리기: 다른 기기 변경이 끼어든 뒤", () => {
     // 3600 + 36000 + 600 - 25초 경과 - 36000
     expect(body.data.remainingSeconds).toBe(4175);
     expect(body.data.status).toBe("RUNNING");
+    // modify와 같이 변경 뒤 updatedAt을 준다(콘솔의 외부 변경 판정)
+    expect(body.data.updatedAt).toEqual(expect.any(String));
     expect(body.data.log.id).toBe(a.log.id);
     expect(body.data.log.revertedAt).toBe(new Date(T0 + 25_000).toISOString());
 

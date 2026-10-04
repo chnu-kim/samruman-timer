@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { ErrorState } from "@/components/ui/ErrorState";
 
+// 탭 제목은 다른 못 찾음 화면(프로젝트·타이머)과 같은 '찾을 수 없음'이다
 export const metadata: Metadata = {
-  title: "페이지를 찾을 수 없음",
+  title: "찾을 수 없음",
 };
 
 // 없는 경로의 404. 루트 레이아웃 안에서 그려지므로 헤더·푸터·앱 배경이 그대로 있고,

@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
-import { render, screen, within } from "@testing-library/react";
+import { configure, render, screen, waitFor, within } from "@testing-library/react";
 import NotFound from "@/app/not-found";
 import ProjectDetailPage from "@/app/projects/[id]/page";
 import { resetMeCache } from "@/lib/session-me";
 import TimerStatsPage from "@/app/timers/[id]/stats/page";
 import { ErrorState } from "@/components/ui/ErrorState";
+
+// 페이지 전체(목록·상세·통계)를 그려 기다리므로 전체 테스트를 함께 돌리는 부하에서 기본 1초가 모자란 적이 있다
+configure({ asyncUtilTimeout: 3000 });
 
 // 화면 인스턴스를 유지한 채 경로의 id만 바뀌는 경우를 흉내 낼 수 있게 바꿀 수 있는 값으로 둔다
 const route = vi.hoisted(() => ({ id: "x1" }));
@@ -100,7 +103,7 @@ describe("오류 화면", () => {
     render(<ProjectDetailPage />);
     await screen.findByRole("heading", { level: 1, name: "프로젝트를 찾을 수 없습니다" });
     expectNoticeScreen("프로젝트를 찾을 수 없습니다", { name: "프로젝트 목록으로", href: "/projects" });
-    expect(document.title).toBe("찾을 수 없음 | 삼루먼타이머");
+    await waitFor(() => expect(document.title).toBe("찾을 수 없음 | 삼루먼타이머"));
     expect(screen.getByText("삭제되었거나 주소가 잘못되었습니다.")).toBeInTheDocument();
   });
 
@@ -113,7 +116,7 @@ describe("오류 화면", () => {
     render(<TimerStatsPage />);
     await screen.findByRole("heading", { level: 1, name: "통계를 볼 수 없습니다" });
     expectNoticeScreen("통계를 볼 수 없습니다", { name: "프로젝트로 돌아가기", href: "/projects/p9" });
-    expect(document.title).toBe("통계를 볼 수 없음 | 삼루먼타이머");
+    await waitFor(() => expect(document.title).toBe("통계를 볼 수 없음 | 삼루먼타이머"));
   });
 
   // 로그아웃 상태는 미들웨어가 라우트의 소유·존재 판별 전에 401을 낸다. 소유자 문구로 오해하지 않게 로그인 안내를 준다
@@ -127,7 +130,7 @@ describe("오류 화면", () => {
     expectNoticeScreen("로그인이 필요합니다", { name: "프로젝트로 돌아가기", href: "/projects/p9" });
     expect(screen.queryByText(/소유자만/)).not.toBeInTheDocument();
     expect(sessionExpired.fire).not.toHaveBeenCalled();
-    expect(document.title).toBe("통계를 볼 수 없음 | 삼루먼타이머");
+    await waitFor(() => expect(document.title).toBe("통계를 볼 수 없음 | 삼루먼타이머"));
   });
 
   it("로그아웃 상태의 없는 id도 찾을 수 없음이 아니라 로그인 안내, 링크는 프로젝트 목록", async () => {
@@ -154,7 +157,7 @@ describe("오류 화면", () => {
     render(<TimerStatsPage />);
     await screen.findByRole("heading", { level: 1, name: "타이머를 찾을 수 없습니다" });
     expectNoticeScreen("타이머를 찾을 수 없습니다", { name: "프로젝트 목록으로", href: "/projects" });
-    expect(document.title).toBe("찾을 수 없음 | 삼루먼타이머");
+    await waitFor(() => expect(document.title).toBe("찾을 수 없음 | 삼루먼타이머"));
   });
 
   it("안내를 띄운 뒤 다른 타이머를 정상으로 불러오면 이전 안내가 남지 않는다", async () => {

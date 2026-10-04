@@ -160,6 +160,16 @@ describe("prefers-contrast: more", () => {
     expect(parseColor(token(more, "border"))[3]).toBe(0.3);
     expect(contrast(token(more, "muted-foreground"), bg)).toBeGreaterThan(contrast(token(normal, "muted-foreground"), bg));
   });
+
+  // W30: 카드 경계만 올리면 입력 경계(0.5/0.4)와 가까워져 장식·조작 경계의 구분이 흐려진다. 입력 경계도 올려 단차를 기본만큼 남긴다
+  it.each(cases)("%s: 입력 경계와 카드 경계의 알파 차이가 기본 테마 이상이다", (base, media, selector) => {
+    const more = moreBlock(media, selector);
+    const normal = block(base);
+    const alpha = (body: string, name: string) => parseColor(token(body, name))[3];
+    expect(alpha(more, "border-input") - alpha(more, "border")).toBeGreaterThanOrEqual(
+      alpha(normal, "border-input") - alpha(normal, "border") - 1e-9,
+    );
+  });
 });
 
 describe("글자 대비", () => {

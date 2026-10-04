@@ -13,6 +13,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { useDebounce } from "@/hooks/useDebounce";
 import { authFetch } from "@/lib/auth-fetch";
 import { fetchMe } from "@/lib/session-me";
+import { cn } from "@/lib/utils";
 import { SITE_DESCRIPTION } from "@/lib/site";
 import type { ApiSuccessResponse, ProjectListItem, ProjectListResponse, MeResponse, Pagination as PaginationType } from "@/types";
 
@@ -175,8 +176,12 @@ export default function ProjectsPage() {
           <div className="flex min-h-10 pointer-coarse:min-h-11 items-center">
             <h1 className="text-2xl font-bold">프로젝트</h1>
           </div>
-          {/* 처음 온 사람이 이 서비스가 무엇인지 알 수 있게 로그아웃 상태에만 한 줄 소개를 둔다 */}
-          {ready && !user && <p className="text-sm text-muted-foreground">{SITE_DESCRIPTION}</p>}
+          {/* 처음 온 사람이 이 서비스가 무엇인지 알 수 있게 로그아웃 상태에만 한 줄 소개를 둔다.
+              로그인 확인 전(골격)에도 로그아웃 방문자로 보이면(html[data-auth=out], src/lib/auth-hint.ts) 같은 줄을 미리 그려,
+              골격 → 본문 때 소개 줄이 끼어들어 검색줄·카드를 밀지 않게 한다. 같은 요소를 이어 쓰므로 다시 그려지지 않는다 */}
+          {(!ready || !user) && (
+            <p className={cn("text-sm text-muted-foreground", !ready && "hidden signed-out:block")}>{SITE_DESCRIPTION}</p>
+          )}
         </div>
         {ready && user && !hideHeaderCreate && (
           <Button
