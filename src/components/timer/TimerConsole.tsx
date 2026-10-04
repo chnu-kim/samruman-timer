@@ -155,6 +155,8 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
   const logsSeqRef = useRef(0);
   const logsPendingRef = useRef(0);
   const fetchLogs = useCallback(async (page: number, filters: Set<ActionType>, expanded: boolean, { silent = false } = {}) => {
+    // 직접 조회가 진행 중이면 백그라운드 갱신은 건너뛴다. 그 조회가 최신 조건의 결과(또는 오류)를 가져온다
+    if (silent && logsPendingRef.current > 0) return;
     const seq = ++logsSeqRef.current;
     if (!silent) {
       logsPendingRef.current += 1;
