@@ -596,7 +596,8 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
         <span id={timeGroupLabelId} className="sr-only">변경할 시간</span>
 
         {/* 프리셋은 입력값에 더하기만 하고, 적용은 아래 확인 버튼으로 한다(즉시 적용은 모바일 하단 바와 숫자 단축키).
-            md 미만에서는 같은 프리셋이 하단 바에 있으므로 카드 쪽은 숨겨 한 벌만 남긴다 */}
+            md 미만에서는 같은 프리셋이 하단 바에 있으므로 카드 쪽은 숨겨 한 벌만 남긴다.
+            높이는 같은 줄의 시·분·초 입력(Input)과 같다(데스크톱 40px, 터치 44px) */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5">
           <div className="hidden md:flex flex-wrap gap-1.5">
             {PRESETS.map((preset) => (
@@ -604,7 +605,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
                 key={preset.label}
                 type="button"
                 onClick={() => addPreset(preset.seconds)}
-                className="rounded-control border border-border px-3 py-2 min-h-[48px] min-w-[48px] text-sm font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground disabled:bg-muted disabled:hover:border-border disabled:hover:text-muted-foreground disabled:cursor-not-allowed"
+                className="inline-flex h-10 min-w-12 items-center justify-center rounded-control border border-border px-3 pointer-coarse:min-h-11 text-sm font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground disabled:bg-muted disabled:hover:border-border disabled:hover:text-muted-foreground disabled:cursor-not-allowed"
               >
                 +{preset.label}
               </button>

@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
-import { render, screen, within } from "@testing-library/react";
+import { configure, render, screen, within } from "@testing-library/react";
 import NotFound from "@/app/not-found";
 import ProjectDetailPage from "@/app/projects/[id]/page";
 import { resetMeCache } from "@/lib/session-me";
 import TimerStatsPage from "@/app/timers/[id]/stats/page";
 import { ErrorState } from "@/components/ui/ErrorState";
+
+// 페이지 전체(목록·상세·통계)를 그려 기다리므로 전체 테스트를 함께 돌리는 부하에서 기본 1초가 모자란 적이 있다
+configure({ asyncUtilTimeout: 3000 });
 
 // 화면 인스턴스를 유지한 채 경로의 id만 바뀌는 경우를 흉내 낼 수 있게 바꿀 수 있는 값으로 둔다
 const route = vi.hoisted(() => ({ id: "x1" }));
@@ -98,7 +101,7 @@ describe("오류 화면", () => {
   it("없는 프로젝트는 같은 틀로 목록 링크를 준다", async () => {
     stubFetch((url) => (url.startsWith("/api/auth/me") ? new Response(null, { status: 401 }) : new Response(null, { status: 404 })));
     render(<ProjectDetailPage />);
-    await screen.findByRole("heading", { level: 1, name: "프로젝트를 찾을 수 없습니다" }, { timeout: 3000 });
+    await screen.findByRole("heading", { level: 1, name: "프로젝트를 찾을 수 없습니다" });
     expectNoticeScreen("프로젝트를 찾을 수 없습니다", { name: "프로젝트 목록으로", href: "/projects" });
     expect(document.title).toBe("찾을 수 없음 | 삼루먼타이머");
     expect(screen.getByText("삭제되었거나 주소가 잘못되었습니다.")).toBeInTheDocument();

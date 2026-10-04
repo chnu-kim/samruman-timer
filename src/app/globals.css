@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
 @custom-variant dark (&:is(.dark *));
+/* 로그아웃 방문자로 보이는 첫 로드(html[data-auth=out], src/lib/auth-hint.ts). 로그인 확인 전 골격의 모양만 가른다 */
+@custom-variant signed-out (&:where([data-auth=out] *));
 
 :root {
   /* 네이티브 요소(dialog의 CanvasText, select, 스크롤바)가 테마를 따르게 한다 */

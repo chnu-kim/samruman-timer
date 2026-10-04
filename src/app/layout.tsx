@@ -5,6 +5,7 @@ import { Footer } from "@/components/layout/Footer";
 import { ToastProvider } from "@/components/ui/Toast";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
+import { AUTH_HINT_INIT_SCRIPT } from "@/lib/auth-hint";
 import { SessionExpiredHandler } from "@/components/providers/SessionExpiredHandler";
 import { ServiceWorkerRegister } from "@/components/providers/ServiceWorkerRegister";
 import { ServiceWorkerCleanup } from "@/components/providers/ServiceWorkerCleanup";
@@ -56,6 +57,7 @@ export default function RootLayout({
     <html lang="ko" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: AUTH_HINT_INIT_SCRIPT }} />
       </head>
       <body
         className={`${notoSansKR.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}

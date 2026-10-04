@@ -49,6 +49,23 @@ describe("모바일 리플로우·숫자 키보드", () => {
     expect(grid.className).toMatch(/\bgrid-cols-3\b/);
   });
 
+  // G1: 같은 줄의 프리셋 칩(48px)과 시·분·초 입력(40px) 높이가 달랐다. 둘 다 데스크톱 40px, 터치 44px이다
+  it("시간 변경: 카드 프리셋 칩은 시·분·초 입력과 같은 높이 클래스를 쓴다", () => {
+    const { container } = render(
+      <ToastProvider>
+        <TimerControls timerId="t1" status="RUNNING" selectedAction="ADD" onActionChange={() => {}} />
+      </ToastProvider>,
+    );
+    const bar = container.querySelector("[data-quick-bar]") as HTMLElement;
+    const chip = screen.getAllByRole("button", { name: "+1시간" }).find((b) => !bar.contains(b))!;
+    const input = screen.getAllByRole("spinbutton")[0];
+    for (const cls of ["h-10", "pointer-coarse:min-h-11"]) {
+      expect(chip).toHaveClass(cls);
+      expect(input).toHaveClass(cls);
+    }
+    expect(chip.className).not.toMatch(/min-h-\[48px\]/);
+  });
+
   it("새 타이머: 초기 시간 칸이 줄 폭을 나눠 쓰고 숫자 키보드를 띄운다", () => {
     render(
       <ToastProvider>

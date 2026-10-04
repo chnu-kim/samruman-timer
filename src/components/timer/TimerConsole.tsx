@@ -539,7 +539,7 @@ export function TimerConsole({ timerId, initialSnapshot, isOwner, aside, onTimeC
   // 보통은 상위 화면이 상세를 넘겨 이 단계가 없다(골격은 상위의 ProjectDetailSkeleton 하나).
   // 상위가 받지 못했을 때(5xx·시간 초과)만 여기서 다시 불러오며, 그동안 상위 골격의 콘솔 부분을 그대로 두어 자리 높이를 지킨다
   if (loading) {
-    return <ConsoleSkeleton busy />;
+    return <ConsoleSkeleton busy shape={isOwner ? "owner" : "viewer"} />;
   }
 
   if (error || !timer) {

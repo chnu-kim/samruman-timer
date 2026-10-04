@@ -904,3 +904,31 @@ describe("프로젝트 이름 수정 실패", () => {
     expect(mockToast).not.toHaveBeenCalled();
   });
 });
+
+// G1·W29 이월: 간격 구조
+describe("콘솔 간격", () => {
+  it("'새 목표' 버튼이 제목 줄 아래로 넘친 만큼 padding으로 받아 탭 줄과 12px을 남긴다", async () => {
+    stubApi({ timers: [timer], goals: [goal], me: owner });
+    render(<ProjectDetailPage />);
+    const header = (await screen.findByRole("heading", { name: "목표" })).parentElement!;
+    expect(header).toHaveClass("pb-2", "pointer-coarse:pb-2.5");
+    // 버튼의 음수 여백(넘침)과 같은 양이다
+    expect(within(header).getByRole("button", { name: /새 목표/ }).parentElement).toHaveClass("-my-2", "pointer-coarse:-my-2.5");
+  });
+
+  it("시청자의 목표 제목 줄은 버튼이 없어 아래 여백을 더하지 않는다", async () => {
+    stubApi({ timers: [timer], goals: [goal], me: null });
+    render(<ProjectDetailPage />);
+    const header = (await screen.findByRole("heading", { name: "목표" })).parentElement!;
+    expect(header).not.toHaveClass("pb-2");
+  });
+
+  it("닫힌 단축키 도움말 dialog는 콘솔 간격 묶음(space-y-8) 밖에 있어 기록·그래프 행 아래 여백을 남기지 않는다", async () => {
+    stubApi({ timers: [timer], goals: [], me: owner });
+    render(<ProjectDetailPage />);
+    await screen.findByRole("heading", { name: "최근 기록" });
+    const stack = screen.getByRole("timer").closest(".space-y-8")!;
+    expect(stack.querySelector(":scope > dialog")).not.toBeInTheDocument();
+    expect(stack.nextElementSibling?.tagName).toBe("DIALOG");
+  });
+});

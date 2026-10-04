@@ -103,9 +103,10 @@ function GoalSection({
 
   return (
     <section className={cn("space-y-3", className)} aria-label="목표">
-      {/* 헤더 — 제목 + 추가 버튼. 버튼(데스크톱 40px·터치 44px)이 줄을 키우지 않게 음수 여백으로 제목 높이(24px)에 맞춘다.
-          시간 카드·기록·그래프의 제목 줄과 같은 높이라 제목→내용 간격이 12px로 같다 */}
-      <div className="flex items-center justify-between gap-4">
+      {/* 헤더 — 제목 + 추가 버튼. 버튼(데스크톱 40px·터치 44px)이 제목 줄(24px)의 위아래로 8px(터치 10px)씩 넘친다.
+          음수 여백으로 제목 위치는 시간 카드의 제목 줄과 맞추고, 아래로 넘친 만큼은 padding으로 받아 버튼과 아래 탭·안내 사이에도
+          다른 섹션의 제목→내용 간격(12px)이 그대로 남게 한다(넘친 채로 두면 탭 줄과 4px만 남았다) */}
+      <div className={cn("flex items-center justify-between gap-4", newGoalButton && "pb-2 pointer-coarse:pb-2.5")}>
         <h2 className="text-base font-semibold">목표</h2>
         {newGoalButton && <div className="-my-2 pointer-coarse:-my-2.5">{newGoalButton}</div>}
       </div>
