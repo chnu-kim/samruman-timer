@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { LogoIcon, LogOutIcon } from "@/components/ui/Icons";
@@ -16,6 +17,8 @@ interface HeaderProps {
 export function Header({ initialUser }: HeaderProps = {}) {
   const [user, setUser] = useState<MeResponse | null>(initialUser ?? null);
   const [loaded, setLoaded] = useState(initialUser !== undefined);
+  // 로그인 화면에는 본문에 로그인 버튼이 있어, 같은 화면을 다시 여는 헤더 링크를 두지 않는다
+  const onLoginPage = usePathname() === "/login";
 
   useEffect(() => {
     if (initialUser !== undefined) return;
@@ -46,7 +49,8 @@ export function Header({ initialUser }: HeaderProps = {}) {
 
   return (
     <header className="border-b border-border">
-      <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
+      {/* 글자를 크게 키워 한 줄에 다 들어가지 않으면 높이를 고정하지 않고 오른쪽 묶음을 다음 줄로 내린다 */}
+      <div className="mx-auto flex min-h-14 max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-1.5">
         <div className="flex items-center gap-3 sm:gap-6">
           <Link href="/" className="flex items-center gap-2 text-base sm:text-lg font-bold text-accent whitespace-nowrap">
             <LogoIcon className="w-5 h-5" />
@@ -77,7 +81,7 @@ export function Header({ initialUser }: HeaderProps = {}) {
                 <span className="hidden sm:inline">로그아웃</span>
               </Button>
             </>
-          ) : (
+          ) : onLoginPage ? null : (
             <Link
               href="/login"
               onClick={handleLoginClick}

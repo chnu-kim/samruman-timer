@@ -73,14 +73,14 @@ refresh까지 실패해 `authFetch()`가 세션 만료를 알리면 `SessionExpi
 
 ### 2단계: 콜백 처리 (`/api/auth/callback`)
 
-1. `state` 검증 (state 쿠키와 비교). `code`·`state`가 없거나 다르면 `/login?error=auth_failed`로 리다이렉트
+1. `state` 검증 (state 쿠키와 비교). `state`가 없거나 다르면 `/login?error=auth_failed`로 리다이렉트. `code`만 없고 `state`가 state 쿠키와 맞으면(동의 화면 취소) 실패가 아니므로 `error` 없이 `/login`으로 보낸다(직접 연 주소처럼 state까지 없으면 실패로 안내). 두 경우 모두 `oauth_next`의 경로를 다시 검증해 `&next=`로 URL에 싣는다(그 경로로 이동하지는 않고, 로그인 버튼이 다시 들고 간다)
 2. Authorization code로 access token 교환
 3. Access token으로 CHZZK 사용자 정보 조회
 4. DB에서 사용자 조회 또는 생성 (upsert)
 5. Access JWT 생성, 새 `family_id`로 refresh token 발급·DB 저장, `session`·`refresh` 쿠키 설정, state 쿠키 삭제
 6. `oauth_next` 쿠키의 경로로 리다이렉트(다시 검증, 없거나 허용되지 않으면 메인 페이지 `/`). 성공·실패 모두 `oauth_next`를 지운다
 
-토큰 교환·사용자 조회 등에서 예외가 나면 `/login?error=auth_failed`로 보낸다. 운영 로그는 state 검증 실패 시 `auth.oauth_state_invalid` {reason}(code·state 값은 남기지 않음. `missing_state`·`missing_cookie`·`mismatch`는 위조 의심이라 warn, `missing_code`는 동의 화면 취소 등 교환할 code가 없는 경우라 info), 실패 시 error `auth.login.failed` {stage: `token`·`user`·`db`, status, timedOut, durationMs}, 성공 시 info `auth.login.succeeded` {userId, durationMs}다. CHZZK 실패 응답 본문은 버리고 JSON `code` 필드만 오류 메시지에 붙인다(`ChzzkApiError`). 로그인 화면은 `error` 쿼리가 있으면 실패 메시지를 보여 준다. `src/app/(auth)/callback/page.tsx`는 실제 콜백을 처리하지 않고 `/`로 보내기만 한다(실제 콜백은 `/api/auth/callback`).
+토큰 교환·사용자 조회 등에서 예외가 나면 `/login?error=auth_failed`(`oauth_next`가 있으면 `&next=` 포함)로 보낸다. 세션 만료 뒤 재로그인이 한 번 실패해도 보던 화면으로 돌아갈 길을 잃지 않게 하기 위해서다. 운영 로그는 state 검증 실패 시 `auth.oauth_state_invalid` {reason}(code·state 값은 남기지 않음. `missing_state`·`missing_cookie`·`mismatch`는 위조 의심이라 warn, `missing_code`는 동의 화면 취소 등 교환할 code가 없는 경우라 info), 실패 시 error `auth.login.failed` {stage: `token`·`user`·`db`, status, timedOut, durationMs}, 성공 시 info `auth.login.succeeded` {userId, durationMs}다. CHZZK 실패 응답 본문은 버리고 JSON `code` 필드만 오류 메시지에 붙인다(`ChzzkApiError`). 로그인 화면은 `error` 쿼리가 있으면 실패 메시지를 보여 준다. 이미 로그인한 사용자가 `/login`에 오면 `/api/auth/me`로 확인해 `next`(없으면 `/projects`)로 보낸다. `error` 쿼리가 있으면 실패 안내를 보여야 하므로 보내지 않는다(실패 반복 방지). `src/app/(auth)/callback/page.tsx`는 실제 콜백을 처리하지 않고 `/`로 보내기만 한다(실제 콜백은 `/api/auth/callback`).
 
 ### 3단계: 토큰 교환
 

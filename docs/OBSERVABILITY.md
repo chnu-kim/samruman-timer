@@ -106,7 +106,7 @@ refresh 쿠키 없이 보호 라우트를 부른 401은 정상 흐름이고 양�
 - 정상: `missing_code`(info, 동의 화면 취소)와 가끔의 `missing_cookie`(쿠키 만료·다른 브라우저, 24h에 2건까지). 비정상: `mismatch`·`missing_state`가 합쳐 2건 이상(반복, 위조 시도 의심), 또는 `missing_cookie` 3건 이상(쿠키 속성·도메인 변경 의심. "모든 로그인이 `missing_cookie`"는 성공 건수와의 비율이라 고정 임계로 대신한다). 목록에 없는 `reason`은 규칙으로 판단하지 않는다(triage `unknown`).
 - 코드: `src/app/api/auth/callback/route.ts`, `src/app/api/auth/login/route.ts`(state 쿠키 발급).
 
-**`auth.login.failed`** (error) — 로그인 실패. 사용자는 `/login?error=auth_failed`로 간다.
+**`auth.login.failed`** (error) — 로그인 실패. 사용자는 `/login?error=auth_failed`(돌아갈 경로가 있으면 `&next=` 포함)로 간다.
 - 정상: `stage=token|user` 1건(CHZZK 일시 장애). 비정상: `stage=token|user`가 합쳐 2건 이상(연속 발생), `stage=db` 1건 이상(우리 쪽 문제), `kind=schema_drift` 1건 이상, `stage`가 없거나 목록 밖의 값 1건 이상.
 - `stage=token|user`면 CHZZK 쪽: `status`·`timedOut`을 본다(아래 `timeout`). `stage=db`면 `kind`를 본다.
 - 코드: `src/app/api/auth/callback/route.ts`, `src/lib/chzzk.ts`.

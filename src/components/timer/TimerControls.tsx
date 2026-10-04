@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
 import { authFetch } from "@/lib/auth-fetch";
+import { useUndoableModifyToast } from "@/hooks/useUndoableModifyToast";
 import { normalizeTimeParts, resolveQuickActor, type TimeParts } from "@/lib/timer-input";
 import type { ApiSuccessResponse, ApiErrorResponse, TimerModifyResponse, TimerLogResponse, ModifyAction, TimerStatus } from "@/types";
 
@@ -73,6 +74,7 @@ function saveDefaultActor(name: string) {
 
 export function TimerControls({ timerId, status, remainingSeconds, selectedAction, onActionChange, onModified, quickActorRef, className }: TimerControlsProps) {
   const { toast } = useToast();
+  const showModifiedToast = useUndoableModifyToast(timerId, onModified);
   const [actorName, setActorName] = useState("");
   const [hours, setHours] = useState(0);
   const [minutes, setMinutes] = useState(0);
@@ -179,7 +181,8 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
 
       const json = (await res.json()) as ApiSuccessResponse<TimerModifyResponse>;
       onModified?.(json.data); // 서버 값으로 확정
-      toast(`${action === "ADD" ? "추가" : "차감"} 완료`, "success");
+      // 폼·하단 바 공통: '+10분 · 닉네임' + 되돌리기. 결과 잔여는 카운트다운이 보여 준다
+      showModifiedToast(json.data.log);
     } catch {
       // 롤백
       onModified?.({
@@ -282,6 +285,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
             onChange={(e) => setActorName(e.target.value)}
             required
             maxLength={50}
+            autoComplete="off"
             placeholder={defaultActor ? `기본: ${defaultActor}` : "시간 변경을 요청한 시청자"}
           />
           {/* 최근 닉네임 칩 */}
@@ -403,15 +407,16 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
             ))}
           </div>
 
-          {/* 직접 입력 */}
-          <div className="flex items-center gap-2">
+          {/* 직접 입력. 칸 폭을 고정하지 않고 줄 폭을 나눠 써서 320px에서도 가로로 넘치지 않게 한다
+              (Input은 div로 감싸여 있어 flex 항목인 그 div에 flex-1·min-w-0을 준다) */}
+          <div className="flex items-center gap-2 [&>div]:min-w-0 [&>div]:flex-1">
             <Input
               type="number"
               inputMode="numeric"
               min={0}
               value={hours}
               onChange={(e) => changeTime("hours", Number(e.target.value))}
-              className="w-20 text-center"
+              className="w-full text-center"
               placeholder="0"
               aria-label="시간"
             />
@@ -422,7 +427,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
               min={0}
               value={minutes}
               onChange={(e) => changeTime("minutes", Number(e.target.value))}
-              className="w-20 text-center"
+              className="w-full text-center"
               placeholder="0"
               aria-label="분"
             />
@@ -433,7 +438,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
               min={0}
               value={seconds}
               onChange={(e) => changeTime("seconds", Number(e.target.value))}
-              className="w-20 text-center"
+              className="w-full text-center"
               placeholder="0"
               aria-label="초"
             />
@@ -466,7 +471,8 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
       {/* 모바일 하단 고정 빠른 액션 바 */}
       {/* data-quick-bar: 바가 있을 때 body 하단 여백을 잡는다(globals.css) */}
       <div data-quick-bar className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background/95 backdrop-blur-sm px-4 py-3 safe-area-bottom">
-        <div className="flex items-center gap-2">
+        {/* grid-cols-3 = repeat(3, minmax(0, 1fr)): 좁은 폭에서도 버튼이 바 밖으로 밀리지 않는다 */}
+        <div className="grid grid-cols-3 gap-2">
           {QUICK_PRESETS.map((preset) => (
             <button
               key={preset.label}
@@ -474,7 +480,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
               disabled={!quickActor}
               onClick={() => handleQuickApply(preset.seconds)}
               className={cn(
-                "flex-1 rounded-lg py-3 min-h-[48px] text-sm font-bold transition-colors disabled:opacity-50",
+                "rounded-lg py-3 min-h-[48px] text-sm font-bold transition-colors disabled:opacity-50",
                 selectedAction === "ADD"
                   ? "bg-green-600 text-white hover:bg-green-700 active:bg-green-800"
                   : "bg-red-600 text-white hover:bg-red-700 active:bg-red-800",

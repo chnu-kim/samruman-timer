@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import ProjectsPage from "@/app/projects/page";
+import { SITE_DESCRIPTION } from "@/lib/site";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -157,5 +158,25 @@ describe("새 프로젝트 폼 (UX-47)", () => {
     render(<ProjectsPage />);
     fireEvent.click(await screen.findByRole("button", { name: /새 프로젝트/ }));
     expect(screen.getByLabelText("프로젝트 이름")).toHaveFocus();
+  });
+});
+
+// C020: 로그아웃 첫 방문자에게 이 서비스가 무엇인지 한 줄로 알린다(CTA·이미지 없이)
+describe("로그아웃 목록 소개 한 줄 (C020)", () => {
+  it("로그아웃 상태에서는 제목 아래 사이트 설명을 보여 주고 플랫폼 이름은 넣지 않는다", async () => {
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).startsWith("/api/auth/me")) return new Response("{}", { status: 401 });
+      return jsonResponse({ projects: [], pagination: { page: 1, limit: 12, total: 0, totalPages: 1 } });
+    }) as typeof fetch;
+    render(<ProjectsPage />);
+    const description = await screen.findByText(SITE_DESCRIPTION);
+    expect(description.tagName).toBe("P");
+    expect(description.textContent).not.toMatch(/CHZZK|치지직/);
+  });
+
+  it("로그인 상태에서는 설명을 보여 주지 않는다", async () => {
+    render(<ProjectsPage />);
+    await screen.findByRole("tab", { name: /내 프로젝트/ });
+    expect(screen.queryByText(SITE_DESCRIPTION)).not.toBeInTheDocument();
   });
 });

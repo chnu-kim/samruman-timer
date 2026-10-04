@@ -133,6 +133,19 @@ export function formatDuration(seconds: number): string {
   return `${m}분`;
 }
 
+/** 초를 "1시간 30분 5초" 형식으로(0인 단위는 생략). 시간 변경량 표시용 */
+export function formatDeltaSeconds(seconds: number): string {
+  const abs = Math.abs(seconds);
+  const h = Math.floor(abs / 3600);
+  const m = Math.floor((abs % 3600) / 60);
+  const s = abs % 60;
+  const parts: string[] = [];
+  if (h > 0) parts.push(`${h}시간`);
+  if (m > 0) parts.push(`${m}분`);
+  if (s > 0 || parts.length === 0) parts.push(`${s}초`);
+  return parts.join(" ");
+}
+
 export function formatHourShort(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleString("ko-KR", {
@@ -171,7 +184,7 @@ export function formatRelativeDate(iso: string): string {
 }
 
 /**
- * 변경 기록의 행위자 표시명. 만료·예약 활성화는 서버가 actor_name 'system'으로 남기는데,
+ * 변경 기록의 행위자 표시명. 만료·예약 활성화(와 되돌리기로 생긴 만료·재시작)는 서버가 actor_name 'system'으로 남기는데,
  * 시청자 닉네임처럼 읽히지 않도록 화면에서만 '자동'으로 바꾼다(DB 값은 유지).
  */
 export function displayActorName(log: {
@@ -179,7 +192,8 @@ export function displayActorName(log: {
   actorName: string;
   actorUserId: string | null;
 }): string {
-  if (log.actorUserId === null && (log.actionType === "EXPIRE" || log.actionType === "ACTIVATE")) {
+  // REOPEN은 시청자 추가로 생기면 그 닉네임이고, 되돌리기로 생기면 system이다
+  if (log.actorUserId === null && (log.actionType === "EXPIRE" || log.actionType === "ACTIVATE" || log.actionType === "REOPEN")) {
     return "자동";
   }
   return log.actorName;

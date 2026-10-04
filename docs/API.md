@@ -31,7 +31,7 @@
 | 401 | `UNAUTHORIZED` | 인증 필요 |
 | 403 | `FORBIDDEN` | 권한 없음 |
 | 404 | `NOT_FOUND` | 리소스 없음 |
-| 409 | `CONFLICT` | 동시 변경과 계속 겹침 (`POST /api/timers/[id]/modify`) |
+| 409 | `CONFLICT` | 동시 변경과 계속 겹침 (`POST /api/timers/[id]/modify`), 이미 되돌린 기록 (`POST /api/timers/[id]/logs/[logId]/revert`) |
 | 500 | `INTERNAL_ERROR` | 서버 오류 |
 | 503 | `SERVICE_UNAVAILABLE` | 원격 D1 스키마가 코드보다 뒤처짐 (`GET /api/health`) |
 
@@ -57,7 +57,7 @@ CHZZK OAuth 콜백을 처리한다.
   - `code` (string, 필수): Authorization code
   - `state` (string, 필수): CSRF state
 - **응답**: `302 Redirect` → `oauth_next` 쿠키의 경로(다시 검증), 없으면 `/` (세션 쿠키 설정, `oauth_next` 삭제)
-- **에러**: `code`·`state` 누락, state 불일치(state 쿠키 대조), 토큰 교환·사용자 조회 실패 시 `/login?error=auth_failed`로 리다이렉트(`oauth_next` 삭제)
+- **에러**: `state` 누락, state 불일치(state 쿠키 대조), 토큰 교환·사용자 조회 실패 시 `/login?error=auth_failed`로 리다이렉트. `code`만 없고 state가 맞으면(동의 화면 취소) `error` 없이 `/login`으로. 어느 쪽이든 `oauth_next`를 다시 검증해 `&next=`로 싣고 쿠키는 삭제
 
 ### POST /api/auth/logout
 
@@ -489,7 +489,7 @@ CHZZK OAuth 콜백을 처리한다.
   - `403`: 프로젝트 소유자 아님
   - `404`: 타이머 없음 또는 삭제됨 (처리 중 다른 요청이 삭제한 경우 포함)
   - `409`: 동시 변경과 5번 연속 겹침. 다시 시도하면 된다
-- **응답**: `200 OK` (`status`는 `RUNNING` 또는 `EXPIRED`, `log`는 이번 요청에서 남긴 로그 중 마지막 것 — 0초 도달 시 `EXPIRE` 로그)
+- **응답**: `200 OK` (`status`는 `RUNNING` 또는 `EXPIRED`, `log`는 이번 요청의 `ADD`/`SUBTRACT` 로그다. 차감으로 0초가 돼 `EXPIRE`를 함께 남겨도 `log`는 `SUBTRACT`이며, 되돌리기는 이 `log.id`를 쓴다)
 ```json
 {
   "data": {
@@ -504,7 +504,43 @@ CHZZK OAuth 콜백을 처리한다.
       "deltaSeconds": 3600,
       "beforeSeconds": 3600,
       "afterSeconds": 7200,
-      "createdAt": "2025-01-01T00:00:00Z"
+      "createdAt": "2025-01-01T00:00:00Z",
+      "revertedAt": null
+    }
+  }
+}
+```
+
+### POST /api/timers/[id]/logs/[logId]/revert
+
+시간 추가·차감 기록 하나를 되돌린다(로그 취소 처리). 반대 방향 `modify`가 아니다. 보정 행을 남기지 않고 그 기록에 `revertedAt`을 표시하며, 되돌린 기록은 통계·순위·그래프·목표 진행률에서 빠진다. 규칙은 [TIMER-LOGIC.md](TIMER-LOGIC.md) "되돌리기".
+
+- **인증**: 필요 (프로젝트 소유자만)
+- **요청 본문**: 없음
+- **동작**: 예약 활성화·만료 감지를 먼저 실행한 뒤, 현재 잔여 시간에 그 기록이 실제로 바꾼 양(`beforeSeconds - afterSeconds`)만 반대로 적용한다. 사이에 다른 기기의 변경이 있어도 그 변경은 그대로 남는다. 0초가 되면 `EXPIRED`(+`EXPIRE` 로그), 만료 상태에서 0초보다 커지면 `RUNNING`(+`REOPEN` 로그). 이미 0초인 만료 타이머의 `ADD`를 되돌리면 잔여는 0 그대로이고 기록만 취소 처리된다
+- **에러**:
+  - `400`: 타이머 ID·`logId`가 32자 hex가 아님, `ADD`/`SUBTRACT`가 아닌 기록, 예약 상태
+  - `401`: 인증 없음
+  - `403`: 프로젝트 소유자 아님
+  - `404`: 타이머 없음·삭제됨, 또는 이 타이머의 기록이 아님
+  - `409`: 이미 되돌린 기록(`"이미 되돌린 기록입니다"`), 또는 동시 변경과 5번 연속 겹침
+- **응답**: `200 OK`. `modify`와 같은 모양이고 `log`는 되돌린 기록이다(`revertedAt` 채워짐)
+```json
+{
+  "data": {
+    "id": "timer_id",
+    "remainingSeconds": 3600,
+    "status": "RUNNING",
+    "log": {
+      "id": "log_id",
+      "actionType": "ADD",
+      "actorName": "시청자 닉네임",
+      "actorUserId": "user_id",
+      "deltaSeconds": 3600,
+      "beforeSeconds": 3600,
+      "afterSeconds": 7200,
+      "createdAt": "2025-01-01T00:00:00Z",
+      "revertedAt": "2025-01-01T00:00:05Z"
     }
   }
 }
@@ -565,7 +601,7 @@ CHZZK OAuth 콜백을 처리한다.
   }
 }
 ```
-- 집계 대상은 `ADD`·`SUBTRACT` 로그다. `uniqueDonors`와 `topDonors`는 `ADD`의 `actorName` 기준, `peakHour`는 이벤트가 없으면 `null`
+- 집계 대상은 되돌리지 않은(`reverted_at IS NULL`) `ADD`·`SUBTRACT` 로그다. `uniqueDonors`와 `topDonors`는 `ADD`의 `actorName` 기준, `peakHour`는 이벤트가 없으면 `null`
 
 ---
 
@@ -581,6 +617,7 @@ CHZZK OAuth 콜백을 처리한다.
   - `limit` (number, 기본값 20, 최대 250): 페이지당 항목 수
   - `actionType` (string, 선택): 필터링할 액션 타입 (쉼표 구분). 허용: `CREATE`, `ADD`, `SUBTRACT`, `EXPIRE`, `REOPEN`, `ACTIVATE`, `DELETE`
 - 정렬: `created_at DESC`. `limit`은 1~250으로 보정, `totalPages`는 `ceil(total / limit)`
+- 되돌린 기록도 목록에 남는다. `revertedAt`이 채워져 있으면 되돌린 기록이다(`null`이면 유효)
 - **에러**:
   - `400`: 허용되지 않은 `actionType`
   - `404`: 타이머 없음 또는 삭제됨
@@ -597,7 +634,8 @@ CHZZK OAuth 콜백을 처리한다.
         "deltaSeconds": 3600,
         "beforeSeconds": 0,
         "afterSeconds": 3600,
-        "createdAt": "2025-01-01T00:00:00Z"
+        "createdAt": "2025-01-01T00:00:00Z",
+        "revertedAt": null
       }
     ],
     "pagination": {
@@ -620,7 +658,7 @@ CHZZK OAuth 콜백을 처리한다.
 - **에러**:
   - `400`: `mode` 누락 또는 유효하지 않음
   - `404`: 타이머 없음 또는 삭제됨
-- `remaining`은 모든 로그의 `afterSeconds`, `cumulative`·`frequency`는 `ADD`·`SUBTRACT` 로그만 사용한다. `frequency`의 `hour`는 UTC 시간 단위 버킷
+- `remaining`은 모든 로그의 `afterSeconds`, `cumulative`·`frequency`는 `ADD`·`SUBTRACT` 로그만 사용한다. 세 모드 모두 되돌린 기록은 뺀다(`remaining`에서 그 기록과 되돌리기 사이의 다른 기록은 당시 실제 잔여를 그대로 그린다). `frequency`의 `hour`는 UTC 시간 단위 버킷
 - 응답 크기 상한(비인증 공개 엔드포인트라 로그 수에 비례해 커지지 않게 한다):
   - `remaining`·`cumulative`: 로그가 1000건을 넘으면 `ceil(전체/1000)`건마다 하나씩 균등 추출한다. 마지막 점은 항상 포함한다. `cumulative`의 누적합은 추출 전 전체 로그로 SQL 창 함수에서 계산한다
   - `frequency`: 최근 1000개 시간 버킷만 반환한다 (오름차순)

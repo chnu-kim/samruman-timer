@@ -6,6 +6,9 @@ import { Header } from "../Header";
 // 테마 토글은 이 테스트와 무관하고 ThemeProvider·matchMedia가 필요하므로 대체한다
 vi.mock("@/components/ui/ThemeToggle", () => ({ ThemeToggle: () => null }));
 
+let pathname = "/";
+vi.mock("next/navigation", () => ({ usePathname: () => pathname }));
+
 // 비로그인 상태에서 헤더의 '로그인'을 누르면 보던 화면을 next로 실어 보낸다
 describe("Header 로그인 링크", () => {
   const originalLocation = window.location;
@@ -35,12 +38,23 @@ describe("Header 로그인 링크", () => {
     expect(location.href).toBe(`/login?next=${encodeURIComponent("/timers/abc?tab=logs")}`);
   });
 
-  it("허용되지 않는 경로(로그인 화면)에서는 기본 링크(/login)로 이동한다", () => {
-    location.pathname = "/login";
+  it("허용되지 않는 경로(API 등)에서는 기본 링크(/login)로 이동한다", () => {
+    location.pathname = "/api/auth/me";
     const { link, notPrevented } = clickLogin();
     expect(notPrevented).toBe(true);
     expect(link.getAttribute("href")).toBe("/login");
     expect(location.href).toBe("http://localhost/");
+  });
+
+  // C153: 로그인 화면에는 본문 로그인 버튼이 있으므로 같은 화면을 다시 여는 헤더 링크를 두지 않는다
+  it("로그인 화면에서는 헤더 로그인 링크를 그리지 않는다", () => {
+    pathname = "/login";
+    try {
+      render(<Header initialUser={null} />);
+      expect(screen.queryByRole("link", { name: "로그인" })).not.toBeInTheDocument();
+    } finally {
+      pathname = "/";
+    }
   });
 
   it("수정자 키를 누른 클릭(새 탭 열기 등)은 가로채지 않는다", () => {

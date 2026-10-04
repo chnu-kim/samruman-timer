@@ -12,7 +12,7 @@ paths:
 ## 구조
 
 - 핸들러는 `withErrorHandler()`(`src/lib/db.ts`)로 감싼다. 예외 원문·스택·SQL이 클라이언트로 나가지 않게 하는 장치다.
-- 에러 코드: `BAD_REQUEST`(400), `UNAUTHORIZED`(401), `FORBIDDEN`(403), `NOT_FOUND`(404), `INTERNAL_ERROR`(500), `SERVICE_UNAVAILABLE`(503, `GET /api/health`의 스키마 드리프트만)
+- 에러 코드: `BAD_REQUEST`(400), `UNAUTHORIZED`(401), `FORBIDDEN`(403), `NOT_FOUND`(404), `CONFLICT`(409, 동시 변경 재시도 소진·이미 되돌린 기록), `INTERNAL_ERROR`(500), `SERVICE_UNAVAILABLE`(503, `GET /api/health`의 스키마 드리프트만)
 - 사용자 식별은 미들웨어가 넣은 `x-user-id` 헤더로만 한다. 미들웨어는 클라이언트가 보낸 `x-user-*` 헤더를 먼저 제거하므로 이 헤더는 신뢰할 수 있다.
 
 ## 인증·인가

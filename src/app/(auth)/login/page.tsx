@@ -1,8 +1,9 @@
 "use client";
 
-import { Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { sanitizeNextPath } from "@/lib/safe-redirect";
+import { SITE_SUMMARY, SITE_TAGLINE } from "@/lib/site";
 
 function LoginContent() {
   const searchParams = useSearchParams();
@@ -10,15 +11,32 @@ function LoginContent() {
   // 세션 만료로 온 경우 로그인 후 돌아갈 경로. 서버(로그인·콜백)에서도 다시 검증한다
   const next = sanitizeNextPath(searchParams.get("next"));
   const loginHref = next ? `/api/auth/login?next=${encodeURIComponent(next)}` : "/api/auth/login";
+  const router = useRouter();
+
+  // 이미 로그인한 사용자는 돌아갈 곳(next, 없으면 목록)으로 보낸다. 로그인 실패(?error=)로 온 경우는
+  // 안내를 보여야 하고 되돌려 보내면 실패가 반복될 수 있어 머문다.
+  // authFetch를 쓰지 않는다: 401이면 세션 만료 이벤트가 다시 /login으로 보내 제자리를 돈다(Header와 같은 이유)
+  useEffect(() => {
+    if (error) return;
+    let cancelled = false;
+    fetch("/api/auth/me")
+      .then((res) => {
+        if (res.ok && !cancelled) router.replace(next ?? "/projects");
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [error, next, router]);
 
   return (
     <div className="w-full max-w-sm space-y-6 px-4">
       <div className="text-center">
         <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          삼루먼타이머
+          {SITE_TAGLINE}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          CHZZK 계정으로 로그인하세요
+          {SITE_SUMMARY}
         </p>
       </div>
 
@@ -31,7 +49,7 @@ function LoginContent() {
       {/* API 라우트로 전체 이동해야 하므로 <a>를 두고, 공용 Button primary와 같은 색·포커스 스타일을 쓴다 */}
       <a
         href={loginHref}
-        className="flex w-full items-center justify-center rounded-lg bg-accent px-4 h-12 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        className="flex w-full items-center justify-center text-center rounded-lg bg-accent px-4 h-12 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
         CHZZK로 로그인
       </a>
