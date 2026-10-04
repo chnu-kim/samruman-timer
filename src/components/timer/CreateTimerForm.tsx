@@ -426,7 +426,7 @@ export function CreateTimerForm({ projectId, defaultTitle = "", onSuccess }: Cre
           size="md"
           disabled={loading || submitHint !== ""}
           aria-describedby={submitHint ? submitHintId : undefined}
-          className="whitespace-nowrap pointer-coarse:min-h-11"
+          className="whitespace-nowrap"
         >
           {loading ? "생성 중…" : "타이머 만들기"}
         </Button>

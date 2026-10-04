@@ -147,6 +147,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   const barCooldownTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(barCooldownTimerRef.current), []);
   const actionGroupLabelId = useId();
+  const timeGroupLabelId = useId();
   const submitHintId = useId();
   const disconnectedHintId = useId();
   const nicknamePromptId = useId();
@@ -585,12 +586,13 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
       </div>
 
       {/* 시간 입력 */}
-      <div>
-        <span className="text-sm font-medium text-foreground">시간</span>
+      {/* 카드 제목이 이미 '시간'이라 묶음 이름은 스크린리더용으로만 두고, 칸 이름('시'·'분'·'초')과도 겹치지 않게 한다 */}
+      <div role="group" aria-labelledby={timeGroupLabelId}>
+        <span id={timeGroupLabelId} className="sr-only">변경할 시간</span>
 
         {/* 프리셋은 입력값에 더하기만 하고, 적용은 아래 확인 버튼으로 한다(즉시 적용은 모바일 하단 바와 숫자 단축키).
             md 미만에서는 같은 프리셋이 하단 바에 있으므로 카드 쪽은 숨겨 한 벌만 남긴다 */}
-        <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-2.5">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5">
           <div className="hidden md:flex flex-wrap gap-1.5">
             {PRESETS.map((preset) => (
               <button
@@ -614,7 +616,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
               value={hours}
               onChange={(e) => changeTime("hours", Number(e.target.value))}
               className="w-full text-center"
-              aria-label="시간"
+              aria-label="시"
             />
             <span className="text-sm text-muted-foreground">시</span>
             <Input

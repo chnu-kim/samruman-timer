@@ -161,6 +161,15 @@ describe("TimerControls", () => {
     expect(onModified).not.toHaveBeenCalled();
   });
 
+  it("시간 입력 묶음의 이름은 카드 제목·칸 이름과 겹치지 않는다", () => {
+    render(<Harness timerId={timerId} status="RUNNING" />);
+    const group = screen.getByRole("group", { name: "변경할 시간" });
+    expect(within(group).getByRole("spinbutton", { name: "시" })).toBeInTheDocument();
+    expect(within(group).getByRole("spinbutton", { name: "분" })).toBeInTheDocument();
+    expect(within(group).getByRole("spinbutton", { name: "초" })).toBeInTheDocument();
+    expect(screen.queryByRole("spinbutton", { name: "시간" })).not.toBeInTheDocument();
+  });
+
   it("renders time presets", () => {
     render(<Harness timerId={timerId} status="RUNNING" />);
     expect(cardButton("+1시간")).toBeInTheDocument();
@@ -407,7 +416,7 @@ describe("TimerControls", () => {
   it("분 90은 1시간 30분, 초 75는 1분 15초로 올린다", () => {
     render(<Harness timerId={timerId} status="RUNNING" />);
     fireEvent.change(screen.getByRole("spinbutton", { name: "분" }), { target: { value: "90" } });
-    expect(screen.getByRole("spinbutton", { name: "시간" })).toHaveValue(1);
+    expect(screen.getByRole("spinbutton", { name: "시" })).toHaveValue(1);
     expect(screen.getByRole("spinbutton", { name: "분" })).toHaveValue(30);
     expect(cardButton("시간 추가 (1시간 30분)")).toBeEnabled();
 

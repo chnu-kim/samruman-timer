@@ -461,6 +461,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
 
   // 예약 상태의 시간 카드는 안내와 버튼 하나뿐이라 제목을 숨긴다. 만료 상태는 재시작 안내와 입력 폼이 모두 보이므로 제목을 둔다
   const hideControlsHeading = timer.status === "SCHEDULED" && !expired;
+  const showControlsHeader = !hideControlsHeading || shortcutsEnabled;
   // 기록이 아직 하나도 없다: 타이머 전체에 0건이거나 생성(CREATE) 행뿐이다(logsBaseEmpty).
   // 타이머는 만들 때 CREATE 기록이 항상 생기므로 0건만 보면 이 분기에 닿지 못한다. 시간을 한 번도 바꾸지 않았으면 '없음'으로 본다.
   // 로딩 중·오류에는 해당하지 않고, 이미 펼친 뒤에는 숨기지 않는다(누른 '접기'가 사라지면 포커스를 잃고, 필터 결과 0건에도 칩이 있어야 풀 수 있다)
@@ -493,22 +494,22 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
 
       {/* 시간 + 곁 영역(목표). 아래 기록·그래프 행과 같은 3:2 트랙·gap-5라 열 경계가 위아래로 맞는다. 방송 중 가장 자주 쓰는 두 가지를 첫 화면에 나란히 둔다 */}
       {(isOwner || aside) && (
-        <div className={cn("grid gap-5", isOwner && !!aside && "lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start")}>
+        <div className={cn("grid gap-x-5 gap-y-8", isOwner && !!aside && "lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start")}>
           {isOwner && (
             <section
               aria-labelledby={hideControlsHeading ? undefined : "timer-controls-heading"}
               aria-label={hideControlsHeading ? "시간" : undefined}
-              className="rounded-xl border border-border bg-background p-5"
+              className="rounded-card border border-border bg-background p-5"
             >
               {/* 단축키가 있다는 사실을 '?'를 몰라도 알 수 있게, 도움말로 가는 진입점을 제목 줄에 하나만 둔다.
                   키보드가 있는 포인터 기기에서만 보인다(터치 기기에서는 단축키를 쓸 수 없다).
                   예약·만료 상태의 내용은 안내와 버튼 하나뿐이라 제목은 숨긴다(상태는 배지·보조 문구가 알린다) */}
-              {(!hideControlsHeading || shortcutsEnabled) && (
+              {showControlsHeader && (
                 <div
                   className={cn(
                     "items-center gap-3",
                     // 터치 기기에서는 버튼만 있는 줄 전체를 접어 빈 줄 높이가 생기지 않게 한다
-                    hideControlsHeading ? "hidden justify-end pointer-fine:flex" : "flex min-h-10 justify-between",
+                    hideControlsHeading ? "hidden justify-end pointer-fine:flex" : "flex justify-between",
                   )}
                 >
                   {!hideControlsHeading && (
@@ -522,7 +523,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                         variant="link"
                         onClick={() => setShowHelp(true)}
                         aria-haspopup="dialog"
-                        className="-my-0.5 -mr-2"
+                        className="-mr-2"
                       >
                         단축키
                       </Button>
@@ -542,7 +543,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
                 nicknamePromptRef={nicknamePromptRef}
                 expired={expired}
                 disconnected={connection.disconnected}
-                className={hideControlsHeading ? "pointer-fine:mt-3" : "mt-3"}
+                className={showControlsHeader ? "mt-3" : undefined}
               />
             </section>
           )}
@@ -551,7 +552,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
       )}
 
       {/* 기록 + 그래프 */}
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
+      <div className="grid gap-x-5 gap-y-8 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
         <section aria-labelledby="timer-logs-heading">
           <div className="flex items-center justify-between gap-4">
             <h2 id="timer-logs-heading" className="text-base font-semibold">
@@ -561,7 +562,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
               <Button
                 type="button"
                 variant="link"
-                className="-my-2.5 -mr-2"
+                className="-mr-2 pointer-coarse:-my-2.5"
                 onClick={toggleLogsExpanded}
                 aria-expanded={logsExpanded}
               >
@@ -675,7 +676,7 @@ export function TimerConsole({ timerId, isOwner, aside, onTimeChanged, onTimerRe
 
         <section aria-labelledby="timer-graph-heading">
           <h2 id="timer-graph-heading" className="text-base font-semibold">잔여 시간 추이</h2>
-          <div className="mt-3 rounded-xl border border-border bg-muted p-4">
+          <div className="mt-3 rounded-card border border-border bg-background p-5">
             {graphLoading ? (
               <div className="flex h-64 items-center justify-center">
                 <Spinner />

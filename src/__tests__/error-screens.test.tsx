@@ -69,6 +69,22 @@ describe("ErrorState 톤", () => {
   });
 });
 
+// G1: 전체 화면 오류의 복구 동작은 막다른 404의 이동 버튼과 같은 테두리 버튼이고, 글자 링크 모양은 카드 안(compact)에만 쓴다
+describe("ErrorState 다시 시도 모양", () => {
+  it("본형은 테두리 버튼, compact는 글자 링크", () => {
+    const { unmount } = render(<ErrorState onRetry={vi.fn()} />);
+    const full = screen.getByRole("button", { name: "다시 시도" });
+    expect(full).toHaveClass("border-border", "rounded-control");
+    expect(full).not.toHaveClass("text-accent");
+    unmount();
+
+    render(<ErrorState compact onRetry={vi.fn()} />);
+    const compact = screen.getByRole("button", { name: "다시 시도" });
+    expect(compact).toHaveClass("text-accent");
+    expect(compact).not.toHaveClass("border-border");
+  });
+});
+
 describe("오류 화면", () => {
   it("없는 경로(not-found)는 한국어 h1과 프로젝트 목록 링크 하나", () => {
     render(<NotFound />);
