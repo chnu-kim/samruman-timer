@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, act } from "@testing-library/react";
 import { ToastProvider } from "@/components/ui/Toast";
-import { SessionExpiredHandler } from "../SessionExpiredHandler";
+import { SessionExpiredHandler, SESSION_EXPIRED_TOAST } from "../SessionExpiredHandler";
 import { authFetch } from "@/lib/auth-fetch";
 
 // authFetch를 쓰는 화면(시간 증감 등)의 계약만 확인한다. 페이지 로드 때 refresh를 처음 일으키는
@@ -44,7 +44,7 @@ describe("SessionExpiredHandler + authFetch", () => {
     const res500 = await authFetch("/api/timers/t-1/modify", { method: "POST" });
     expect(res500.status).toBe(500);
     expect(expired).not.toHaveBeenCalled();
-    expect(screen.queryByText("세션이 만료되었습니다. 다시 로그인해주세요.")).toBeNull();
+    expect(screen.queryByText(SESSION_EXPIRED_TOAST)).toBeNull();
 
     // 401: 만료 토스트를 띄운다
     let res401: Response | undefined;
@@ -53,7 +53,21 @@ describe("SessionExpiredHandler + authFetch", () => {
     });
     expect(res401?.status).toBe(401);
     expect(expired).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("세션이 만료되었습니다. 다시 로그인해주세요.")).toBeInTheDocument();
+    expect(screen.getByText(SESSION_EXPIRED_TOAST)).toBeInTheDocument();
+
+    // 1.5초 뒤 만료 표시를 실어 로그인 화면으로 보낸다(로그인 화면이 이유를 한 줄 알린다)
+    const hrefSet = vi.fn();
+    const original = window.location;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { set href(v: string) { hrefSet(v); } },
+    });
+    act(() => {
+      vi.advanceTimersByTime(1500);
+    });
+    Object.defineProperty(window, "location", { configurable: true, value: original });
+    expect(hrefSet).toHaveBeenCalledTimes(1);
+    expect(hrefSet.mock.calls[0][0]).toMatch(/^\/login\?(next=[^&]+&)?expired=1$/);
 
     window.removeEventListener("session-expired", expired);
     vi.unstubAllGlobals();

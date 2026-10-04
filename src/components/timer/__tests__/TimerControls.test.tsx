@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { useState, type ComponentProps } from "react";
 import { render, screen, fireEvent, waitFor, act, within } from "@testing-library/react";
-import { TimerControls } from "../TimerControls";
+import { TimerControls, MODIFY_FAILED_FORM_MESSAGE, MODIFY_FAILED_QUICK_MESSAGE, NICKNAME_REQUIRED_MESSAGE } from "../TimerControls";
 import type { ModifyAction } from "@/types";
 
 type HarnessProps = Omit<ComponentProps<typeof TimerControls>, "selectedAction" | "onActionChange"> & {
@@ -481,6 +481,7 @@ describe("TimerControls", () => {
     it("rolls back to previous value on API error", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
+        status: 400,
         json: async () => ({
           error: { code: "BAD_REQUEST", message: "잘못된 요청입니다" },
         }),
@@ -514,9 +515,9 @@ describe("TimerControls", () => {
         );
       });
 
-      // 에러 메시지 표시
+      // 4xx는 서버가 알려 준 이유를 입력부 인라인 한 곳에만(C032: 토스트 중복 없음)
       expect(screen.getByRole("alert")).toHaveTextContent("잘못된 요청입니다");
-      expect(mockToast).toHaveBeenCalledWith("잘못된 요청입니다", "error");
+      expect(mockToast).not.toHaveBeenCalledWith("잘못된 요청입니다", "error");
       // UX-10: 모순되는 성공 토스트가 없고, 입력값이 복원된다
       expect(mockToast).not.toHaveBeenCalledWith("추가 완료", "success");
       expect(screen.getByRole("button", { name: /시간 추가/ })).toHaveTextContent("1시간");
@@ -553,7 +554,8 @@ describe("TimerControls", () => {
         );
       });
 
-      expect(screen.getByRole("alert")).toHaveTextContent("시간 변경에 실패했습니다");
+      expect(screen.getByRole("alert")).toHaveTextContent(MODIFY_FAILED_FORM_MESSAGE);
+      expect(mockToast).not.toHaveBeenCalledWith(expect.anything(), "error");
       expect(mockToast).not.toHaveBeenCalledWith("추가 완료", "success");
       expect(screen.getByRole("button", { name: /시간 추가/ })).toHaveTextContent("1시간");
     });
@@ -699,6 +701,130 @@ describe("TimerControls", () => {
         resolveFirst!({ ok: true, json: async () => ({ data: { id: timerId, remainingSeconds: 7200, status: "RUNNING", log: { id: "l1" } } }) } as Response);
         resolveSecond!({ ok: true, json: async () => ({ data: { id: timerId, remainingSeconds: 10800, status: "RUNNING", log: { id: "l2" } } }) } as Response);
       });
+    });
+  });
+
+  // C029·C032: 실패는 한 곳에만 알린다. 401은 세션 만료 안내(SessionExpiredHandler) 한 건만
+  describe("failure notice channel", () => {
+    const serverError = () => ({
+      ok: false,
+      status: 500,
+      json: async () => ({ error: { code: "INTERNAL_ERROR", message: "서버 오류가 발생했습니다" } }),
+    });
+
+    function renderAndFill(onModified = vi.fn()) {
+      render(<Harness timerId={timerId} status="RUNNING" remainingSeconds={7200} onModified={onModified} />);
+      fireEvent.change(screen.getByLabelText("시청자 닉네임"), { target: { value: "테스터" } });
+      fireEvent.click(screen.getByRole("button", { name: "+1시간" }));
+      return onModified;
+    }
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("폼에서 500이고 오류 자리가 보이면 인라인 1건, 토스트 0건(서버 원문 대신 다시 시도 안내)", async () => {
+      mockFetch.mockResolvedValueOnce(serverError());
+      renderAndFill();
+      fireEvent.click(screen.getByRole("button", { name: /시간 추가/ }));
+
+      await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(MODIFY_FAILED_FORM_MESSAGE));
+      expect(screen.getAllByRole("alert")).toHaveLength(1);
+      expect(mockToast).not.toHaveBeenCalled();
+      // 입력은 되살아나 다시 확인을 누를 수 있다
+      expect(screen.getByRole("button", { name: /시간 추가/ })).toHaveTextContent("1시간");
+    });
+
+    it("폼에서 실패했지만 확인 버튼이 화면 밖이면 토스트 1건, 인라인 0건", async () => {
+      // 요청 중 스크롤해 입력부가 뷰포트 아래로 내려간 상황
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+        top: 2000, bottom: 2048, height: 48, left: 0, right: 100, width: 100, x: 0, y: 2000, toJSON: () => ({}),
+      } as DOMRect);
+      mockFetch.mockResolvedValueOnce(serverError());
+      renderAndFill();
+      fireEvent.click(screen.getByRole("button", { name: /시간 추가/ }));
+
+      await waitFor(() => expect(mockToast).toHaveBeenCalledWith(MODIFY_FAILED_FORM_MESSAGE, "error"));
+      expect(mockToast).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("모바일 하단 바에 가린 확인 버튼은 보이지 않는 것으로 친다", async () => {
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+        const isBar = this.hasAttribute("data-quick-bar");
+        const top = isBar ? 760 : 740;
+        const height = isBar ? 84 : 48;
+        return { top, bottom: top + height, height, left: 0, right: 390, width: 390, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
+      });
+      mockFetch.mockResolvedValueOnce(serverError());
+      renderAndFill();
+      fireEvent.click(screen.getByRole("button", { name: /시간 추가/ }));
+
+      await waitFor(() => expect(mockToast).toHaveBeenCalledWith(MODIFY_FAILED_FORM_MESSAGE, "error"));
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("하단 바 경로는 늘 토스트 1건, 인라인 0건", async () => {
+      mockFetch.mockResolvedValueOnce(serverError());
+      renderAndFill();
+      fireEvent.click(screen.getByRole("button", { name: "+1h" }));
+
+      await waitFor(() => expect(mockToast).toHaveBeenCalledWith(MODIFY_FAILED_QUICK_MESSAGE, "error"));
+      expect(mockToast).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("401이면 아무 알림도 띄우지 않고(세션 만료 안내만 남게) 화면 값·입력만 되돌린다", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: async () => ({ error: { code: "UNAUTHORIZED", message: "인증이 필요합니다" } }),
+      });
+      const onModified = renderAndFill();
+      fireEvent.click(screen.getByRole("button", { name: /시간 추가/ }));
+
+      await waitFor(() =>
+        expect(onModified).toHaveBeenLastCalledWith(expect.objectContaining({ remainingSeconds: 7200 })),
+      );
+      expect(mockToast).not.toHaveBeenCalled();
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.queryByText("인증이 필요합니다")).toBeNull();
+      expect(screen.getByRole("button", { name: /시간 추가/ })).toHaveTextContent("1시간");
+    });
+
+    it("하단 바 401도 알리지 않는다", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: async () => ({ error: { code: "UNAUTHORIZED", message: "인증이 필요합니다" } }),
+      });
+      renderAndFill();
+      fireEvent.click(screen.getByRole("button", { name: "+1h" }));
+      await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+      await act(async () => {});
+      expect(mockToast).not.toHaveBeenCalled();
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("'지금 시작'이 401이면 버튼 아래 오류를 띄우지 않는다", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: async () => ({ error: { code: "UNAUTHORIZED", message: "인증이 필요합니다" } }),
+      });
+      render(<Harness timerId={timerId} status="SCHEDULED" />);
+      await confirmActivate();
+      await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+      await act(async () => {});
+      expect(screen.queryByText("인증이 필요합니다")).toBeNull();
+    });
+
+    it("닉네임 없이 제출하면 통일된 문구 하나만 인라인으로", async () => {
+      render(<Harness timerId={timerId} status="RUNNING" />);
+      fireEvent.click(screen.getByRole("button", { name: "+1시간" }));
+      fireEvent.click(screen.getByRole("button", { name: /시간 추가/ }));
+      expect(await screen.findByRole("alert")).toHaveTextContent(NICKNAME_REQUIRED_MESSAGE);
+      expect(mockToast).not.toHaveBeenCalled();
     });
   });
 

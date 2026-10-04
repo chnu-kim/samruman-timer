@@ -35,8 +35,19 @@ export function sanitizeNextPath(value: string | null | undefined): string | nul
   return value;
 }
 
-/** 세션 만료 시 보낼 로그인 주소. 지금 보던 경로를 next로 실어 로그인 후 돌아오게 한다 */
+/** 로그인 주소. 지금 보던 경로를 next로 실어 로그인 후 돌아오게 한다(헤더 '로그인'·세션 만료 공용) */
 export function loginUrlWithNext(currentPath: string): string {
   const next = sanitizeNextPath(currentPath);
   return next ? `/login?next=${encodeURIComponent(next)}` : "/login";
+}
+
+/**
+ * 세션 만료로 보내는 로그인 주소. 헤더 '로그인'도 next를 싣기 때문에 next만으로는 만료인지 알 수 없어
+ * `expired=1`을 덧붙이고, 로그인 화면은 이 값이 있을 때만 '세션이 만료되어…' 안내를 보여 준다
+ */
+export const SESSION_EXPIRED_PARAM = "expired";
+
+export function sessionExpiredLoginUrl(currentPath: string): string {
+  const url = loginUrlWithNext(currentPath);
+  return `${url}${url.includes("?") ? "&" : "?"}${SESSION_EXPIRED_PARAM}=1`;
 }
