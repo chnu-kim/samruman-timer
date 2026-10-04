@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useState, useCallback, useMemo, useEffect, useId, useRef } from "react";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
@@ -42,6 +42,16 @@ const PRESETS: { name: string; config: Partial<OverlayConfig> }[] = [
   },
 ];
 
+// 프리셋이 정하는 값(color·bg·shadow·fontSize)이 모두 같으면 그 프리셋이 적용된 상태로 본다
+function matchesPreset(config: OverlayConfig, preset: (typeof PRESETS)[number]): boolean {
+  return (Object.keys(preset.config) as (keyof OverlayConfig)[]).every(
+    (key) => config[key] === preset.config[key],
+  );
+}
+
+// 투명은 type=color가 표현하지 못해 검정으로 그려지므로 견본 자리에 체커보드를 깐다
+const CHECKERBOARD = "repeating-conic-gradient(#d4d4d4 0% 25%, #ffffff 0% 50%) 50% / 12px 12px";
+
 const POSITION_LABELS: Record<Position, string> = {
   center: "중앙",
   "top-left": "좌상단",
@@ -52,11 +62,17 @@ const POSITION_LABELS: Record<Position, string> = {
 
 // 입력 중간 상태(#ff 등)가 URL에 들어가면 오버레이 글자가 body 색을 물려받으므로 완성된 값만 반영한다
 
-const POSITIONS: Position[] = ["top-left", "top-right", "center", "bottom-left", "bottom-right"];
+// 3×3 칸에 놓을 위치. null은 고를 수 없는 빈 칸이다
+const POSITION_GRID: (Position | null)[] = [
+  "top-left", null, "top-right",
+  null, "center", null,
+  "bottom-left", null, "bottom-right",
+];
 
 export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
   const { toast } = useToast();
-  const modalRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
   const [savedConfig, setSavedConfig] = useState<OverlayConfig | null>(null);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -139,49 +155,20 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
     }
   }, [isDirty, onClose]);
 
-  // P0: ESC key handler + focus trap
+  // 네이티브 모달 <dialog>가 배경 inert·Tab 순환을 맡는다. 부모가 이 컴포넌트를 바로 언마운트하므로
+  // close()의 포커스 복귀 대신, DOM에서 빠진 뒤(useEffect 정리) 연 버튼으로 직접 돌려준다
+  // 연 버튼은 showModal 직전에 한 번만 잡는다. StrictMode의 재실행 때는 이미 열려 있어 포커스가 모달 안에 있다
+  const openerRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        handleClose();
-        return;
-      }
-
-      if (e.key === "Tab" && modalRef.current) {
-        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-        );
-        if (focusable.length === 0) return;
-
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-
-        if (e.shiftKey) {
-          if (document.activeElement === first) {
-            e.preventDefault();
-            last.focus();
-          }
-        } else {
-          if (document.activeElement === last) {
-            e.preventDefault();
-            first.focus();
-          }
-        }
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [handleClose]);
-
-  // P0: Auto-focus first focusable element on mount
-  useEffect(() => {
-    if (modalRef.current) {
-      const first = modalRef.current.querySelector<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      );
-      first?.focus();
+    const dialog = dialogRef.current;
+    if (dialog && !dialog.open) {
+      openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      dialog.showModal();
     }
+    return () => {
+      const opener = openerRef.current;
+      if (opener?.isConnected) opener.focus();
+    };
   }, []);
 
   const handleSave = useCallback(async () => {
@@ -277,22 +264,26 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
 
   return (
     <>
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onClick={handleClose}
-      role="dialog"
+    <dialog
+      ref={dialogRef}
       aria-modal="true"
-      aria-label="OBS 오버레이 설정"
+      aria-labelledby={titleId}
+      // Esc: 저장 안 한 변경이 있으면 확인창을 거치도록 기본 닫기를 막는다
+      onCancel={(e) => {
+        e.preventDefault();
+        handleClose();
+      }}
+      // 브라우저가 cancel을 막지 못하고 닫은 경우(사용자 활성화 없는 Esc 반복 등)에도 상태를 맞춘다
+      onClose={onClose}
+      onClick={(e) => {
+        if (e.target === dialogRef.current) handleClose();
+      }}
+      className="m-auto w-full max-w-[min(42rem,calc(100%-2rem))] max-h-[90dvh] overflow-hidden rounded-xl border border-border bg-background p-0 text-foreground shadow-dialog backdrop:bg-black/50 animate-[fade-in_0.15s_ease-out]"
     >
-      {/* P2 #13: fade-in animation */}
-      <div
-        ref={modalRef}
-        className="relative w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden rounded-xl border border-border bg-background shadow-dialog mx-4 animate-[fade-in_0.15s_ease-out]"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="flex max-h-[90dvh] flex-col">
         {/* 헤더 */}
         <div className="flex items-center justify-between p-6 pb-0">
-          <h2 className="text-lg font-bold">OBS 오버레이 설정</h2>
+          <h2 id={titleId} className="text-lg font-bold">OBS 오버레이 설정</h2>
           <button
             onClick={handleClose}
             aria-label="닫기"
@@ -331,16 +322,25 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
         <div className="mb-5">
           <span className="text-sm font-medium text-foreground">프리셋 테마</span>
           <div className="mt-1.5 flex flex-wrap gap-2">
-            {PRESETS.map((preset) => (
-              <button
-                key={preset.name}
-                type="button"
-                onClick={() => applyPreset(preset)}
-                className="rounded-lg border border-border px-3 py-2 min-h-11 text-sm font-medium text-muted-foreground hover:border-foreground/30 hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                {preset.name}
-              </button>
-            ))}
+            {PRESETS.map((preset) => {
+              const active = matchesPreset(config, preset);
+              return (
+                <button
+                  key={preset.name}
+                  type="button"
+                  onClick={() => applyPreset(preset)}
+                  aria-pressed={active}
+                  className={cn(
+                    "rounded-lg border px-3 py-2 min-h-11 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    active
+                      ? "border-accent bg-accent-light text-foreground"
+                      : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground",
+                  )}
+                >
+                  {preset.name}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -436,17 +436,28 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
           <div>
             <span className="text-sm font-medium text-foreground">배경색</span>
             <div className="mt-1.5 flex items-center gap-2">
-              {/* P1 #6: 44px color input */}
-              <input
-                type="color"
-                value={config.bg === "transparent" ? "#000000" : config.bg}
-                onChange={(e) => {
-                  setBgDraft(null);
-                  setConfig((prev) => ({ ...prev, bg: e.target.value }));
-                }}
-                className="w-11 h-11 rounded border border-border cursor-pointer"
-                aria-label="배경색"
-              />
+              <span
+                className="relative w-11 h-11 shrink-0 rounded has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring"
+                style={config.bg === "transparent" ? { background: CHECKERBOARD } : undefined}
+                data-testid="bg-swatch"
+              >
+                <input
+                  type="color"
+                  value={config.bg === "transparent" ? "#000000" : config.bg}
+                  onChange={(e) => {
+                    setBgDraft(null);
+                    setConfig((prev) => ({ ...prev, bg: e.target.value }));
+                  }}
+                  className={cn(
+                    "block w-11 h-11 rounded border border-border cursor-pointer",
+                    config.bg === "transparent" && "opacity-0",
+                  )}
+                  aria-label="배경색"
+                />
+                {config.bg === "transparent" && (
+                  <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded border border-border" />
+                )}
+              </span>
               <div className="flex-1 flex items-center gap-1">
                 <Input
                   value={bgDraft ?? config.bg}
@@ -466,17 +477,19 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
                 />
               </div>
             </div>
-            {/* P1 #7: 44px touch target for reset button */}
-            <button
-              type="button"
-              onClick={() => {
-                setBgDraft(null);
-                setConfig((prev) => ({ ...prev, bg: "transparent" }));
-              }}
-              className="mt-1 min-h-11 px-1 inline-flex items-center text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              투명으로 초기화
-            </button>
+            {/* 이미 투명이면 누를 일이 없으므로 숨긴다 */}
+            {config.bg !== "transparent" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setBgDraft(null);
+                  setConfig((prev) => ({ ...prev, bg: "transparent" }));
+                }}
+                className="mt-1 min-h-11 px-1 inline-flex items-center text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                투명으로 초기화
+              </button>
+            )}
           </div>
         </div>
 
@@ -484,67 +497,28 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
         <div className="mb-5">
           <span className="text-sm font-medium text-foreground">위치</span>
           <div className="mt-1.5 grid grid-cols-3 grid-rows-3 gap-1 w-56 h-40 border border-border rounded-lg p-1 bg-muted">
-            {/* Row 1 */}
-            <button
-              type="button"
-              onClick={() => setConfig((prev) => ({ ...prev, position: "top-left" }))}
-              className={cn(
-                "rounded text-xs transition-colors min-h-[40px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                config.position === "top-left" ? "bg-accent text-accent-foreground" : "hover:bg-foreground/10",
-              )}
-              aria-label="좌상단"
-              aria-pressed={config.position === "top-left"}
-            />
-            <div className="min-h-[40px]" />
-            <button
-              type="button"
-              onClick={() => setConfig((prev) => ({ ...prev, position: "top-right" }))}
-              className={cn(
-                "rounded text-xs transition-colors min-h-[40px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                config.position === "top-right" ? "bg-accent text-accent-foreground" : "hover:bg-foreground/10",
-              )}
-              aria-label="우상단"
-              aria-pressed={config.position === "top-right"}
-            />
-            {/* Row 2 */}
-            <div className="min-h-[40px]" />
-            <button
-              type="button"
-              onClick={() => setConfig((prev) => ({ ...prev, position: "center" }))}
-              className={cn(
-                "rounded text-xs transition-colors min-h-[40px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                config.position === "center" ? "bg-accent text-accent-foreground" : "hover:bg-foreground/10",
-              )}
-              aria-label="중앙"
-              aria-pressed={config.position === "center"}
-            />
-            <div className="min-h-[40px]" />
-            {/* Row 3 */}
-            <button
-              type="button"
-              onClick={() => setConfig((prev) => ({ ...prev, position: "bottom-left" }))}
-              className={cn(
-                "rounded text-xs transition-colors min-h-[40px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                config.position === "bottom-left" ? "bg-accent text-accent-foreground" : "hover:bg-foreground/10",
-              )}
-              aria-label="좌하단"
-              aria-pressed={config.position === "bottom-left"}
-            />
-            <div className="min-h-[40px]" />
-            <button
-              type="button"
-              onClick={() => setConfig((prev) => ({ ...prev, position: "bottom-right" }))}
-              className={cn(
-                "rounded text-xs transition-colors min-h-[40px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                config.position === "bottom-right" ? "bg-accent text-accent-foreground" : "hover:bg-foreground/10",
-              )}
-              aria-label="우하단"
-              aria-pressed={config.position === "bottom-right"}
-            />
+            {POSITION_GRID.map((pos, i) =>
+              pos === null ? (
+                <div key={i} className="min-h-[40px]" />
+              ) : (
+                <button
+                  key={pos}
+                  type="button"
+                  onClick={() => setConfig((prev) => ({ ...prev, position: pos }))}
+                  className={cn(
+                    "rounded border text-xs transition-colors min-h-[40px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    // 고르지 않은 칸도 누를 수 있는 자리로 보이게 윤곽을 상시 둔다(배경 대비 3:1 이상)
+                    config.position === pos
+                      ? "border-accent bg-accent text-accent-foreground"
+                      : "border-foreground/50 hover:bg-foreground/10",
+                  )}
+                  aria-label={POSITION_LABELS[pos]}
+                  aria-pressed={config.position === pos}
+                />
+              ),
+            )}
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            현재: {POSITION_LABELS[config.position]}
-          </p>
+
         </div>
 
         {/* 토글 옵션 */}
@@ -620,7 +594,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
             role="status"
             aria-live="polite"
             className={cn(
-              "text-xs font-medium text-amber-600 dark:text-amber-400 transition-opacity duration-200",
+              "text-xs font-medium text-amber-700 dark:text-amber-400 transition-opacity duration-200",
               isDirty ? "opacity-100" : "opacity-0 pointer-events-none",
             )}
           >
@@ -659,7 +633,7 @@ export function OverlaySettings({ timerId, onClose }: OverlaySettingsProps) {
         </div>
         </>}
       </div>
-    </div>
+    </dialog>
 
     <ConfirmDialog
       open={showUnsavedDialog}
