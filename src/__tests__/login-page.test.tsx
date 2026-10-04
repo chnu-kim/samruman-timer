@@ -47,6 +47,37 @@ describe("로그인 화면 문구", () => {
   });
 });
 
+// C029: 세션 만료로 보내졌을 때만 이유를 한 줄 알린다. 헤더 '로그인'도 next를 실으므로 next만으로는 알리지 않는다
+describe("세션 만료 안내", () => {
+  const LINE = "세션이 만료되어 다시 로그인합니다.";
+
+  it("expired=1이 있으면 만료 안내를 한 줄 보여 주고 로그인 버튼은 next를 들고 간다", () => {
+    mockMe(401);
+    search = `next=${encodeURIComponent("/projects/abc")}&expired=1`;
+    render(<LoginPage />);
+    expect(screen.getByText(LINE)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "CHZZK로 로그인" })).toHaveAttribute(
+      "href",
+      `/api/auth/login?next=${encodeURIComponent("/projects/abc")}`
+    );
+  });
+
+  it("next만 있으면(헤더 '로그인') 만료 안내를 보여 주지 않는다", () => {
+    mockMe(401);
+    search = `next=${encodeURIComponent("/projects/abc")}`;
+    render(<LoginPage />);
+    expect(screen.queryByText(LINE)).toBeNull();
+  });
+
+  it("로그인 실패(?error=)와 겹치면 실패 안내만 보여 준다", () => {
+    mockMe(401);
+    search = "error=auth_failed&expired=1";
+    render(<LoginPage />);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.queryByText(LINE)).toBeNull();
+  });
+});
+
 // C155: 이미 로그인한 사용자가 /login에 오면 로그인 화면을 보여 주지 않고 보낸다
 describe("로그인 상태에서 /login", () => {
   it("next가 없으면 프로젝트 목록으로 보낸다", async () => {

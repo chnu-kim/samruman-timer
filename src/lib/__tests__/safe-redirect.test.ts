@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sanitizeNextPath, loginUrlWithNext } from "@/lib/safe-redirect";
+import { sanitizeNextPath, loginUrlWithNext, sessionExpiredLoginUrl } from "@/lib/safe-redirect";
 
 // UX-74: 로그인 후 돌아갈 경로는 같은 출처의 상대 경로만 허용한다(오픈 리다이렉트 방지)
 describe("sanitizeNextPath", () => {
@@ -68,5 +68,15 @@ describe("loginUrlWithNext", () => {
   it("로그인 화면이거나 허용하지 않는 경로면 next 없이 보낸다", () => {
     expect(loginUrlWithNext("/login")).toBe("/login");
     expect(loginUrlWithNext("//evil.com")).toBe("/login");
+  });
+});
+
+describe("sessionExpiredLoginUrl", () => {
+  it("next 뒤에 만료 표시를 덧붙인다(로그인 화면이 만료 안내를 보여 주게)", () => {
+    expect(sessionExpiredLoginUrl("/timers/abc")).toBe("/login?next=%2Ftimers%2Fabc&expired=1");
+  });
+
+  it("next가 없어도 만료 표시는 싣는다", () => {
+    expect(sessionExpiredLoginUrl("/login")).toBe("/login?expired=1");
   });
 });

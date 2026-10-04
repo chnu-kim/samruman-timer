@@ -1,14 +1,16 @@
 // @vitest-environment jsdom
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import ProjectDetailPage from "@/app/projects/[id]/page";
+import { MODIFY_FAILED_QUICK_MESSAGE } from "@/components/timer/TimerControls";
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "p1" }),
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 
+const { mockToast } = vi.hoisted(() => ({ mockToast: vi.fn() }));
 vi.mock("@/components/ui/Toast", () => ({
-  useToast: () => ({ toast: vi.fn() }),
+  useToast: () => ({ toast: mockToast }),
 }));
 
 // jsdom에는 native <dialog>의 showModal/close가 없다
@@ -77,13 +79,16 @@ const goal = {
 
 type FetchCall = { url: string; method: string; body?: string };
 
-function stubApi({ timers, goals, me = null, detail = timerDetail }: { timers: unknown[]; goals: unknown[]; me?: unknown; detail?: unknown }) {
+function stubApi({ timers, goals, me = null, modifyStatus, detail = timerDetail }: { timers: unknown[]; goals: unknown[]; me?: unknown; modifyStatus?: number; detail?: unknown }) {
   const calls: FetchCall[] = [];
   global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? "GET";
     calls.push({ url, method, body: typeof init?.body === "string" ? init.body : undefined });
     if (url.startsWith("/api/auth/me")) return me ? jsonResponse(me) : new Response(null, { status: 401 });
+    if (modifyStatus && url === "/api/timers/t1/modify") {
+      return new Response(JSON.stringify({ error: { code: "X", message: "서버 원문" } }), { status: modifyStatus });
+    }
     if (url === "/api/projects/p1/timers") return jsonResponse(timers);
     if (url === "/api/projects/p1/goals") return jsonResponse(goals);
     if (url.startsWith("/api/timers/t1/logs")) {
@@ -395,6 +400,31 @@ describe("프로젝트 콘솔", () => {
         const modify = calls.find((c) => c.url === "/api/timers/t1/modify" && c.method === "POST");
         expect(JSON.parse(modify!.body!)).toMatchObject({ actorName: "치즈냥" });
       });
+    });
+
+    // C029·C032: 단축키 실패는 토스트 한 건. 401은 세션 만료 안내만 남도록 아무것도 띄우지 않는다
+    it("'1'이 500이면 다시 시도 안내 토스트 한 건", async () => {
+      mockToast.mockReset();
+      stubApi({ timers: [timer], goals: [], me: owner, modifyStatus: 500 });
+      render(<ProjectDetailPage />);
+      await waitFor(() => expect(screen.getByLabelText("시청자 닉네임")).toHaveValue("기본냥"));
+
+      fireEvent.keyDown(window, { key: "1", code: "Digit1" });
+      await waitFor(() => expect(mockToast).toHaveBeenCalledWith(MODIFY_FAILED_QUICK_MESSAGE, "error"));
+      expect(mockToast).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText("서버 원문")).toBeNull();
+    });
+
+    it("'1'이 401이면 아무 알림도 띄우지 않는다", async () => {
+      mockToast.mockReset();
+      const calls = stubApi({ timers: [timer], goals: [], me: owner, modifyStatus: 401 });
+      render(<ProjectDetailPage />);
+      await waitFor(() => expect(screen.getByLabelText("시청자 닉네임")).toHaveValue("기본냥"));
+
+      fireEvent.keyDown(window, { key: "1", code: "Digit1" });
+      await waitFor(() => expect(calls.some((c) => c.url === "/api/timers/t1/modify")).toBe(true));
+      await new Promise((r) => setTimeout(r, 50));
+      expect(mockToast).not.toHaveBeenCalled();
     });
 
     it("목표 폼이 열려 있으면 '1'이 뒤쪽 타이머를 바꾸지 않는다", async () => {
