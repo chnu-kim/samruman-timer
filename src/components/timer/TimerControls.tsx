@@ -437,7 +437,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
 
   if (status === "SCHEDULED") {
     return (
-      <div className={cn("space-y-3", className)}>
+      <div className={cn("flex flex-col items-start gap-3", className)}>
         <p className="text-sm text-muted-foreground">
           시작 시각까지 기다리거나 지금 시작할 수 있습니다. 시작을 늦추려면 타이머를 삭제한 뒤 다시 만드세요.
         </p>
@@ -477,7 +477,7 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
 
   return (
     // Enter로 제출한다. 오류 안내는 아래 role=alert 문구가 맡으므로 브라우저 기본 검증 말풍선은 끈다
-    <form ref={formRef} noValidate onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} onFocus={handleFormFocus} onBlur={handleFormBlur} className={cn("space-y-5", className)}>
+    <form ref={formRef} noValidate onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} onFocus={handleFormFocus} onBlur={handleFormBlur} className={cn("flex flex-col gap-5", className)}>
       {/* 만료 상태에서 추가는 곧 재시작이므로 결과를 한 줄로 미리 알린다 */}
       {/* tabIndex -1: 추가/차감 토글이 사라질 때 그 안에 있던 포커스를 받는다(Tab 순서에는 넣지 않는다) */}
       {expired && (

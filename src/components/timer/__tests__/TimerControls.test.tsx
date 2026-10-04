@@ -100,6 +100,18 @@ describe("TimerControls", () => {
     expect(screen.queryByLabelText("시청자 닉네임")).not.toBeInTheDocument();
   });
 
+  // 카드 바닥 여백이 위와 같도록 space-y(숨은 마지막 자식에 margin이 남음) 대신 gap을 쓴다
+  it("루트가 gap 레이아웃이라 숨은 마지막 자식이 바닥 여백을 만들지 않는다", () => {
+    const { container: scheduled } = render(<Harness timerId={timerId} status="SCHEDULED" />);
+    const sRoot = scheduled.firstElementChild as HTMLElement;
+    expect(sRoot.className).toMatch(/\bgap-3\b/);
+    expect(sRoot.className).not.toMatch(/space-y/);
+    const { container: running } = render(<Harness timerId={timerId} status="RUNNING" />);
+    const form = running.querySelector("form") as HTMLElement;
+    expect(form.className).toMatch(/\bgap-5\b/);
+    expect(form.className).not.toMatch(/space-y/);
+  });
+
   it("'지금 시작'은 activate API를 부르고 서버 응답으로 상위를 갱신한다", async () => {
     const data = {
       id: timerId,
