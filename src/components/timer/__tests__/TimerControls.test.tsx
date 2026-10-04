@@ -52,12 +52,51 @@ describe("TimerControls", () => {
     expect(screen.getByRole("radio", { name: "차감" })).toBeInTheDocument();
   });
 
-  it("shows message for SCHEDULED timers", () => {
+  // C031: 예약 타이머는 시간 조작 대신 '지금 시작' 하나만 둔다
+  it("SCHEDULED에서는 안내 한 줄과 '지금 시작' 버튼만 보인다", () => {
     render(<Harness timerId={timerId} status="SCHEDULED" />);
-    expect(screen.getByText(/예약된 타이머/)).toBeInTheDocument();
-    // UX-43: 일정을 바꿀 유일한 방법(삭제 후 재생성)을 안내한다
-    expect(screen.getByText(/삭제한 뒤 다시 만드세요/)).toBeInTheDocument();
+    expect(screen.getByText("시작 시각까지 기다리거나 지금 시작할 수 있습니다.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "지금 시작" })).toBeInTheDocument();
+    expect(screen.queryByText(/삭제한 뒤 다시 만드세요/)).not.toBeInTheDocument();
     expect(screen.queryByLabelText("시청자 닉네임")).not.toBeInTheDocument();
+  });
+
+  it("'지금 시작'은 activate API를 부르고 서버 응답으로 상위를 갱신한다", async () => {
+    const data = {
+      id: timerId,
+      remainingSeconds: 3600,
+      status: "RUNNING",
+      log: { id: "log1", actionType: "ACTIVATE", actorName: "owner", actorUserId: "u1", deltaSeconds: 0, beforeSeconds: 3600, afterSeconds: 3600, createdAt: "2026-10-04T00:00:00.000Z" },
+    };
+    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ data }), { status: 200 }));
+    const onModified = vi.fn();
+    render(<Harness timerId={timerId} status="SCHEDULED" onModified={onModified} />);
+
+    const button = screen.getByRole("button", { name: "지금 시작" });
+    fireEvent.click(button);
+    // 요청 중에는 두 번 누를 수 없다
+    expect(button).toBeDisabled();
+
+    await waitFor(() => expect(onModified).toHaveBeenCalledWith(data));
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch.mock.calls[0][0]).toBe(`/api/timers/${timerId}/activate`);
+    expect(mockFetch.mock.calls[0][1]).toMatchObject({ method: "POST" });
+    // 낙관적 반영을 하지 않으므로 상위 갱신은 서버 응답 한 번뿐이다
+    expect(onModified).toHaveBeenCalledTimes(1);
+  });
+
+  it("'지금 시작'이 실패하면 서버 메시지를 버튼 아래에 알리고 상위를 바꾸지 않는다", async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: { code: "CONFLICT", message: "이미 시작된 타이머입니다" } }), { status: 409 }),
+    );
+    const onModified = vi.fn();
+    render(<Harness timerId={timerId} status="SCHEDULED" onModified={onModified} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "지금 시작" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("이미 시작된 타이머입니다");
+    expect(screen.getByRole("button", { name: "지금 시작" })).toBeEnabled();
+    expect(onModified).not.toHaveBeenCalled();
   });
 
   it("renders time presets", () => {

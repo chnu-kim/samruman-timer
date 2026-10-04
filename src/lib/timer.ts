@@ -89,6 +89,62 @@ export async function detectScheduledActivation(
   };
 }
 
+export const ALREADY_STARTED_MESSAGE = "이미 시작된 타이머입니다";
+
+/**
+ * 소유자가 예약 시각 전에 직접 시작한다(SCHEDULED → RUNNING).
+ * 시작 시각(scheduled_start_at)도 지금으로 바꿔, 실제 시작 시각을 읽는 곳(오버레이 경과 시간 등)이 어긋나지 않게 한다.
+ * 예약 시각이 이미 지났다면 호출 전에 detectScheduledActivation이 그 시각 기준으로 전이시켜야 한다.
+ */
+export async function activateTimerNow(
+  db: D1Database,
+  timer: Timer,
+  actorName: string,
+  actorUserId: string
+): Promise<{ timer: Timer; log: TimerLog }> {
+  if (timer.status === "DELETED") {
+    throw new TimerStateError("타이머를 찾을 수 없습니다", 404, "NOT_FOUND");
+  }
+  if (timer.status !== "SCHEDULED") {
+    throw new TimerStateError(ALREADY_STARTED_MESSAGE, 409, "CONFLICT");
+  }
+
+  const now = nowISO();
+  const log = createLog(
+    timer.id, "ACTIVATE", actorName, actorUserId, 0, timer.baseRemainingSeconds, timer.baseRemainingSeconds, now
+  );
+
+  const results = await db.batch([
+    db
+      .prepare(
+        `UPDATE timers SET status = 'RUNNING', last_calculated_at = ?, scheduled_start_at = ?, updated_at = ? WHERE ${STATE_GUARD}`
+      )
+      .bind(now, now, now, ...stateGuardBinds(timer)),
+    db
+      .prepare(INSERT_LOG_IF_CHANGED)
+      .bind(log.id, log.timerId, log.actionType, log.actorName, log.actorUserId, log.deltaSeconds, log.beforeSeconds, log.afterSeconds, log.createdAt),
+  ]);
+  if (!applied(results)) {
+    // 예약 상태에서는 시간 변경이 막혀 있으므로, 가드가 어긋났다면 다른 요청이 먼저 시작했거나 삭제한 것이다
+    const current = await reloadTimerState(db, timer);
+    if (current.status === "DELETED") {
+      throw new TimerStateError("타이머를 찾을 수 없습니다", 404, "NOT_FOUND");
+    }
+    throw new TimerStateError(ALREADY_STARTED_MESSAGE, 409, "CONFLICT");
+  }
+
+  return {
+    timer: {
+      ...timer,
+      status: "RUNNING",
+      lastCalculatedAt: now,
+      scheduledStartAt: now,
+      updatedAt: now,
+    },
+    log,
+  };
+}
+
 export async function detectExpiry(
   db: D1Database,
   timer: Timer

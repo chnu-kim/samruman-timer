@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { calculateRemaining, detectScheduledActivation, detectExpiry, modifyTimer } from "@/lib/timer";
+import { calculateRemaining, detectScheduledActivation, detectExpiry, modifyTimer, activateTimerNow, TimerStateError } from "@/lib/timer";
 import type { Timer } from "@/types";
 
 // ─── calculateRemaining ───
@@ -105,6 +105,76 @@ describe("detectScheduledActivation", () => {
     const result = await detectScheduledActivation(db, timer);
     expect(result.status).toBe("EXPIRED");
     expect(db.batch).not.toHaveBeenCalled();
+  });
+});
+
+// ─── activateTimerNow (C031 '지금 시작') ───
+
+describe("activateTimerNow", () => {
+  function createMockDB() {
+    const preparedStatement = {
+      bind: vi.fn().mockReturnThis(),
+      run: vi.fn().mockResolvedValue({}),
+      first: vi.fn().mockResolvedValue(null),
+      all: vi.fn().mockResolvedValue({ results: [] }),
+    };
+    return {
+      prepare: vi.fn().mockReturnValue(preparedStatement),
+      batch: vi.fn().mockResolvedValue([{ meta: { changes: 1 } }]),
+      _stmt: preparedStatement,
+    } as unknown as D1Database & { _stmt: typeof preparedStatement; batch: ReturnType<typeof vi.fn> };
+  }
+
+  function makeTimer(overrides: Partial<Timer> = {}): Timer {
+    return {
+      id: "timer-1",
+      projectId: "proj-1",
+      title: "Test Timer",
+      description: null,
+      baseRemainingSeconds: 3600,
+      lastCalculatedAt: "2025-01-01T00:00:00Z",
+      status: "SCHEDULED",
+      scheduledStartAt: new Date(Date.now() + 1_000).toISOString(), // 예약 시각 직전
+      createdBy: "user-1",
+      createdAt: "2025-01-01T00:00:00Z",
+      updatedAt: "2025-01-01T00:00:00Z",
+      ...overrides,
+    };
+  }
+
+  it("예약 시각 직전 → 지금 기준으로 RUNNING, 시작 시각도 지금, ACTIVATE 로그(before=after=잔여)", async () => {
+    const db = createMockDB();
+    const before = Date.now();
+    const { timer, log } = await activateTimerNow(db, makeTimer(), "방송인", "user-1");
+    expect(timer.status).toBe("RUNNING");
+    expect(timer.baseRemainingSeconds).toBe(3600);
+    expect(timer.lastCalculatedAt).toBe(log.createdAt);
+    expect(timer.scheduledStartAt).toBe(log.createdAt);
+    expect(new Date(log.createdAt).getTime()).toBeGreaterThanOrEqual(before - 1000);
+    expect(log).toMatchObject({ actionType: "ACTIVATE", actorName: "방송인", actorUserId: "user-1", deltaSeconds: 0, beforeSeconds: 3600, afterSeconds: 3600 });
+    expect(calculateRemaining(timer.baseRemainingSeconds, timer.lastCalculatedAt)).toBe(3600);
+    expect(db.batch).toHaveBeenCalledTimes(1);
+  });
+
+  it("SCHEDULED가 아니면(RUNNING·EXPIRED) 409, 쓰기 없음", async () => {
+    for (const status of ["RUNNING", "EXPIRED"] as const) {
+      const db = createMockDB();
+      await expect(activateTimerNow(db, makeTimer({ status }), "방송인", "user-1")).rejects.toMatchObject({ status: 409, code: "CONFLICT" });
+      expect(db.batch).not.toHaveBeenCalled();
+    }
+  });
+
+  it("CAS 실패 후 다시 읽은 상태가 삭제면 404, 시작됐으면 409", async () => {
+    const deleted = createMockDB();
+    deleted.batch.mockResolvedValueOnce([{ meta: { changes: 0 } }]);
+    const err = await activateTimerNow(deleted, makeTimer(), "방송인", "user-1").catch((e) => e);
+    expect(err).toBeInstanceOf(TimerStateError);
+    expect(err.status).toBe(404);
+
+    const started = createMockDB();
+    started.batch.mockResolvedValueOnce([{ meta: { changes: 0 } }]);
+    started._stmt.first.mockResolvedValueOnce({ status: "RUNNING", base_remaining_seconds: 3600, last_calculated_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z" });
+    await expect(activateTimerNow(started, makeTimer(), "방송인", "user-1")).rejects.toMatchObject({ status: 409 });
   });
 });
 

@@ -80,6 +80,9 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
   const [error, setError] = useState("");
   const [recentActors, setRecentActors] = useState<string[]>([]);
   const [defaultActor, setDefaultActor] = useState("");
+  // 예약 타이머 '지금 시작'. 시간 조작 폼과 오류 문구가 섞이지 않도록 따로 둔다
+  const [activating, setActivating] = useState(false);
+  const [activateError, setActivateError] = useState("");
   // 실패 시 입력을 되돌릴 때, 요청 중에 새로 입력한 값을 덮어쓰지 않도록 최신 입력을 들고 있는다
   const inputsRef = useRef({ hours, minutes, seconds });
   inputsRef.current = { hours, minutes, seconds };
@@ -247,12 +250,36 @@ export function TimerControls({ timerId, status, remainingSeconds, selectedActio
     }
   }
 
+  // 낙관적 반영 없이 서버 확정 후에만 바꾼다. 응답은 modify와 같은 형태라 상위가 기록·그래프·목표를 새로 불러온다
+  async function handleActivate() {
+    setActivateError("");
+    setActivating(true);
+    try {
+      const res = await authFetch(`/api/timers/${timerId}/activate`, { method: "POST" });
+      if (!res.ok) {
+        const json = (await res.json().catch(() => null)) as ApiErrorResponse | null;
+        setActivateError(json?.error?.message || "타이머를 시작하지 못했습니다.");
+        return;
+      }
+      const json = (await res.json()) as ApiSuccessResponse<TimerModifyResponse>;
+      onModified?.(json.data);
+    } catch {
+      setActivateError("타이머를 시작하지 못했습니다.");
+    } finally {
+      setActivating(false);
+    }
+  }
+
   if (status === "SCHEDULED") {
     return (
-      <div className={className}>
+      <div className={cn("space-y-3", className)}>
         <p className="text-sm text-muted-foreground">
-          예약된 타이머는 시작 전까지 시간을 변경할 수 없습니다. 시작 시각을 바꾸려면 타이머를 삭제한 뒤 다시 만드세요.
+          시작 시각까지 기다리거나 지금 시작할 수 있습니다.
         </p>
+        <Button type="button" onClick={handleActivate} disabled={activating} className="max-md:min-h-11">
+          지금 시작
+        </Button>
+        {activateError && <p className="text-sm text-red-600 dark:text-red-400" role="alert">{activateError}</p>}
       </div>
     );
   }

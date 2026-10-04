@@ -393,7 +393,7 @@
 - **근거**: [11-timer-running-owner--d-light.png](ux-review/11-timer-running-owner--d-light.png), [19-timer-stats--d-light.png](ux-review/19-timer-stats--d-light.png) · `src/app/layout.tsx:20-23`
 
 #### UX-43. 예약 타이머를 조기 시작하거나 시작 시각을 바꿀 방법이 없다
-- **상태**: 해결 — 최소안. 예약 안내에 '시작 시각을 바꾸려면 타이머를 삭제한 뒤 다시 만드세요.'를 덧붙였다(소유자 삭제 버튼과 DELETE API가 SCHEDULED에서도 동작함을 확인). '지금 시작'은 수요 확인 후 검토한다.
+- **상태**: 해결 — 조기 시작. 예약 카드에 '지금 시작' 버튼(`POST /api/timers/[id]/activate`, 수동 `ACTIVATE`)을 두고 안내를 '시작 시각까지 기다리거나 지금 시작할 수 있습니다.'로 바꿨다(2026-10 UX 백로그 C031). 시작 시각 변경은 아직 없고 늦추려면 삭제 후 재생성한다.
 - **심각도**: minor · **영역**: 타이머 상태
 - **관찰**: SCHEDULED 패널에는 안내 문구만 있다. PATCH는 title과 description만 받는다. 남은 수단은 삭제 후 재생성이다. 예약 타이머에는 로그가 없어 잃는 데이터는 없다.
 - **이유**: 방송이 일찍 시작되면 폼을 다시 채워야 한다.

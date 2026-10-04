@@ -122,6 +122,12 @@ describe("proxy: 보호 라우트 — 토큰 없음", () => {
     expect(res.status).toBe(401);
   });
 
+  it("POST /api/timers/abc/activate → 401", async () => {
+    const req = makeRequest("POST", "/api/timers/abc/activate");
+    const res = await proxy(req);
+    expect(res.status).toBe(401);
+  });
+
   it("DELETE /api/projects/abc/goals/g1 → 401", async () => {
     const req = makeRequest("DELETE", "/api/projects/abc/goals/g1");
     const res = await proxy(req);

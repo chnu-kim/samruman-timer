@@ -31,7 +31,7 @@
 | 401 | `UNAUTHORIZED` | 인증 필요 |
 | 403 | `FORBIDDEN` | 권한 없음 |
 | 404 | `NOT_FOUND` | 리소스 없음 |
-| 409 | `CONFLICT` | 동시 변경과 계속 겹침 (`POST /api/timers/[id]/modify`) |
+| 409 | `CONFLICT` | 동시 변경과 계속 겹침 (`POST /api/timers/[id]/modify`), 이미 시작된 타이머 (`POST /api/timers/[id]/activate`) |
 | 500 | `INTERNAL_ERROR` | 서버 오류 |
 | 503 | `SERVICE_UNAVAILABLE` | 원격 D1 스키마가 코드보다 뒤처짐 (`GET /api/health`) |
 
@@ -503,6 +503,42 @@ CHZZK OAuth 콜백을 처리한다.
       "beforeSeconds": 3600,
       "afterSeconds": 7200,
       "createdAt": "2025-01-01T00:00:00Z"
+    }
+  }
+}
+```
+
+### POST /api/timers/[id]/activate
+
+예약(`SCHEDULED`) 타이머를 예약 시각 전에 지금 시작한다. 방송을 일찍 켰을 때 OBS 오버레이 주소를 바꾸지 않고 같은 타이머로 시작하기 위한 것이다.
+
+- **인증**: 필요 (프로젝트 소유자만)
+- **요청 본문**: 없음
+- **동작**:
+  - 먼저 예약 활성화 감지를 실행한다. 예약 시각이 이미 지났으면 그 시각 기준으로 자동 활성화되고(`actor_name` = `'system'`) 이 요청은 `409`로 끝난다
+  - 아직 예약 상태면 `status = RUNNING`, `last_calculated_at = scheduled_start_at = now`로 바꾸고 `ACTIVATE` 로그를 남긴다(`actor_name` = 소유자 닉네임, `actor_user_id` = 소유자, delta 0, before = after = 잔여). 상태 쓰기는 `STATE_GUARD` 조건이라 다른 요청이 먼저 시작·삭제했으면 쓰지 않는다
+- **에러**:
+  - `400`: 타이머 ID가 32자 hex가 아님
+  - `401`: 인증 없음
+  - `403`: 프로젝트 소유자 아님
+  - `404`: 타이머 없음 또는 삭제됨 (처리 중 다른 요청이 삭제한 경우 포함)
+  - `409`: 이미 시작됨(`RUNNING`·`EXPIRED`, 예약 시각 경과로 자동 활성화된 경우 포함)
+- **응답**: `200 OK`. 형태는 `POST /api/timers/[id]/modify`와 같다(`log`는 이번 `ACTIVATE` 로그)
+```json
+{
+  "data": {
+    "id": "timer_id",
+    "remainingSeconds": 3600,
+    "status": "RUNNING",
+    "log": {
+      "id": "log_id",
+      "actionType": "ACTIVATE",
+      "actorName": "소유자 닉네임",
+      "actorUserId": "user_id",
+      "deltaSeconds": 0,
+      "beforeSeconds": 3600,
+      "afterSeconds": 3600,
+      "createdAt": "2026-10-04T10:00:00Z"
     }
   }
 }
