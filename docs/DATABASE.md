@@ -4,7 +4,7 @@
 
 Cloudflare D1 (SQLite 호환)을 사용한다. 스키마는 `migrations/` 디렉토리에서 마이그레이션 파일로 관리한다.
 
-아래 스키마는 `migrations/0001`~`0009`를 순서대로 적용한 최종 형태다. 일부 테이블은 마이그레이션 중 재생성되어 최초 정의와 다르다(예: `timers`, `timer_logs`의 `id`는 `DEFAULT`가 없다). ID와 날짜는 앱 코드에서 `generateId()`·`nowISO()`로 채운다.
+아래 스키마는 `migrations/0001`~`0010`을 순서대로 적용한 최종 형태다. 일부 테이블은 마이그레이션 중 재생성되어 최초 정의와 다르다(예: `timers`, `timer_logs`의 `id`는 `DEFAULT`가 없다). ID와 날짜는 앱 코드에서 `generateId()`·`nowISO()`로 채운다.
 
 ## 테이블 스키마
 
@@ -63,7 +63,7 @@ CREATE TABLE timers (
 
 ### timer_logs
 
-`0001`에서 생성, `0002`(`ACTIVATE`)와 `0003`(`DELETE`)에서 테이블을 재생성했다. `0003` 이후 `id`에는 `DEFAULT`가 없다.
+`0001`에서 생성, `0002`(`ACTIVATE`)와 `0003`(`DELETE`)에서 테이블을 재생성했다. `0003` 이후 `id`에는 `DEFAULT`가 없다. `0010`에서 `reverted_at` 컬럼 추가(되돌리기).
 
 ```sql
 CREATE TABLE timer_logs (
@@ -75,9 +75,12 @@ CREATE TABLE timer_logs (
   delta_seconds INTEGER NOT NULL DEFAULT 0,
   before_seconds INTEGER NOT NULL,
   after_seconds INTEGER NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  reverted_at TEXT  -- 0010
 );
 ```
+
+- `reverted_at`: 되돌린(취소 처리한) 시각. `NULL`이면 유효한 기록이다. `ADD`·`SUBTRACT`에만 채워진다. 행은 지우지 않고 기록 목록에 남지만, 통계·그래프·목표 소비 시간 집계는 `reverted_at IS NULL`인 행만 쓴다(`docs/TIMER-LOGIC.md` "되돌리기")
 
 ### overlay_settings
 
@@ -172,6 +175,7 @@ migrations/
   0007_refresh_tokens.sql   — refresh token 테이블 (refresh_tokens + 인덱스 3개)
   0008_overlay_animation.sql — overlay_settings.animation 컬럼 추가
   0009_timer_unique_and_session_lifetime.sql — 프로젝트당 비삭제 타이머 UNIQUE 부분 인덱스(먼저 기존 중복은 가장 먼저 만든 1개만 남기고 DELETED + DELETE 로그), refresh_tokens.family_expires_at(기존 행은 family 최초 발급 + 90일, expires_at도 그 안으로 줄임)
+  0010_log_reverted.sql — timer_logs.reverted_at(되돌리기: 기록은 남기고 집계에서 제외)
 ```
 
 ### 규칙

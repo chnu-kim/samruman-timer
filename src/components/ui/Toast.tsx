@@ -1,22 +1,40 @@
 "use client";
 
-import { createContext, useCallback, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 type ToastVariant = "success" | "error" | "info";
+
+interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
+interface ToastOptions {
+  /** 토스트 안의 버튼 하나(예: 되돌리기). 누르면 실행하고 토스트를 닫는다 */
+  action?: ToastAction;
+  /** 표시 시간(ms). 기본 3초, 버튼이 있으면 6초 */
+  duration?: number;
+}
 
 interface ToastItem {
   id: number;
   message: string;
   variant: ToastVariant;
+  action?: ToastAction;
+  duration: number;
   exiting?: boolean;
 }
 
 interface ToastContextValue {
-  toast: (message: string, variant?: ToastVariant) => void;
+  toast: (message: string, variant?: ToastVariant, options?: ToastOptions) => void;
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
+
+const DEFAULT_DURATION_MS = 3000;
+const ACTION_DURATION_MS = 6000;
+const EXIT_MS = 200;
 
 let toastId = 0;
 
@@ -38,43 +56,78 @@ const iconPaths: Record<ToastVariant, string> = {
   info: "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
 };
 
+/**
+ * 토스트는 한 번에 하나다. 새 토스트가 이전 것을 바로 교체한다(연속 조작에서 쌓이지 않게).
+ */
 export function ToastProvider({ children }: { children: React.ReactNode }) {
-  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [current, setCurrent] = useState<ToastItem | null>(null);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const removeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const toast = useCallback((message: string, variant: ToastVariant = "info") => {
-    const id = ++toastId;
-    setToasts((prev) => [...prev, { id, message, variant }]);
-
-    setTimeout(() => {
-      setToasts((prev) =>
-        prev.map((t) => (t.id === id ? { ...t, exiting: true } : t)),
-      );
-      setTimeout(() => {
-        setToasts((prev) => prev.filter((t) => t.id !== id));
-      }, 200);
-    }, 3000);
+  const clearTimers = useCallback(() => {
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    if (removeTimerRef.current) clearTimeout(removeTimerRef.current);
+    hideTimerRef.current = null;
+    removeTimerRef.current = null;
   }, []);
+
+  const scheduleHide = useCallback((id: number, duration: number) => {
+    clearTimers();
+    hideTimerRef.current = setTimeout(() => {
+      setCurrent((prev) => (prev?.id === id ? { ...prev, exiting: true } : prev));
+      removeTimerRef.current = setTimeout(() => {
+        setCurrent((prev) => (prev?.id === id ? null : prev));
+      }, EXIT_MS);
+    }, duration);
+  }, [clearTimers]);
+
+  const toast = useCallback((message: string, variant: ToastVariant = "info", options: ToastOptions = {}) => {
+    const id = ++toastId;
+    const duration = options.duration ?? (options.action ? ACTION_DURATION_MS : DEFAULT_DURATION_MS);
+    setCurrent({ id, message, variant, action: options.action, duration });
+    scheduleHide(id, duration);
+  }, [scheduleHide]);
+
+  useEffect(() => clearTimers, [clearTimers]);
+
+  function dismiss() {
+    clearTimers();
+    setCurrent(null);
+  }
+
+  // 버튼이 있는 토스트는 마우스를 올리거나 포커스가 들어간 동안 닫지 않는다(시간 제한 안에 누를 수 있게)
+  function pause() {
+    if (current?.action) clearTimers();
+  }
+  function resume() {
+    if (current?.action && !current.exiting) scheduleHide(current.id, current.duration);
+  }
 
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      {/* 토스트에는 누를 요소가 없으므로 탭이 아래(모바일 하단 빠른 액션 바 등)로 통과하게 둔다.
-          md 미만에서는 하단 바 위로 올려 버튼 라벨을 가리지 않게 한다 */}
-      <div className="fixed bottom-24 md:bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
-        {toasts.map((t) => (
+      {/* 컨테이너는 탭을 아래(모바일 하단 빠른 액션 바 등)로 통과시킨다. 버튼이 있는 토스트만 포인터를 받는다.
+          모바일 하단 바가 있으면 그 바로 위(--quick-bar-h, globals.css)에 띄워 바와 입력부를 가리지 않는다 */}
+      <div className="fixed left-4 right-4 bottom-[calc(var(--quick-bar-h,0px)+1rem)] z-50 flex flex-col items-stretch gap-2 pointer-events-none md:left-auto md:items-end">
+        {current && (
           <div
-            key={t.id}
+            key={current.id}
             className={cn(
-              "flex items-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium shadow-md",
-              variantStyles[t.variant],
+              "flex items-center gap-2 rounded-lg border text-sm font-medium shadow-md",
+              current.action ? "pointer-events-auto py-1 pl-4 pr-1" : "px-4 py-3",
+              variantStyles[current.variant],
             )}
             style={{
-              animation: t.exiting
-                ? "toast-out 0.2s ease-in forwards"
-                : "toast-in 0.2s ease-out",
+              animation: current.exiting
+                ? `toast-out ${EXIT_MS / 1000}s ease-in forwards`
+                : `toast-in ${EXIT_MS / 1000}s ease-out`,
             }}
+            onMouseEnter={pause}
+            onMouseLeave={resume}
+            onFocus={pause}
+            onBlur={resume}
             // 오류는 개별 alert로 즉시 읽힌다. 성공·정보는 아래 상시 live region이 읽는다
-            role={t.variant === "error" ? "alert" : undefined}
+            role={current.variant === "error" ? "alert" : undefined}
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -83,21 +136,33 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               viewBox="0 0 24 24"
               stroke="currentColor"
               strokeWidth={2}
+              aria-hidden="true"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d={iconPaths[t.variant]} />
+              <path strokeLinecap="round" strokeLinejoin="round" d={iconPaths[current.variant]} />
             </svg>
-            {t.message}
+            <span className="min-w-0 flex-1">{current.message}</span>
+            {current.action && (
+              <button
+                type="button"
+                onClick={() => {
+                  const action = current.action;
+                  dismiss();
+                  action?.onClick();
+                }}
+                className="min-h-11 shrink-0 rounded-md px-3 font-semibold underline underline-offset-2 hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {current.action.label}
+              </button>
+            )}
           </div>
-        ))}
+        )}
       </div>
       {/* 성공·정보 토스트용 live region. 토스트와 함께 새로 삽입된 role=status 노드는
           스크린리더가 읽지 않을 수 있으므로 영역은 항상 렌더하고 내용만 바꾼다 */}
       <div role="status" aria-live="polite" className="sr-only">
-        {toasts
-          .filter((t) => t.variant !== "error")
-          .map((t) => (
-            <p key={t.id}>{t.message}</p>
-          ))}
+        {current && current.variant !== "error" && (
+          <p key={current.id}>{current.message}</p>
+        )}
       </div>
     </ToastContext.Provider>
   );
