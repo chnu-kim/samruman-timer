@@ -26,7 +26,7 @@ describe("SessionExpiredHandler + authFetch", () => {
         })
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ error: { code: "UNAUTHORIZED", message: "유효하지 않은 세션입니다" } }), {
+        new Response(JSON.stringify({ error: { code: "SESSION_EXPIRED", message: "유효하지 않은 세션입니다" } }), {
           status: 401,
         })
       );

@@ -268,8 +268,8 @@ Next 16 관례상 `proxy.ts`가 표준이지만 이 프로젝트는 `middleware.
 | 상황 | 응답 | 운영 로그 |
 |------|------|-----------|
 | `refresh` 쿠키 없음 | 401 `UNAUTHORIZED` | 없음 (로그아웃 상태의 정상 흐름이라 양이 많다) |
-| 재사용 감지(`reuse_detected`) | 401 `UNAUTHORIZED` | warn `auth.refresh.reuse_detected` {userId, familyId} |
-| 그 밖의 거부(`not_found`·`expired`·`family_expired`·`revoked`·`user_missing`) | 401 `UNAUTHORIZED` | info `auth.refresh.rejected` {reason} |
+| 재사용 감지(`reuse_detected`) | 401 `SESSION_EXPIRED` | warn `auth.refresh.reuse_detected` {userId, familyId} |
+| 그 밖의 거부(`not_found`·`expired`·`family_expired`·`revoked`·`user_missing`) | 401 `SESSION_EXPIRED` | info `auth.refresh.rejected` {reason} |
 | 갱신 중 D1 장애·JWT 서명 실패 등 예외 | **500 `INTERNAL_ERROR`** | error `auth.refresh.failed` {method, path, ...오류 필드} |
 
 D1 장애를 401로 내면 "세션 만료"로 가려져 운영자가 장애를 알아채지 못한다. 그래서 500으로 낸다. 클라이언트에서 500은 이렇게 보인다.
@@ -321,6 +321,7 @@ POST /api/auth/logout
 
 - `authFetch()`(`src/lib/auth-fetch.ts`)는 `fetch`를 감싸 401이면 `fireSessionExpired()`를 호출한다
 - `fireSessionExpired()`(`src/lib/session-expired.ts`)는 페이지 수명 동안 한 번만 `window`에 `session-expired` 이벤트를 보낸다
-- `SessionExpiredHandler`(`src/components/providers/`)가 이벤트를 받아 토스트("세션이 만료되었습니다. 다시 로그인해주세요.")를 띄우고 1.5초 뒤 `loginUrlWithNext(현재 경로 + 쿼리)`로 이동한다
+- `SessionExpiredHandler`(`src/components/providers/`)가 이벤트를 받아 토스트("세션이 만료되어 로그인 화면으로 이동합니다.")를 띄우고 1.5초 뒤 `sessionExpiredLoginUrl(현재 경로 + 쿼리)`(`/login?next=…&expired=1`)로 이동한다
 - `/api/auth/me` 조회(헤더, 프로젝트·타이머 페이지)는 `authFetch`가 아닌 `fetch`를 써서 비로그인 401이 세션 만료로 처리되지 않는다
+- 미들웨어는 `refresh` 쿠키가 없으면 401 `UNAUTHORIZED`, 있는데 갱신이 거부되면 401 `SESSION_EXPIRED`를 낸다. 로그아웃 상태로도 열 수 있는 화면이 첫 로드부터 보호 API를 부를 때는 이 코드로 나눈다. 통계 화면(`/timers/[id]/stats`)은 `fetch`로 부르고 `SESSION_EXPIRED`일 때만 `fireSessionExpired()`를 직접 부르며, `UNAUTHORIZED`면 '로그인이 필요합니다' 안내만 보인다. `authFetch`는 코드와 무관하게 모든 401을 세션 만료로 본다(로그인한 사용자만 부르는 경로에서 쓴다)
 - refresh 도중 서버 오류로 미들웨어가 500을 내면 `authFetch`는 이벤트를 보내지 않는다. 호출한 화면의 오류 처리가 그대로 동작한다 (`SessionExpiredHandler.test.tsx`)

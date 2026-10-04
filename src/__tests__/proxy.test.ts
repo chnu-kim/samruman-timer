@@ -102,6 +102,13 @@ describe("proxy: 비보호 라우트", () => {
 });
 
 describe("proxy: 보호 라우트 — 토큰 없음", () => {
+  // 통계 라우트의 404(없는 타이머)·403(소유자 아님) 판별보다 먼저 401이 난다. 통계 화면은 이 코드로 '로그인 필요'를 띄운다
+  it("GET /api/timers/abc/stats → 라우트 판별 전에 401 UNAUTHORIZED", async () => {
+    const res = await proxy(makeRequest("GET", "/api/timers/abc/stats"));
+    expect(res.status).toBe(401);
+    expect((await parseJson(res)).error.code).toBe("UNAUTHORIZED");
+  });
+
   it("POST /api/projects → 401", async () => {
     const req = makeRequest("POST", "/api/projects");
     const res = await proxy(req);
@@ -256,6 +263,7 @@ describe("proxy: refresh 거부 사유 로깅", () => {
     );
 
     expect(res.status).toBe(401);
+    expect((await parseJson(res)).error.code).toBe("SESSION_EXPIRED");
     const requestId = res.headers.get("x-request-id");
     expect(requestId).toMatch(UUID_RE);
     const logged = entries(consoleWarn);
@@ -281,7 +289,8 @@ describe("proxy: refresh 거부 사유 로깅", () => {
 
       expect(res.status).toBe(401);
       const body = await parseJson(res);
-      expect(body.error.code).toBe("UNAUTHORIZED");
+      // 로그아웃 상태(refresh 쿠키 없음)의 UNAUTHORIZED와 구분해 화면이 세션 만료 흐름을 탄다
+      expect(body.error.code).toBe("SESSION_EXPIRED");
       expect(entries(consoleLog)).toEqual([
         expect.objectContaining({ level: "info", event: "auth.refresh.rejected", reason }),
       ]);
