@@ -150,7 +150,7 @@ describe("CountdownDisplay", () => {
       <CountdownDisplay remainingSeconds={60} status="RUNNING" size="large" />,
     );
     const timer = screen.getByRole("timer");
-    // C140: 모바일은 clamp()로 폭에 비례(390px에서 약 66px), sm부터 60px
+    // C140: 모바일은 clamp()로 폭에 비례(353px부터 상한 60px), sm부터 60px
     expect(timer.className).toContain("text-[length:clamp(3rem,17vw,3.75rem)]");
     expect(timer.className).toContain("sm:text-6xl");
   });

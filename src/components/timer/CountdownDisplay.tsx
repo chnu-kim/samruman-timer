@@ -105,7 +105,7 @@ export function CountdownDisplay({
           role="timer"
           className={cn(
             size === "large"
-              // 모바일은 폭에 비례해 키운다(390px에서 약 66px로 화면 폭의 약 80%). 가장 작은 폭에서도 한 줄에 들어가게 아래를 3rem으로 막는다
+              // 모바일은 폭에 비례해 키우되 sm(60px)을 넘지 않게 3.75rem에서 멈춘다(353px부터 60px, 320px에서 약 54px). 가장 작은 폭에서도 한 줄에 들어가게 아래를 3rem으로 막는다
               ? "text-[length:clamp(3rem,17vw,3.75rem)] leading-none sm:text-6xl font-mono font-bold tracking-tight"
               : "text-lg font-mono font-semibold",
             isExpired && "text-muted-foreground",
