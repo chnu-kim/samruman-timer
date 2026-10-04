@@ -115,6 +115,56 @@ describe("오류 화면", () => {
     expect(screen.queryByRole("heading", { name: "타이머를 찾을 수 없습니다" })).not.toBeInTheDocument();
   });
 
+  const emptyStats = {
+    summary: { totalEvents: 0, totalAddedSeconds: 0, totalSubtractedSeconds: 0, netAddedSeconds: 0, uniqueDonors: 0, peakHour: null },
+    topDonors: [],
+    hourlyDistribution: [],
+    dailyActivity: [],
+  };
+
+  it("정상 통계를 본 뒤 없는 타이머로 바뀌면 이전 통계 대신 안내를 보인다", async () => {
+    stubFetch((url) => {
+      if (url === "/api/timers/x1") return jsonResponse({ id: "x1", projectId: "p1", projectName: "첫 방송" });
+      if (url === "/api/timers/x1/stats") return jsonResponse(emptyStats);
+      if (url.startsWith("/api/timers/x1/graph")) return jsonResponse({ mode: "cumulative", points: [] });
+      return new Response(null, { status: 404 });
+    });
+    const { rerender } = render(<TimerStatsPage />);
+    await screen.findByRole("heading", { level: 1, name: /첫 방송 통계/ });
+
+    route.id = "x2";
+    rerender(<TimerStatsPage />);
+    await screen.findByRole("heading", { level: 1, name: "타이머를 찾을 수 없습니다" });
+    expect(screen.queryByRole("heading", { name: /첫 방송 통계/ })).not.toBeInTheDocument();
+  });
+
+  it("늦게 도착한 이전 타이머의 응답이 새 타이머 화면을 덮어쓰지 않는다", async () => {
+    let releaseOld: () => void = () => {};
+    const oldGate = new Promise<void>((r) => { releaseOld = r; });
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/api/timers/x1")) {
+        await oldGate;
+        if (url === "/api/timers/x1") return jsonResponse({ id: "x1", projectId: "p1", projectName: "이전 방송" });
+        if (url === "/api/timers/x1/stats") return jsonResponse(emptyStats);
+        return jsonResponse({ mode: "cumulative", points: [] });
+      }
+      if (url === "/api/timers/x2") return jsonResponse({ id: "x2", projectId: "p2", projectName: "새 방송" });
+      if (url === "/api/timers/x2/stats") return jsonResponse(emptyStats);
+      return jsonResponse({ mode: "cumulative", points: [] });
+    }) as typeof fetch;
+
+    const { rerender } = render(<TimerStatsPage />);
+    route.id = "x2";
+    rerender(<TimerStatsPage />);
+    await screen.findByRole("heading", { level: 1, name: /새 방송 통계/ });
+
+    releaseOld();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.getByRole("heading", { level: 1, name: /새 방송 통계/ })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /이전 방송 통계/ })).not.toBeInTheDocument();
+  });
+
   it("일시적 오류는 지금처럼 다시 시도를 보여 주고 링크는 없다", async () => {
     stubFetch(() => new Response(null, { status: 500 }));
     render(<TimerStatsPage />);
