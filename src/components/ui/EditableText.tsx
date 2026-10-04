@@ -32,6 +32,9 @@ export function EditableText({
   // Enter·Esc·저장/취소 버튼으로 끝냈을 때만 편집 버튼으로 포커스를 돌린다.
   // 다른 곳을 클릭하거나 Tab으로 나가서(blur) 저장된 경우는 사용자가 옮긴 포커스를 빼앗지 않는다
   const restoreFocusRef = useRef(false);
+  // 저장 진행 중 여부. Enter로 저장하면 input이 disabled가 되며 blur가 일어나 handleSave를 또 부르는데,
+  // saving 상태는 다음 렌더에야 보이므로 즉시 바뀌는 ref로 막아 요청이 두 번 나가지 않게 한다
+  const savingRef = useRef(false);
 
   useEffect(() => {
     setDraft(value);
@@ -48,12 +51,14 @@ export function EditableText({
   }, [editing]);
 
   async function handleSave() {
+    if (savingRef.current) return;
     const trimmed = draft.trim();
     if (!trimmed || trimmed === value) {
       setDraft(value);
       setEditing(false);
       return;
     }
+    savingRef.current = true;
     setSaving(true);
     try {
       await onSave(trimmed);
@@ -62,6 +67,7 @@ export function EditableText({
       setDraft(value);
       setEditing(false);
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }

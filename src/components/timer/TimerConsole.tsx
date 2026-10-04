@@ -342,8 +342,8 @@ export function TimerConsole({ timerId, initialSnapshot, initialFailed = false, 
   // 화면에 마지막으로 반영한 값과 그 시각, 그 값의 updatedAt. 폴링 값이 다른 기기의 변경인지 판단하는 기준이다.
   // 이 화면의 조작은 응답의 updatedAt까지 반영하므로(handleModified) 다음 폴링이 같은 변경을 외부 변경으로 보지 않는다
   const syncedRef = useRef<(SyncedTimerSnapshot & { updatedAt: string }) | null>(null);
-  // 화면이 마지막으로 받아들인 서버 updatedAt. syncedRef는 렌더 뒤에 바뀌므로, 조작 응답이 렌더 전에 연달아 도착해도
-  // 옛 응답을 가려낼 수 있게 handleModified가 받아들이는 즉시 여기에도 적는다
+  // 화면이 마지막으로 받아들인 서버 updatedAt. syncedRef는 렌더 뒤에 바뀌므로, 조작 응답·폴링 응답이 렌더 전에 연달아 도착해도
+  // 옛 응답을 가려낼 수 있게 handleModified·pollTimer가 받아들이는 즉시 여기에도 적는다. 롤백도 이 값으로 걸러진다(TimerControls)
   const appliedUpdatedAtRef = useRef<string | null>(timer?.updatedAt ?? null);
   useEffect(() => {
     syncedRef.current = timer
@@ -358,7 +358,7 @@ export function TimerConsole({ timerId, initialSnapshot, initialFailed = false, 
   const pollTimer = useCallback(async () => {
     // 응답 없이 멈춘 요청도 시간 제한(fetchTimerDetail)에 걸려 실패로 센다.
     // 화면의 updatedAt을 since로 실어, 그사이 바뀐 것이 시간(추가·차감)인지 제목 같은 메타 정보뿐인지 서버가 알려 주게 한다
-    const { status, data: serverData } = await fetchTimerDetail(timerId, syncedRef.current?.updatedAt);
+    const { status, data: serverData } = await fetchTimerDetail(timerId, appliedUpdatedAtRef.current ?? undefined);
     if (status === 404) {
       onTimerRemovedRef.current?.();
       return;
@@ -367,14 +367,17 @@ export function TimerConsole({ timerId, initialSnapshot, initialFailed = false, 
     if (!serverData) throw new Error(`poll ${status}`);
     const synced = syncedRef.current;
     // 이 화면이 이미 반영한 것보다 옛 상태다(조작 직전에 떠난 폴링이 조작 응답 뒤에 도착). 화면을 되돌리지 않고 버린다.
-    // 시각으로 바꿔 비교한다(밀리초 유무 등 표기가 달라도 글자 순서가 아니라 시간 순서로). 읽을 수 없는 값이면 버리지 않는다
-    if (synced && Date.parse(serverData.updatedAt) < Date.parse(synced.updatedAt)) return;
+    // 시각으로 바꿔 비교한다(밀리초 유무 등 표기가 달라도 글자 순서가 아니라 시간 순서로). 읽을 수 없는 값이면 버리지 않는다.
+    // 기준은 렌더 뒤에 바뀌는 syncedRef가 아니라 받아들이는 즉시 바뀌는 appliedUpdatedAtRef다(응답이 렌더 전에 도착해도 거른다)
+    const applied = appliedUpdatedAtRef.current;
+    if (applied && Date.parse(serverData.updatedAt) < Date.parse(applied)) return;
+    appliedUpdatedAtRef.current = serverData.updatedAt;
     // updatedAt이 다르면 1~2초짜리 변경이어도 다른 기기의 조작으로 본다. 3초 임계(hasExternalChange)는 상태 전이와
     // updatedAt이 같은 채로 값만 어긋난 경우를 잡는다. 다만 서버가 그사이 추가·차감이 없었다고 하면(deltaSinceSeconds === null:
     // 오버레이 설정의 제목 수정 등) 기록·그래프·목표가 바뀌지 않았으므로 다시 받지 않는다. 필드가 없으면(되돌리기가 끼어 합계를
     // 낼 수 없을 때 등) 바뀐 것으로 본다. 상태 전이(예약 활성화·만료)는 hasExternalChange가 따로 잡는다
     const metaOnly = serverData.deltaSinceSeconds === null;
-    const externalChange = !!synced && ((synced.updatedAt !== serverData.updatedAt && !metaOnly) || hasExternalChange(synced, serverData, Date.now()));
+    const externalChange = !!synced && (((applied ?? synced.updatedAt) !== serverData.updatedAt && !metaOnly) || hasExternalChange(synced, serverData, Date.now()));
 
     setTimer((prev) => {
       if (!prev) return prev;
@@ -433,7 +436,8 @@ export function TimerConsole({ timerId, initialSnapshot, initialFailed = false, 
   function handleModified(data: TimerModifyResponse) {
     // 빠른 연속 조작에서 앞 요청의 응답이 뒤 요청의 응답보다 늦게 오면, 그 값(잔여·상태·updatedAt)은 이미 반영한 것보다 옛 상태다.
     // 폴링과 같은 규칙(시각 비교, 같거나 읽을 수 없으면 반영)으로 버려 화면과 저장한 updatedAt을 되돌리지 않는다.
-    // updatedAt이 없는 값(낙관적 반영·롤백)은 지연 없이 그대로 반영한다
+    // updatedAt이 없는 값(낙관적 반영)은 지연 없이 그대로 반영한다. 롤백은 조작 직전의 updatedAt을 실어 와, 그 뒤 더 새 확정 값
+    // (뒤 조작의 응답 등)이 반영됐으면 같은 규칙으로 버려진다. 같으면 지연 없이 되돌린다
     const applied = appliedUpdatedAtRef.current;
     if (data.updatedAt && applied && Date.parse(data.updatedAt) < Date.parse(applied)) return;
     if (data.updatedAt) appliedUpdatedAtRef.current = data.updatedAt;
@@ -646,6 +650,7 @@ export function TimerConsole({ timerId, initialSnapshot, initialFailed = false, 
                 onTimerRemoved={() => onTimerRemovedRef.current?.()}
                 quickActorRef={quickActorRef}
                 nicknamePromptRef={nicknamePromptRef}
+                appliedUpdatedAtRef={appliedUpdatedAtRef}
                 expired={expired}
                 disconnected={connection.disconnected}
                 className={hideControlsHeading ? undefined : "mt-3"}

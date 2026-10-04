@@ -54,6 +54,20 @@ describe("EditableText", () => {
     expect(onSave).toHaveBeenCalledWith("새 제목");
   });
 
+  it("Enter로 저장하는 중 input이 disabled가 되며 생기는 blur는 다시 저장하지 않는다(요청 1회)", async () => {
+    let finish: () => void = () => {};
+    const onSave = vi.fn(() => new Promise<void>((r) => { finish = r; }));
+    render(<EditableText value="제목" onSave={onSave} editable as="h1" />);
+    fireEvent.click(screen.getByRole("button", { name: "제목 편집" }));
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "새 제목" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    // 브라우저는 저장 중 disabled가 된 input에서 blur를 낸다(jsdom은 내지 않아 직접 낸다)
+    fireEvent.blur(input);
+    await act(async () => { finish(); });
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
   it("다른 곳으로 포커스를 옮겨 저장되면 포커스를 빼앗지 않는다", async () => {
     render(
       <>

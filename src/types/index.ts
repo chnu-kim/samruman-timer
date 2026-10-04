@@ -218,7 +218,8 @@ export interface TimerModifyResponse {
   status: TimerStatus;
   /**
    * 변경 뒤 타이머의 updatedAt. 콘솔이 저장해 두었다 다음 폴링 값과 비교해 자기 조작을 다른 기기의 변경으로 보지 않는다.
-   * 서버 응답(modify·revert·activate)에는 늘 있고, 클라이언트가 만드는 낙관적 반영·롤백 값에는 없다
+   * 서버 응답(modify·revert·activate)에는 늘 있고, 클라이언트가 만드는 낙관적 반영 값에는 없다. 롤백 값에는 조작 직전에
+   * 화면이 받아들인 updatedAt을 실어, 그 뒤 더 새 확정 값이 반영됐으면 옛 응답처럼 버려지게 한다
    */
   updatedAt?: string;
   /**

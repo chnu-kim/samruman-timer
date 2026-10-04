@@ -109,7 +109,7 @@ export const PATCH = withErrorHandler(async (
   if (name !== undefined) {
     if (typeof name !== "string" || !name.trim() || name.trim().length > 100) {
       return NextResponse.json(
-        { error: { code: "BAD_REQUEST", message: "name은 1~100자 문자열이어야 합니다" } },
+        { error: { code: "BAD_REQUEST", message: "이름은 1~100자로 입력해 주세요" } },
         { status: 400 }
       );
     }
@@ -119,7 +119,7 @@ export const PATCH = withErrorHandler(async (
   if (description !== undefined) {
     if (description !== null && (typeof description !== "string" || description.length > 500)) {
       return NextResponse.json(
-        { error: { code: "BAD_REQUEST", message: "description은 최대 500자 문자열이어야 합니다" } },
+        { error: { code: "BAD_REQUEST", message: "설명은 500자 이내로 입력해 주세요" } },
         { status: 400 }
       );
     }

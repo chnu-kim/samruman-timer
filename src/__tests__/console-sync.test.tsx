@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
 // 콘솔 폴링의 외부 변경 판정(updatedAt)과 타이머 상세 요청의 시간 제한
-import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, act, within } from "@testing-library/react";
 import ProjectDetailPage from "@/app/projects/[id]/page";
 import { resetMeCache } from "@/lib/session-me";
+
+// 화면 전체를 jsdom에 그리는 무거운 파일이라 이 파일만 시간 제한을 늘린다(전역은 기본 5초). 전체 실행 하나면 가장 느린 테스트가
+// 1초 안팎(동시 2개 2.5초)이지만, 실행이 겹치면(에이전트 동시 실행. 전체 실행 4개 동시에 13초까지) CPU 경합으로 5초를 넘는다
+vi.setConfig({ testTimeout: 20_000 });
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "p1" }),
@@ -123,6 +127,35 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
+
+/** 1시간 추가(ADD) 조작의 서버 응답 */
+const modifyResponse = (remainingSeconds: number, updatedAt: string, logId: string) => jsonResponse({
+  id: "t1",
+  remainingSeconds,
+  status: "RUNNING",
+  updatedAt,
+  log: { id: logId, actionType: "ADD", actorName: "기본냥", actorUserId: "u1", deltaSeconds: 3600, beforeSeconds: 0, afterSeconds: 0, createdAt: updatedAt, revertedAt: null },
+});
+
+/** 조작(modify)과, hold.detail이 참인 동안의 상세(폴링) 요청을 붙잡아 두었다 테스트가 원하는 순서로 돌려준다 */
+function holdRequests() {
+  const modify: Array<(r: Response) => void> = [];
+  const detail: Array<(r: Response) => void> = [];
+  const hold = { detail: false, modify, detailHeld: detail };
+  const base = global.fetch;
+  global.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url === "/api/timers/t1/modify") return new Promise<Response>((resolve) => modify.push(resolve));
+    if (hold.detail && url.split("?")[0] === "/api/timers/t1") return new Promise<Response>((resolve) => detail.push(resolve));
+    return base(input, init);
+  }) as typeof fetch;
+  return hold;
+}
+
+/** 붙잡힌 응답 하나가 화면 상태(ref)에 반영될 만큼 마이크로태스크를 흘린다. act 안에서 부르면 그사이 렌더는 일어나지 않는다 */
+async function drainMicrotasks() {
+  for (let i = 0; i < 50; i++) await Promise.resolve();
+}
 
 const count = (prefix: string) => vi.mocked(global.fetch).mock.calls.filter(([u]) => String(u).startsWith(prefix)).length;
 
@@ -258,13 +291,6 @@ describe("폴링의 외부 변경 판정 (updatedAt)", () => {
       if (String(input) === "/api/timers/t1/modify") return new Promise<Response>((resolve) => held.push(resolve));
       return base(input, init);
     }) as typeof fetch;
-    const modifyResponse = (remainingSeconds: number, updatedAt: string, logId: string) => jsonResponse({
-      id: "t1",
-      remainingSeconds,
-      status: "RUNNING",
-      updatedAt,
-      log: { id: logId, actionType: "ADD", actorName: "기본냥", actorUserId: "u1", deltaSeconds: 3600, beforeSeconds: 0, afterSeconds: 0, createdAt: updatedAt, revertedAt: null },
-    });
     render(<ProjectDetailPage />);
     await waitFor(() => expect(screen.getByLabelText("시청자 닉네임")).toHaveValue("기본냥"));
 
@@ -286,6 +312,96 @@ describe("폴링의 외부 변경 판정 (updatedAt)", () => {
     await vi.advanceTimersByTimeAsync(10_000);
     expect(count("/api/timers/t1/graph")).toBe(graphs);
     expect(screen.getByRole("timer")).toHaveTextContent(/^02:5\d/);
+  });
+
+  it("역순 응답이 렌더 전에 연달아 도착해도(같은 틱) 앞 조작의 옛 응답을 버린다", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const hold = holdRequests();
+    render(<ProjectDetailPage />);
+    await waitFor(() => expect(screen.getByLabelText("시청자 닉네임")).toHaveValue("기본냥"));
+
+    fireEvent.keyDown(window, { key: "1", code: "Digit1" });
+    fireEvent.keyDown(window, { key: "1", code: "Digit1" });
+    await waitFor(() => expect(hold.modify).toHaveLength(2));
+    server.base = remaining() + 7200;
+    server.at = Date.now();
+    server.updatedAt = T2;
+    // 뒤 조작의 응답과 앞 조작의 옛 응답을 렌더 없이 잇달아 반영한다. 렌더 뒤에 바뀌는 기준(syncedRef)으로는 거를 수 없다
+    await act(async () => {
+      hold.modify[1](modifyResponse(server.base, T2, "l3"));
+      await drainMicrotasks();
+      hold.modify[0](modifyResponse(server.base - 3600, T1, "l2"));
+      await drainMicrotasks();
+    });
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    expect(screen.getByRole("timer")).toHaveTextContent(/^0(3:00:00|2:5\d)/);
+
+    const graphs = count("/api/timers/t1/graph");
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(count("/api/timers/t1/graph")).toBe(graphs);
+    expect(screen.getByRole("timer")).toHaveTextContent(/^02:5\d/);
+  });
+
+  it("앞 조작이 늦게 실패해도 그사이 확정된 뒤 조작의 값을 롤백으로 덮지 않는다", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const hold = holdRequests();
+    render(<ProjectDetailPage />);
+    await waitFor(() => expect(screen.getByLabelText("시청자 닉네임")).toHaveValue("기본냥"));
+
+    // 하단 바 프리셋(낙관적 반영 경로)으로 조작 A·B(각 1시간). 서버에는 B만 반영됐다(2시간, updatedAt T1)
+    const bar = document.querySelector<HTMLElement>("[data-quick-bar]")!;
+    fireEvent.click(within(bar).getByRole("button", { name: "+1시간" }));
+    await waitFor(() => expect(hold.modify).toHaveLength(1));
+    await waitFor(() => expect(within(bar).getByRole("button", { name: "+1시간" })).toBeEnabled());
+    fireEvent.click(within(bar).getByRole("button", { name: "+1시간" }));
+    await waitFor(() => expect(hold.modify).toHaveLength(2));
+    // 두 조작이 낙관적으로 반영돼 있다(3시간)
+    expect(screen.getByRole("timer")).toHaveTextContent(/^0(3:00:00|2:5\d)/);
+    server.base = remaining() + 3600;
+    server.at = Date.now();
+    server.updatedAt = T1;
+    await act(async () => { hold.modify[1](modifyResponse(server.base, T1, "l3")); });
+    await waitFor(() => expect(screen.getByRole("timer")).toHaveTextContent(/^0(2:00:00|1:5\d)/));
+
+    // A가 늦게 실패한다. 롤백은 A 직전 값(1시간)이지만 그 뒤 B가 확정됐으므로 반영하지 않는다
+    await act(async () => {
+      hold.modify[0](new Response(JSON.stringify({ error: { code: "INTERNAL", message: "x" } }), { status: 500, headers: { "Content-Type": "application/json" } }));
+    });
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    expect(screen.getByRole("timer")).toHaveTextContent(/^0(2:00:00|1:5\d)/);
+  });
+
+  it("조작 응답과 그보다 옛 폴링 응답이 렌더 전에 연달아 도착해도 폴링 값으로 되돌리지 않는다", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const hold = holdRequests();
+    render(<ProjectDetailPage />);
+    await consoleReady();
+
+    // 조작 전에 떠난 폴링(옛 상태 T0)을 붙잡아 둔다
+    hold.detail = true;
+    await vi.advanceTimersByTimeAsync(5_000);
+    await waitFor(() => expect(hold.detailHeld).toHaveLength(1));
+    const stale = jsonResponse(detail());
+
+    fireEvent.keyDown(window, { key: "1", code: "Digit1" });
+    await waitFor(() => expect(hold.modify).toHaveLength(1));
+    server.base = remaining() + 3600;
+    server.at = Date.now();
+    server.updatedAt = T1;
+    await act(async () => {
+      hold.modify[0](modifyResponse(server.base, T1, "l2"));
+      await drainMicrotasks();
+      hold.detailHeld[0](stale);
+      await drainMicrotasks();
+    });
+    hold.detail = false;
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    expect(screen.getByRole("timer")).toHaveTextContent(/^0(2:00:00|1:5\d)/);
+    // 저장한 updatedAt도 T1로 남아 다음 폴링이 이 조작을 다른 기기의 변경으로 보지 않는다
+    const graphs = count("/api/timers/t1/graph");
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(count("/api/timers/t1/graph")).toBe(graphs);
+    expect(screen.getByRole("timer")).toHaveTextContent(/^01:5\d/);
   });
 });
 
