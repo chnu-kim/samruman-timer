@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import { ToastProvider, useToast } from "../Toast";
 
 function Trigger() {
@@ -17,8 +17,9 @@ describe("Toast", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "알림" }));
 
-    const item = screen.getByText("추가 완료", { selector: "div" });
+    const item = screen.getByText("추가 완료", { selector: "span" }).parentElement!.parentElement!;
     expect(item.className).not.toMatch(/pointer-events-auto/);
+    expect(item.className).toMatch(/bg-background/); // 불투명 바탕
     expect(item.parentElement?.className).toMatch(/pointer-events-none/);
   });
 
@@ -51,5 +52,98 @@ describe("Toast", () => {
     fireEvent.click(screen.getByRole("button", { name: "오류" }));
     expect(screen.getByRole("alert")).toHaveTextContent("실패했습니다");
     expect(screen.getByRole("status")).not.toHaveTextContent("실패했습니다");
+  });
+
+  // C018: 연속 조작에서 토스트가 쌓이지 않는다
+  it("한 번에 하나만 보이고 새 토스트가 이전 것을 바로 교체한다", () => {
+    function Many() {
+      const { toast } = useToast();
+      return <button onClick={() => [1, 2, 3, 4, 5].forEach((n) => toast(`+${n}분 · 시청자`, "success"))}>다섯 번</button>;
+    }
+    render(
+      <ToastProvider>
+        <Many />
+      </ToastProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "다섯 번" }));
+    expect(screen.queryByText("+1분 · 시청자")).not.toBeInTheDocument();
+    expect(screen.getAllByText("+5분 · 시청자")).toHaveLength(2); // 화면 1개 + live region 1개
+    expect(screen.getByRole("status")).toHaveTextContent(/^\+5분 · 시청자$/);
+  });
+
+  describe("동작 버튼(되돌리기)", () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    function ActionTrigger({ onUndo }: { onUndo: () => void }) {
+      const { toast } = useToast();
+      return (
+        <button onClick={() => toast("+10분 · 벌칙룰렛", "success", { action: { label: "되돌리기", onClick: onUndo } })}>
+          추가
+        </button>
+      );
+    }
+
+    it("버튼이 있는 토스트만 포인터를 받고, 누르면 실행하고 닫힌다", () => {
+      const onUndo = vi.fn();
+      render(
+        <ToastProvider>
+          <ActionTrigger onUndo={onUndo} />
+        </ToastProvider>,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "추가" }));
+      const undo = screen.getByRole("button", { name: "되돌리기" });
+      expect(undo.parentElement!.parentElement!.className).toMatch(/pointer-events-auto/);
+      expect(undo.className).toMatch(/min-h-11/); // 44px 터치 타깃
+
+      fireEvent.click(undo);
+      expect(onUndo).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole("button", { name: "되돌리기" })).not.toBeInTheDocument();
+    });
+
+    it("6초 동안 보이고, 마우스를 올린 동안에는 닫히지 않는다", () => {
+      render(
+        <ToastProvider>
+          <ActionTrigger onUndo={vi.fn()} />
+        </ToastProvider>,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "추가" }));
+      act(() => vi.advanceTimersByTime(5900));
+      expect(screen.getByRole("button", { name: "되돌리기" })).toBeInTheDocument();
+
+      const item = screen.getByRole("button", { name: "되돌리기" }).parentElement!.parentElement!;
+      fireEvent.pointerEnter(item, { pointerType: "mouse" });
+      act(() => vi.advanceTimersByTime(20000));
+      expect(screen.getByRole("button", { name: "되돌리기" })).toBeInTheDocument();
+
+      fireEvent.pointerLeave(item, { pointerType: "mouse" });
+      act(() => vi.advanceTimersByTime(6300));
+      expect(screen.queryByRole("button", { name: "되돌리기" })).not.toBeInTheDocument();
+    });
+
+    it("사라지는 중에 마우스가 들어와도 제거된다", () => {
+      render(
+        <ToastProvider>
+          <ActionTrigger onUndo={vi.fn()} />
+        </ToastProvider>,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "추가" }));
+      act(() => vi.advanceTimersByTime(6050)); // 6초 뒤 퇴장 애니메이션(200ms) 중
+      fireEvent.pointerEnter(screen.getByRole("button", { name: "되돌리기" }).parentElement!.parentElement!, { pointerType: "mouse" });
+      act(() => vi.advanceTimersByTime(300));
+      expect(screen.queryByRole("button", { name: "되돌리기" })).not.toBeInTheDocument();
+    });
+
+    it("터치 탭(마우스가 아닌 포인터)은 자동 닫힘을 멈추지 않는다", () => {
+      render(
+        <ToastProvider>
+          <ActionTrigger onUndo={vi.fn()} />
+        </ToastProvider>,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "추가" }));
+      fireEvent.pointerEnter(screen.getByRole("button", { name: "되돌리기" }).parentElement!.parentElement!, { pointerType: "touch" });
+      act(() => vi.advanceTimersByTime(6300));
+      expect(screen.queryByRole("button", { name: "되돌리기" })).not.toBeInTheDocument();
+    });
   });
 });

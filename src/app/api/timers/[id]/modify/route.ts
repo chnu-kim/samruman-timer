@@ -161,7 +161,8 @@ export const POST = withErrorHandler(async (
       ? calculateRemaining(result.timer.baseRemainingSeconds, result.timer.lastCalculatedAt)
       : 0;
 
-  const lastLog = result.logs[result.logs.length - 1];
+  // 이번 요청의 ADD/SUBTRACT 기록. 차감으로 만료되면 마지막 행은 EXPIRE라서 동작으로 골라야 되돌리기가 맞는 행을 가리킨다
+  const actionLog = result.logs.find((l) => l.actionType === body.action) ?? result.logs[result.logs.length - 1];
 
   return NextResponse.json({
     data: {
@@ -169,14 +170,15 @@ export const POST = withErrorHandler(async (
       remainingSeconds,
       status: result.timer.status,
       log: {
-        id: lastLog.id,
-        actionType: lastLog.actionType,
-        actorName: lastLog.actorName,
-        actorUserId: lastLog.actorUserId,
-        deltaSeconds: lastLog.deltaSeconds,
-        beforeSeconds: lastLog.beforeSeconds,
-        afterSeconds: lastLog.afterSeconds,
-        createdAt: lastLog.createdAt,
+        id: actionLog.id,
+        actionType: actionLog.actionType,
+        actorName: actionLog.actorName,
+        actorUserId: actionLog.actorUserId,
+        deltaSeconds: actionLog.deltaSeconds,
+        beforeSeconds: actionLog.beforeSeconds,
+        afterSeconds: actionLog.afterSeconds,
+        createdAt: actionLog.createdAt,
+        revertedAt: null,
       },
     },
   });

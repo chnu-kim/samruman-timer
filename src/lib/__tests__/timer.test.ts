@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { calculateRemaining, detectScheduledActivation, detectExpiry, modifyTimer } from "@/lib/timer";
+import { calculateRemaining, detectScheduledActivation, detectExpiry, modifyTimer, revertAmount } from "@/lib/timer";
 import type { Timer } from "@/types";
 
 // ─── calculateRemaining ───
@@ -387,5 +387,19 @@ describe("타이머 상태 쓰기 CAS (보안 감사 F02)", () => {
 
     expect(result.status).toBe("RUNNING");
     expect(result.baseRemainingSeconds).toBe(600);
+  });
+});
+
+// ─── revertAmount ───
+// 되돌리기는 요청량이 아니라 그 기록이 실제로 바꾼 양만 반대로 적용한다(상태 전이·집계는 integration/timer-revert.test.ts)
+
+describe("revertAmount", () => {
+  it("ADD는 추가한 만큼 뺀다", () => {
+    expect(revertAmount({ actionType: "ADD", beforeSeconds: 3600, afterSeconds: 39600 })).toBe(-36000);
+  });
+
+  it("SUBTRACT는 실제로 줄인 만큼 더한다(0에서 잘린 차감은 요청량보다 작다)", () => {
+    expect(revertAmount({ actionType: "SUBTRACT", beforeSeconds: 600, afterSeconds: 0 })).toBe(600);
+    expect(revertAmount({ actionType: "SUBTRACT", beforeSeconds: 3600, afterSeconds: 3000 })).toBe(600);
   });
 });

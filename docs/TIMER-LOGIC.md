@@ -49,6 +49,8 @@ DELETED: 어느 상태에서든 삭제 시 (soft delete, 복구 API 없음)
 | `RUNNING` | `EXPIRED` | 조회 시 remaining ≤ 0 감지 | `EXPIRE` |
 | `RUNNING` | `EXPIRED` | 시간 차감으로 remaining ≤ 0 | `SUBTRACT` + `EXPIRE` |
 | `EXPIRED` | `RUNNING` | 시간 추가로 remaining > 0 | `REOPEN` + `ADD` |
+| `RUNNING` | `EXPIRED` | 추가 기록을 되돌려 remaining ≤ 0 | `EXPIRE` (system) |
+| `EXPIRED` | `RUNNING` | 차감 기록을 되돌려 remaining > 0 | `REOPEN` (system) |
 | `SCHEDULED`/`RUNNING`/`EXPIRED` | `DELETED` | 소유자가 타이머(또는 프로젝트) 삭제 | `DELETE` |
 
 ## 연산별 로직
@@ -107,6 +109,30 @@ lastCalculatedAt = now
 - `deltaSeconds`: 1~31,536,000(1년) 정수
 - `actorName`: 1~50자 문자열
 
+### 되돌리기 (로그 취소 처리)
+`POST /api/timers/[id]/logs/[logId]/revert` (프로젝트 소유자만). 구현: `revertTimerLog()` (`src/lib/timer.ts`).
+
+잘못 누른 추가·차감을 없던 일로 만든다. **반대 방향 modify가 아니다.** 반대 modify는 기록·통계에 보정 행을 남겨 원래 실수를 그대로 집계하므로, 기록 행에 `reverted_at`을 표시하고 집계에서 뺀다.
+
+```
+amount = before_seconds - after_seconds      // ADD는 -delta, SUBTRACT는 실제로 줄인 양(0에서 잘렸으면 요청량보다 작다)
+newRemaining = max(0, currentRemaining + amount)
+lastCalculatedAt = now
+timer_logs.reverted_at = now                 // 행은 지우지 않는다
+```
+- **현재 잔여에 그 기록의 변경량만** 되돌린다. 그 기록과 되돌리기 사이에 다른 기기의 변경(후원 ADD 등)이 있어도 그 변경은 남는다
+- 대상: 이 타이머의 `ADD`·`SUBTRACT` 기록만. 다른 action은 `400`, 다른 타이머의 기록은 `404`, 이미 되돌린 기록은 `409 CONFLICT`(잔여를 다시 바꾸지 않는다). 시간 제한은 없다(화면은 성공 토스트의 6초 동안만 버튼을 보여 준다)
+- 먼저 조회 시 상태 감지(활성화 → 만료)를 실행한다. DB가 `RUNNING`이지만 이미 0초인 타이머는 만료 시각의 `EXPIRE`가 먼저 남는다
+- 상태 전이는 modify와 같은 규칙이고 전이 기록만 남긴다(보정 행이 아니다, delta 0, actor `system`):
+  - `RUNNING`에서 newRemaining ≤ 0(정확히 0 포함) → `EXPIRED` + `EXPIRE` (before = 되돌리기 전 잔여, after = 0). 만료 뒤 추가로 재시작한 직후 그 추가를 되돌리는 경우가 여기에 해당한다(경과한 몇 초만큼 모자란다)
+  - `EXPIRED`에서 newRemaining > 0 → `RUNNING` + `REOPEN` (before = 0, after = newRemaining). 차감으로 만료시킨 실수를 되돌리는 경우
+  - 이미 0초인 `EXPIRED` 타이머의 `ADD`를 되돌리면 잔여는 0 그대로이고 기록만 취소 처리된다
+- `SCHEDULED`·`DELETED`는 modify와 같이 `400`·`404`
+- 동시성: 타이머 UPDATE에 `STATE_GUARD`와 함께 "그 기록이 아직 되돌려지지 않았음"(`EXISTS ... reverted_at IS NULL`)을 건다. 잔여가 바뀌지 않아도 타이머 행을 써서, 같은 기록을 동시에 두 번 되돌리면 하나만 적용된다. 이어지는 `reverted_at` UPDATE와 전이 로그 INSERT는 `changes() = 1`로 앞 문장이 적용됐을 때만 실행된다
+- 집계 제외: 통계(요약·순위·시간대·일별), 그래프(세 모드), 목표 소비 시간은 `reverted_at IS NULL`인 행만 쓴다. 기록 목록은 되돌린 행도 보여 주고 '되돌림'으로 표시한다
+- 목표는 되돌리지 않는다: 차감으로 만료된 순간 시간 변경 직후의 목표 조회가 DEADLINE 목표를 `FAILED`로 저장한다(만료 뒤 재오픈돼도 되돌리지 않는 기존 규칙). 그래서 그 차감을 되돌려 타이머가 다시 실행돼도 이미 실패 처리된 DEADLINE 목표는 실패로 남는다
+- 잔여 그래프의 한계: 되돌린 행은 빠지지만, 그 행과 되돌리기 사이에 생긴 다른 행의 `after_seconds`는 당시 실제 잔여(되돌린 변경량 포함)라 그대로 그린다. 보통은 몇 초 안에 되돌려 사이 행이 없다
+
 ### 타이머 삭제 (DELETE)
 ```
 status = DELETED
@@ -127,7 +153,7 @@ status = DELETED
   - `baseRemainingSeconds = 0`, `lastCalculatedAt = 실제 만료 시각(lastCalculatedAt + baseRemainingSeconds)`
   - 로그: `EXPIRE` (created_at = 실제 만료 시각, 조회 시각이 아니다)
 
-감지를 실행하는 곳: `GET /api/timers/[id]`, `GET /api/projects/[id]/timers` (활성화 → 만료 순). `POST /api/timers/[id]/modify`는 활성화 감지만 실행한다.
+감지를 실행하는 곳: `GET /api/timers/[id]`, `GET /api/projects/[id]/timers`, `POST /api/timers/[id]/logs/[logId]/revert` (활성화 → 만료 순). `POST /api/timers/[id]/modify`는 활성화 감지만 실행한다.
 
 ## 로그 기록 규칙
 
@@ -137,8 +163,8 @@ status = DELETED
 | `CREATE` | 타이머 생성 | 초기 시간 |
 | `ADD` | 시간 추가 | 추가된 초 |
 | `SUBTRACT` | 시간 차감 | 차감된 초 (양수) |
-| `EXPIRE` | 만료 감지 | 0 |
-| `REOPEN` | 만료→진행 재오픈 | 0 |
+| `EXPIRE` | 만료 감지(조회·차감·추가 되돌리기) | 0 |
+| `REOPEN` | 만료→진행 재오픈(추가·차감 되돌리기) | 0 |
 | `ACTIVATE` | 예약→진행 활성화 | 0 |
 | `DELETE` | 타이머 삭제 | 0 |
 
@@ -151,16 +177,17 @@ status = DELETED
 {
   timer_id:       타이머 ID
   action_type:    CREATE | ADD | SUBTRACT | EXPIRE | REOPEN | ACTIVATE | DELETE
-  actor_name:     변경자 이름 (ADD/SUBTRACT/REOPEN: 시간 변경을 요청한 시청자 닉네임, CREATE/DELETE: 소유자 닉네임, 자동 전이 ACTIVATE/EXPIRE: 'system')
+  actor_name:     변경자 이름 (ADD/SUBTRACT/REOPEN: 시간 변경을 요청한 시청자 닉네임, CREATE/DELETE: 소유자 닉네임, 자동 전이 ACTIVATE/EXPIRE와 되돌리기가 남긴 EXPIRE/REOPEN: 'system')
   actor_user_id:  조작한 소유자 유저 ID (자동 전이는 NULL)
   delta_seconds:  변경량 (초)
   before_seconds: 변경 전 잔여 시간
   after_seconds:  변경 후 잔여 시간
   created_at:     기록 시각
+  reverted_at:    되돌린 시각 (ADD/SUBTRACT만, NULL이면 유효. 0010)
 }
 ```
 
-- 화면에서는 actor_name `'system'`을 '자동'으로 바꿔 표시한다 (`src/lib/utils.ts`, DB 값은 유지)
+- 화면에서는 actor_user_id가 NULL인 `EXPIRE`·`ACTIVATE`·`REOPEN`의 actor_name(`'system'`)을 '자동'으로 바꿔 표시한다 (`src/lib/utils.ts`, DB 값은 유지)
 - 상태 변경과 로그 INSERT는 하나의 `db.batch()`로 묶는다
 
 ## 엣지 케이스
@@ -199,6 +226,7 @@ status = DELETED
 ```
 consumed = max(0, 초기값(CREATE.after_seconds) + Σ ADD.delta - Σ SUBTRACT.delta - 현재 잔여)
 ```
+- Σ는 되돌리지 않은(`reverted_at IS NULL`) 기록만. 되돌리기는 잔여도 같은 양만큼 되돌리므로 consumed는 그대로다(예외: 추가를 되돌려 잔여가 0에서 잘리면 잘린 만큼 consumed가 줄어든다). 되돌린 +10시간을 합에 남기면 consumed가 10시간 뛰어 목표가 잘못 달성 처리된다
 - 현재 잔여: `RUNNING`이면 계산값, `EXPIRED`면 0, `SCHEDULED`면 baseRemainingSeconds
 - 타이머가 없으면 0
 

@@ -57,6 +57,10 @@ export async function loadProgressSnapshot(
  *           - Σ(SUBTRACT.delta_seconds)
  *           - 현재 잔여 시간
  *
+ * 되돌린 기록(reverted_at)은 합계에서 뺀다. 되돌리기가 잔여도 같은 양만큼 되돌리므로 보통 소비 시간은 그대로다
+ * (잔여가 0에서 잘리는 추가 되돌리기만 잘린 만큼 소비 시간이 줄어든다. "그 추가가 없었다면 그때 만료됐을 것"으로 본다).
+ * 빼지 않으면 잘못 누른 +10시간이 되돌린 뒤에도 소비 시간으로 잡혀 목표가 달성 처리된다.
+ *
  * 프로젝트당 타이머 1개(1:1 관계)이므로 단일 타이머 기준.
  */
 export async function calculateRunningSeconds(
@@ -71,8 +75,8 @@ async function runningSecondsOf(db: D1Database, timer: TimerRow): Promise<number
     .prepare(
       `SELECT
          (SELECT after_seconds FROM timer_logs WHERE timer_id = ? AND action_type = 'CREATE' LIMIT 1) AS initial_seconds,
-         (SELECT COALESCE(SUM(delta_seconds), 0) FROM timer_logs WHERE timer_id = ? AND action_type = 'ADD') AS total_added,
-         (SELECT COALESCE(SUM(delta_seconds), 0) FROM timer_logs WHERE timer_id = ? AND action_type = 'SUBTRACT') AS total_subtracted`,
+         (SELECT COALESCE(SUM(delta_seconds), 0) FROM timer_logs WHERE timer_id = ? AND action_type = 'ADD' AND reverted_at IS NULL) AS total_added,
+         (SELECT COALESCE(SUM(delta_seconds), 0) FROM timer_logs WHERE timer_id = ? AND action_type = 'SUBTRACT' AND reverted_at IS NULL) AS total_subtracted`,
     )
     .bind(timer.id, timer.id, timer.id)
     .first<DeltaSumRow>();
