@@ -30,7 +30,8 @@ export default function TimerStatsPage() {
   const [cumulative, setCumulative] = useState<CumulativeGraphPoint[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
+  // 다시 시도해도 결과가 같은 안내(권한 없음·찾을 수 없음). 재시도 대신 돌아갈 곳을 준다
+  const [notice, setNotice] = useState<{ title: string; message: string; action: { href: string; label: string } } | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -41,8 +42,26 @@ export default function TimerStatsPage() {
       ]);
 
       if (statsRes.status === 401 || statsRes.status === 403) {
-        setError(true);
-        setErrorMessage("프로젝트 소유자만 통계를 볼 수 있습니다.");
+        // 타이머 조회는 공개라 소유자가 아니어도 프로젝트로 돌려보낼 수 있다
+        const projectId = timerRes.ok
+          ? ((await timerRes.json()) as ApiSuccessResponse<TimerDetailResponse>).data.projectId
+          : null;
+        setNotice({
+          title: "통계를 볼 수 없습니다",
+          message: "프로젝트 소유자만 통계를 볼 수 있습니다.",
+          action: projectId
+            ? { href: `/projects/${projectId}`, label: "프로젝트로 돌아가기" }
+            : { href: "/projects", label: "프로젝트 목록으로" },
+        });
+        return;
+      }
+
+      if (statsRes.status === 404) {
+        setNotice({
+          title: "타이머를 찾을 수 없습니다",
+          message: "삭제되었거나 주소가 잘못되었습니다.",
+          action: { href: "/projects", label: "프로젝트 목록으로" },
+        });
         return;
       }
 
@@ -81,11 +100,15 @@ export default function TimerStatsPage() {
     );
   }
 
+  if (notice) {
+    return <ErrorState tone="neutral" {...notice} />;
+  }
+
   if (error || !timer || !stats) {
     return (
       <ErrorState
-        message={errorMessage || "통계 데이터를 불러오는데 실패했습니다."}
-        onRetry={errorMessage ? undefined : () => {
+        message="통계 데이터를 불러오는데 실패했습니다."
+        onRetry={() => {
           setError(false);
           setLoading(true);
           fetchData();

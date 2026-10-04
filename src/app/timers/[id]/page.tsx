@@ -39,7 +39,14 @@ export default function TimerRedirectPage() {
   }, [resolve]);
 
   if (notFound) {
-    return <ErrorState message="타이머를 찾을 수 없습니다. 삭제되었거나 주소가 잘못되었습니다." />;
+    return (
+      <ErrorState
+        tone="neutral"
+        title="타이머를 찾을 수 없습니다"
+        message="삭제되었거나 주소가 잘못되었습니다."
+        action={{ href: "/projects", label: "프로젝트 목록으로" }}
+      />
+    );
   }
 
   if (error) {
