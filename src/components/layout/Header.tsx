@@ -56,7 +56,9 @@ export function Header({ initialUser }: HeaderProps = {}) {
       {/* 글자를 크게 키워 한 줄에 다 들어가지 않으면 높이를 고정하지 않고 오른쪽 묶음을 다음 줄로 내린다 */}
       <div className="mx-auto flex min-h-14 max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-1.5">
         <div className="flex items-center gap-3 sm:gap-6">
-          <Link href="/" className="flex pointer-coarse:min-h-11 items-center gap-2 text-base sm:text-lg font-bold text-accent whitespace-nowrap">
+          {/* 한글 글꼴(Noto Sans KR)이 늦게 받아지면 서비스 이름 폭이 대체 글꼴보다 약 6px 넓어져 옆 '프로젝트' 링크가 밀린다(CLS).
+              nav가 보이는 sm부터는 두 글꼴 폭을 모두 덮는 최소 폭(글자 크기 비례)을 잡아 nav 자리를 고정한다 */}
+          <Link href="/" className="flex pointer-coarse:min-h-11 items-center gap-2 text-base sm:text-lg sm:min-w-[7.25em] font-bold text-accent whitespace-nowrap">
             <LogoIcon className="w-5 h-5" />
             삼루먼타이머
           </Link>

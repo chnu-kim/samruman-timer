@@ -272,7 +272,7 @@ describe("프로젝트 콘솔", () => {
     expect(calls.some((c) => c.url.startsWith("/api/timers/t1/logs") && c.url.includes("limit=5"))).toBe(true);
     expect(screen.queryByRole("button", { name: "추가" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "전체 기록" }));
+    fireEvent.click(await screen.findByRole("button", { name: "전체 기록" }));
     expect(await screen.findByRole("heading", { name: "기록" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "추가", pressed: false })).toBeInTheDocument();
     await waitFor(() =>

@@ -48,3 +48,13 @@ describe("그래프 래퍼", () => {
     warn.mockRestore();
   });
 });
+
+// W29: 콘솔 그래프는 크기를 재기 전 첫 렌더에도 'width(-1) and height(-1)' 경고를 남기지 않는다
+describe("잔여 시간 추이 첫 렌더", () => {
+  it("크기를 재기 전에도 Recharts 크기 경고가 없다", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    render(<RemainingChart points={[{ timestamp: "2026-10-04T06:30:00Z", remainingSeconds: 600 }]} />);
+    expect(warn.mock.calls.filter(([m]) => String(m).includes("should be greater than 0"))).toHaveLength(0);
+    warn.mockRestore();
+  });
+});

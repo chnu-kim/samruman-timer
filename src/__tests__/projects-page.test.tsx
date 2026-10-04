@@ -23,7 +23,9 @@ beforeEach(() => {
     if (url.startsWith("/api/auth/me")) {
       return jsonResponse({ id: "u1", chzzkUserId: "c1", nickname: "삼루먼", profileImageUrl: null });
     }
-    return jsonResponse({ projects: [], pagination: { page: 1, limit: 12, total: 0, totalPages: 1 } });
+    // 공개 프로젝트(다른 사람의 프로젝트)가 있어야 탭 바가 생긴다(W29)
+    const total = url.startsWith("/api/projects/others") ? 2 : 0;
+    return jsonResponse({ projects: [], pagination: { page: 1, limit: 12, total, totalPages: 1 } });
   }) as typeof fetch;
 });
 
@@ -39,7 +41,7 @@ describe("프로젝트 목록 탭", () => {
   it("화살표 키로 탭을 바꾸면 선택과 포커스가 함께 이동한다", async () => {
     render(<ProjectsPage />);
     const mine = await screen.findByRole("tab", { name: /내 프로젝트/ });
-    const others = screen.getByRole("tab", { name: /다른 프로젝트/ });
+    const others = screen.getByRole("tab", { name: /공개 프로젝트/ });
 
     mine.focus();
     fireEvent.keyDown(mine, { key: "ArrowRight" });
@@ -76,7 +78,7 @@ describe("프로젝트 목록 tabpanel (UX-44)", () => {
 });
 
 describe("탭 개수 로딩 (C148)", () => {
-  it("개수 응답 전에는 '(0)'을 보이지 않고, 응답 뒤에 '(n)'을 보인다", async () => {
+  it("개수 응답 전에는 탭도 '(0)'도 보이지 않고, 응답 뒤에 '(n)'을 보인다", async () => {
     let release: () => void = () => {};
     const gate = new Promise<void>((r) => { release = r; });
     global.fetch = vi.fn(async (input: RequestInfo | URL) => {
@@ -89,14 +91,15 @@ describe("탭 개수 로딩 (C148)", () => {
     }) as typeof fetch;
 
     render(<ProjectsPage />);
-    const mine = await screen.findByRole("tab", { name: /내 프로젝트/ });
-    const others = screen.getByRole("tab", { name: /다른 프로젝트/ });
-    expect(mine).toHaveTextContent(/^내 프로젝트$/);
-    expect(others).toHaveTextContent(/^다른 프로젝트$/);
+    // W29: 개수를 받기 전에는 탭 바가 있을지(공개 프로젝트가 있는지) 모르므로 제목과 골격만 둔다
+    await screen.findByRole("heading", { name: "프로젝트" });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+    expect(screen.queryByText(/\(0\)/)).not.toBeInTheDocument();
 
     release();
     await screen.findByRole("tab", { name: "내 프로젝트 (5)" });
-    expect(screen.getByRole("tab", { name: "다른 프로젝트 (5)" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "공개 프로젝트 (5)" })).toBeInTheDocument();
   });
 });
 
@@ -115,18 +118,18 @@ describe("카드 소유자 표시 (C099)", () => {
     }) as typeof fetch;
   });
 
-  it("내 프로젝트 탭에서는 소유자 이름을 숨기고, 다른 프로젝트 탭에서는 보인다", async () => {
+  it("내 프로젝트 탭에서는 소유자 이름을 숨기고, 공개 프로젝트 탭에서는 보인다", async () => {
     render(<ProjectsPage />);
     await screen.findByRole("link", { name: "주말 방송" });
     expect(screen.queryByText("삼루먼")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("tab", { name: /다른 프로젝트/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /공개 프로젝트/ }));
     expect(await screen.findByText("삼루먼")).toBeInTheDocument();
   });
 });
 
 describe("신규 유저의 검색·정렬 (UX-46)", () => {
-  function stubProjects(mineTotal: number, loggedIn = true) {
+  function stubProjects(mineTotal: number, loggedIn = true, othersTotal = 2) {
     global.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.startsWith("/api/auth/me")) {
@@ -134,7 +137,7 @@ describe("신규 유저의 검색·정렬 (UX-46)", () => {
           ? jsonResponse({ id: "u1", chzzkUserId: "c1", nickname: "삼루먼", profileImageUrl: null })
           : new Response(null, { status: 401 });
       }
-      const total = url.startsWith("/api/projects/mine") ? mineTotal : 0;
+      const total = url.startsWith("/api/projects/mine") ? mineTotal : url.startsWith("/api/projects/others") ? othersTotal : 0;
       return jsonResponse({ projects: [], pagination: { page: 1, limit: 12, total, totalPages: 1 } });
     }) as typeof fetch;
   }
@@ -149,10 +152,10 @@ describe("신규 유저의 검색·정렬 (UX-46)", () => {
     expect(screen.queryByRole("combobox", { name: "정렬 기준" })).not.toBeInTheDocument();
   });
 
-  it("다른 프로젝트 탭에서는 검색창을 보여 준다", async () => {
+  it("공개 프로젝트 탭에서는 검색창을 보여 준다", async () => {
     stubProjects(0);
     render(<ProjectsPage />);
-    fireEvent.click(await screen.findByRole("tab", { name: /다른 프로젝트/ }));
+    fireEvent.click(await screen.findByRole("tab", { name: /공개 프로젝트/ }));
     expect(screen.getByRole("textbox", { name: "프로젝트 검색" })).toBeInTheDocument();
   });
 
@@ -232,11 +235,11 @@ describe("빈 목록의 만들기 버튼 (C103)", () => {
     expect(screen.getByRole("button", { name: /첫 프로젝트 만들기/ })).toBeInTheDocument();
   });
 
-  it("다른 프로젝트 탭에서는 본문 버튼이 없으므로 헤더 버튼을 보인다", async () => {
+  it("공개 프로젝트 탭에서는 본문 버튼이 없으므로 헤더 버튼을 보인다", async () => {
     stubMine(0);
     render(<ProjectsPage />);
     await screen.findByRole("tab", { name: /내 프로젝트 \(0\)/ });
-    fireEvent.click(screen.getByRole("tab", { name: /다른 프로젝트/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /공개 프로젝트/ }));
     expect(await screen.findByRole("button", { name: /새 프로젝트/ })).toBeInTheDocument();
   });
 
@@ -253,7 +256,6 @@ describe("빈 목록의 만들기 버튼 (C103)", () => {
     }) as typeof fetch;
     render(<ProjectsPage />);
     await screen.findByText("프로젝트를 불러오지 못했습니다.");
-    await screen.findByRole("tab", { name: /내 프로젝트 \(0\)/ });
     expect(screen.getByRole("button", { name: /새 프로젝트/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /첫 프로젝트 만들기/ })).not.toBeInTheDocument();
   });
@@ -283,5 +285,96 @@ describe("로그아웃 목록 소개 한 줄 (C020)", () => {
     render(<ProjectsPage />);
     await screen.findByRole("tab", { name: /내 프로젝트/ });
     expect(screen.queryByText(SITE_DESCRIPTION)).not.toBeInTheDocument();
+  });
+});
+
+// W29: 탭 바·검색줄·빈 문구가 실제로 고를 것이 있는지에 맞고, 로딩 단계마다 줄이 끼어들어 아래를 밀지 않는다
+describe("목록 탭·빈 상태·로딩 골격 (W29)", () => {
+  const me = { id: "u1", chzzkUserId: "c1", nickname: "삼루먼", profileImageUrl: null };
+  const card = (i: number) => ({
+    id: `p${i}`, name: `프로젝트 ${i}`, description: null, ownerNickname: "삼루먼", timerCount: 0,
+    timerStatus: null, remainingSeconds: null, scheduledStartAt: null, createdAt: "2026-03-01T12:00:00Z",
+  });
+
+  function stub({ mine, others, othersCountStatus = 200, loggedIn = true }: { mine: number; others: number; othersCountStatus?: number; loggedIn?: boolean }) {
+    const calls: string[] = [];
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.startsWith("/api/auth/me")) return loggedIn ? jsonResponse(me) : new Response(null, { status: 401 });
+      const isCount = url.endsWith("?limit=1");
+      if (url.startsWith("/api/projects/others") && isCount && othersCountStatus !== 200) return new Response(null, { status: othersCountStatus });
+      const total = url.startsWith("/api/projects/mine") ? mine : others;
+      const shown = isCount ? 0 : Math.min(total, 12);
+      return jsonResponse({ projects: Array.from({ length: shown }, (_, i) => card(i)), pagination: { page: 1, limit: 12, total, totalPages: Math.max(1, Math.ceil(total / 12)) } });
+    }) as typeof fetch;
+    return calls;
+  }
+
+  it("공개 프로젝트가 0개면 탭 바 없이 내 목록만 보인다", async () => {
+    stub({ mine: 47, others: 0 });
+    render(<ProjectsPage />);
+    await screen.findByRole("link", { name: "프로젝트 0" });
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.queryByRole("tabpanel")).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "프로젝트 검색" })).toBeInTheDocument();
+  });
+
+  it("공개 탭이 0건이면 검색·정렬을 숨기고 내 프로젝트와 다른 빈 문구를 보인다", async () => {
+    // 개수를 받지 못하면 탭은 남고, 고른 탭의 첫 페이지가 0건인지로 판단한다
+    stub({ mine: 3, others: 0, othersCountStatus: 500 });
+    render(<ProjectsPage />);
+    fireEvent.click(await screen.findByRole("tab", { name: "공개 프로젝트" }));
+    expect(await screen.findByText("공개된 프로젝트가 없습니다.")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.queryByText("아직 프로젝트가 없습니다.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /첫 프로젝트 만들기/ })).not.toBeInTheDocument();
+  });
+
+  it("로그아웃 목록이 비어 있으면 '공개된 프로젝트가 없습니다'다", async () => {
+    stub({ mine: 0, others: 0, loggedIn: false });
+    render(<ProjectsPage />);
+    expect(await screen.findByText("공개된 프로젝트가 없습니다.")).toBeInTheDocument();
+  });
+
+  it("탭 개수는 처음 한 번만 세고, 검색·정렬·탭을 바꿔도 다시 세거나 검색 결과 수로 바꾸지 않는다", async () => {
+    const calls = stub({ mine: 5, others: 2 });
+    render(<ProjectsPage />);
+    await screen.findByRole("tab", { name: "내 프로젝트 (5)" });
+    fireEvent.change(screen.getByRole("combobox", { name: "정렬 기준" }), { target: { value: "name" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "프로젝트 검색" }), { target: { value: "주말" } });
+    await waitFor(() => expect(calls.some((u) => u.includes("q="))).toBe(true), { timeout: 2000 });
+    fireEvent.click(screen.getByRole("tab", { name: /공개 프로젝트/ }));
+    await waitFor(() => expect(calls.some((u) => u.startsWith("/api/projects/others") && u.includes("q="))).toBe(true));
+    expect(calls.filter((u) => u.endsWith("?limit=1"))).toHaveLength(2);
+    expect(screen.getByRole("tab", { name: "내 프로젝트 (5)" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "공개 프로젝트 (2)" })).toBeInTheDocument();
+  });
+
+  it("첫 응답 전에는 제목과 첫 페이지 수(12)만큼의 카드 골격만 두고, 본문 줄은 한 번에 그린다", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => { release = r; });
+    stub({ mine: 5, others: 2 });
+    const inner = global.fetch;
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (!String(input).startsWith("/api/auth/me")) await gate;
+      return inner(input, init);
+    }) as typeof fetch;
+    render(<ProjectsPage />);
+    expect(screen.getByRole("heading", { name: "프로젝트" })).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 20));
+    const busy = document.querySelector("[aria-busy=true]")!;
+    expect(busy.querySelectorAll(".grid > div")).toHaveLength(12);
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /새 프로젝트/ })).not.toBeInTheDocument();
+
+    release();
+    await screen.findByRole("tab", { name: "내 프로젝트 (5)" });
+    expect(screen.getByRole("textbox", { name: "프로젝트 검색" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /새 프로젝트/ })).toBeInTheDocument();
+    expect(document.querySelector("[aria-busy=true]")).not.toBeInTheDocument();
   });
 });

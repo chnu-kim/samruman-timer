@@ -149,14 +149,24 @@ describe("콘솔 조회 실패 표시 (W31)", () => {
   });
 
   it("응답을 받기 전에는 빈 상태 문구도 '(0)'도 보이지 않는다", async () => {
+    // W29: 목표가 있는지가 화면 모양(시청자의 목표 영역)을 정하므로 목표를 받기 전에는 골격만 둔다
     api.goals = "pending";
+    const { unmount } = render(<ProjectDetailPage />);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(document.querySelector("[aria-busy=true]")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "최근 기록" })).not.toBeInTheDocument();
+    expect(screen.queryByText(EMPTY_TEXT)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\(0\)/)).not.toBeInTheDocument();
+    unmount();
+
+    // 기록은 섹션 안에서 기다린다. 빈 문구 없이 자리만 둔다
+    api.goals = "ok";
     api.logs = "pending";
     render(<ProjectDetailPage />);
     await screen.findByRole("heading", { name: "최근 기록" });
-
     expect(screen.queryByText(EMPTY_TEXT)).not.toBeInTheDocument();
     expect(screen.queryByText(/불러오지 못했습니다/)).not.toBeInTheDocument();
-    expect(within(goalSection()).getByRole("tab", { name: "진행 중" })).toBeInTheDocument();
+    expect(within(goalSection()).getByRole("tab", { name: "진행 중 (1)" })).toBeInTheDocument();
   });
 
   it("2xx로 0건을 받았을 때만 빈 상태 문구를 보인다", async () => {
@@ -258,13 +268,12 @@ describe("콘솔 조회 실패 표시 (W31)", () => {
     expect(within(expandedLogs()).getByRole("button", { name: "추가" })).toBeInTheDocument();
   });
 
-  it("목표·기록을 받기 전과 실패했을 때는 탭과 '전체 기록'을 숨기지 않는다", async () => {
-    api.goals = "pending";
+  it("기록을 받기 전에는 '전체 기록'을 그리지 않고, 실패했을 때는 탭과 '전체 기록'을 숨기지 않는다", async () => {
+    // W29: 생성 기록뿐인지 판정하기 전에 그렸다가 지우면 깜빡이므로, 첫 기록을 받기 전에는 그리지 않는다
     api.logs = "pending";
     const { unmount } = render(<ProjectDetailPage />);
     await screen.findByRole("heading", { name: "최근 기록" });
-    expect(within(goalSection()).getAllByRole("tab")).toHaveLength(2);
-    expect(within(logSection()).getByRole("button", { name: "전체 기록" })).toBeInTheDocument();
+    expect(within(logSection()).queryByRole("button", { name: "전체 기록" })).not.toBeInTheDocument();
     unmount();
 
     api.goals = 500;
@@ -409,5 +418,51 @@ describe("콘솔 조회 실패 표시 (W31)", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+// W29: 골격 → 콘솔이 한 번에 바뀌고, 그 뒤 기록·그래프가 도착해도 자리를 미리 잡아 두어 아래가 밀리지 않는다
+describe("콘솔 첫 화면 (W29)", () => {
+  it("타이머 상세를 받기 전에는 골격 하나만 두고, 콘솔은 상세를 다시 부르지 않는다", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => { release = r; });
+    const inner = global.fetch;
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/timers/t1") await gate;
+      return inner(input, init);
+    }) as typeof fetch;
+    render(<ProjectDetailPage />);
+    await new Promise((r) => setTimeout(r, 50));
+    // 프로젝트·목표·로그인은 이미 받았지만 콘솔 모양이 정해지지 않았으므로 헤더도 그리지 않는다
+    expect(screen.queryByRole("heading", { name: "테스트 프로젝트" })).not.toBeInTheDocument();
+    expect(document.querySelectorAll("[aria-busy=true]")).toHaveLength(1);
+
+    release();
+    await screen.findByRole("heading", { name: "최근 기록" });
+    expect(screen.getByRole("heading", { name: "테스트 프로젝트" })).toBeInTheDocument();
+    expect(document.querySelector("[aria-busy=true]")).not.toBeInTheDocument();
+    expect(vi.mocked(global.fetch).mock.calls.filter(([u]) => String(u) === "/api/timers/t1")).toHaveLength(1);
+  });
+
+  it("기록·그래프도 상세와 함께 받아 첫 화면에 바로 그리고, 콘솔이 다시 부르지 않는다", async () => {
+    render(<ProjectDetailPage />);
+    await screen.findByRole("heading", { name: "최근 기록" });
+    // 골격 다음 첫 화면에 이미 기록 행과 '전체 기록'이 있다(뒤늦게 채워지거나 나타나지 않는다)
+    expect(within(logSection()).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(logSection()).getByRole("button", { name: "전체 기록" })).toBeInTheDocument();
+    expect(within(graphSection()).queryByLabelText("로딩 중")).not.toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 100));
+    const urls = vi.mocked(global.fetch).mock.calls.map(([u]) => String(u));
+    expect(urls.filter((u) => u.startsWith("/api/timers/t1/logs"))).toHaveLength(1);
+    expect(urls.filter((u) => u.startsWith("/api/timers/t1/graph"))).toHaveLength(1);
+  });
+
+  it("기록·그래프가 늦으면 기다리지 않고 콘솔을 그리며, 그 자리(기록 5행·그래프 높이)를 잡아 둔다", async () => {
+    api.logs = "pending";
+    api.graph = "pending";
+    render(<ProjectDetailPage />);
+    await screen.findByRole("heading", { name: "최근 기록" });
+    expect(logSection().querySelector(".h-\\[19\\.0625rem\\]")).toBeInTheDocument();
+    expect(within(graphSection()).getByLabelText("로딩 중").closest(".h-64")).toBeInTheDocument();
   });
 });
