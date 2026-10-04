@@ -380,6 +380,15 @@ describe("OverlaySettings 네이티브 모달 (C002·C007)", () => {
     showModal.mockRestore();
   });
 
+  // C055: md 미만에서는 가운데 카드가 아니라 화면 아래에 붙은 시트(좌우 꽉, 위 모서리만 둥글게, 90dvh)
+  it("md 미만에서는 하단 시트 모양이다", async () => {
+    render(<OverlaySettings timerId="abc" onClose={() => {}} />);
+    const dialog = await screen.findByRole("dialog", { name: "OBS 오버레이 설정" });
+    for (const cls of ["max-md:mb-0", "max-md:max-w-none", "max-md:rounded-b-none", "max-h-[90dvh]"]) {
+      expect(dialog.className.split(/\s+/)).toContain(cls);
+    }
+  });
+
   it("변경이 없으면 Esc(cancel)로 바로 닫고 기본 닫기는 막는다", async () => {
     const onClose = vi.fn();
     render(<OverlaySettings timerId="abc" onClose={onClose} />);
