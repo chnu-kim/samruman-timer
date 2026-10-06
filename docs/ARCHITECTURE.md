@@ -303,7 +303,7 @@ npx opennextjs-cloudflare build && npx opennextjs-cloudflare deploy --tag=<git s
 - `timers/[id]/page.tsx`만 서버 컴포넌트다(D1 조회 뒤 `redirect()`로 프로젝트 화면으로 보낸다). 나머지 페이지는 클라이언트 컴포넌트라 페이지별 title은 각 라우트의 서버 `layout.tsx`에 둔다. 하위 페이지가 있는 layout(`projects`, `timers/[id]`)은 title을 문자열로 두면 그 아래에서 템플릿이 끊기므로 `{ default, template }`으로 다시 선언한다.
 - 색인 제외: 오버레이·OAuth 콜백·통계(소유자 전용)는 layout의 `robots: noindex`로 막는다. `robots.txt`는 `/api/`만 Disallow한다(Disallow하면 크롤러가 noindex 메타를 읽지 못한다).
 - canonical: `/projects`(검색·정렬 쿼리 통합), `/login`(`?next=`·`?error=` 통합), `/projects/<id>`(상위 canonical을 물려받지 않게 자기 주소).
-- sitemap에는 로그인 없이 보이는 `/projects`, `/login`만 둔다.
+- sitemap에는 첫 화면 `/projects`만 둔다. `/login`은 로그아웃 `/projects`와 같은 진입 화면(`SignInScreen`)이라 같은 본문을 두 번 알리지 않는다(색인·canonical은 그대로). 로그아웃 `/projects`를 `/login`으로 리다이렉트하지 않는 이유: 클라이언트 방식은 401 중복·로드 중 헤더 변화·크롤러 2단 체인이 생기고, 서버 방식은 `projects/layout`에 두면 시청자 상세(`/projects/[id]`)까지 막혀 페이지를 서버·클라이언트로 쪼개야 한다.
 
 ## PWA
 

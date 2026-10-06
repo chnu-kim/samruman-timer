@@ -30,8 +30,9 @@ describe("SEO", () => {
     expect(r.sitemap).toBe(`${SITE_URL}/sitemap.xml`);
   });
 
-  it("sitemap은 로그인 없이 보이는 고정 경로만 담는다", () => {
-    expect(sitemap().map((e) => e.url)).toEqual([`${SITE_URL}/projects`, `${SITE_URL}/login`]);
+  // /login은 로그아웃 /projects와 같은 진입 화면이라 첫 화면 하나만 알린다
+  it("sitemap은 첫 화면 /projects만 담는다", () => {
+    expect(sitemap().map((e) => e.url)).toEqual([`${SITE_URL}/projects`]);
   });
 
   it("오버레이·콜백·통계 화면은 noindex다", () => {

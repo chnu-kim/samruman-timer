@@ -2,7 +2,7 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import ProjectsPage from "@/app/projects/page";
 import { fetchMe, resetMeCache } from "@/lib/session-me";
-import { SITE_DESCRIPTION } from "@/lib/site";
+import { SITE_SUMMARY, SITE_TAGLINE } from "@/lib/site";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -81,12 +81,16 @@ describe("목록은 내 프로젝트만", () => {
     expect(screen.queryByText("삼루먼")).not.toBeInTheDocument();
   });
 
-  it("로그아웃이면 목록을 부르지 않고 소개와 로그인 안내를 보인다", async () => {
+  // 같은 상황(로그인해야 쓸 수 있음)이라 /login과 같은 진입 화면(SignInScreen)을 그린다
+  it("로그아웃이면 목록을 부르지 않고 로그인 화면과 같은 진입 화면을 보인다", async () => {
     const calls = stub({ mine: 0, loggedIn: false });
     render(<ProjectsPage />);
     const login = await screen.findByRole("link", { name: "CHZZK로 로그인" });
     expect(login).toHaveAttribute("href", "/api/auth/login?next=%2Fprojects");
-    expect(screen.getByText(SITE_DESCRIPTION)).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(SITE_TAGLINE);
+    expect(screen.getByText(SITE_SUMMARY)).toBeInTheDocument();
+    expect(screen.queryByText("프로젝트", { selector: "h1" })).not.toBeInTheDocument();
     expect(calls.some((u) => u.startsWith("/api/projects"))).toBe(false);
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /새 프로젝트|첫 프로젝트 만들기/ })).not.toBeInTheDocument();
@@ -96,7 +100,9 @@ describe("목록은 내 프로젝트만", () => {
     stub({ mine: 0, loggedIn: false });
     localStorage.removeItem("signedIn");
     render(<ProjectsPage />);
-    const login = await screen.findByRole("link", { name: "CHZZK로 로그인" });
+    // 확인 전 골격에도 같은 링크가 있으므로 확인이 끝나 진입 화면 하나만 남은 뒤의 링크를 누른다
+    await waitFor(() => expect(document.querySelector("[class*='signed-out']")).not.toBeInTheDocument());
+    const login = screen.getByRole("link", { name: "CHZZK로 로그인" });
     login.addEventListener("click", (e) => e.preventDefault());
     fireEvent.click(login);
     expect(localStorage.getItem("signedIn")).toBe("1");
@@ -200,29 +206,29 @@ describe("빈 목록의 만들기 버튼 (C103)", () => {
   });
 });
 
-// C020: 로그아웃 첫 방문자에게 이 서비스가 무엇인지 한 줄로 알린다
-describe("로그아웃 소개 한 줄 (C020)", () => {
-  it("로그아웃 상태에서는 제목 아래 사이트 설명을 보여 주고 플랫폼 이름은 넣지 않는다", async () => {
+// C020: 로그아웃 첫 방문자에게 이 서비스가 무엇인지 알린다. 공개 소개 문구에는 플랫폼 이름을 넣지 않는다(로그인 버튼은 예외)
+describe("로그아웃 소개 (C020)", () => {
+  it("소개 제목·문구에 플랫폼 이름이 없다", async () => {
     stub({ mine: 0, loggedIn: false });
     render(<ProjectsPage />);
     await screen.findByRole("link", { name: "CHZZK로 로그인" });
-    const description = screen.getByText(SITE_DESCRIPTION);
-    expect(description.tagName).toBe("P");
-    expect(description.textContent).not.toMatch(/CHZZK|치지직/);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).not.toMatch(/CHZZK|치지직/);
+    expect(screen.getByText(SITE_SUMMARY).textContent).not.toMatch(/CHZZK|치지직/);
   });
 
-  it("로그인 상태에서는 설명을 보여 주지 않는다", async () => {
+  it("로그인 상태에서는 소개를 보여 주지 않는다", async () => {
     render(<ProjectsPage />);
     await screen.findByRole("button", { name: /첫 프로젝트 만들기/ });
-    expect(screen.queryByText(SITE_DESCRIPTION)).not.toBeInTheDocument();
+    expect(screen.queryByText(SITE_SUMMARY)).not.toBeInTheDocument();
+    expect(screen.queryByText(SITE_TAGLINE)).not.toBeInTheDocument();
   });
 });
 
 // W29: 로딩 단계마다 줄이 끼어들어 아래를 밀지 않는다
 describe("로딩 골격 (W29)", () => {
-  // 로그인 확인 전 골격에도 로그아웃 방문자로 보이면(html[data-auth=out]) 소개 줄을 CSS로 미리 그리고,
-  // 본문이 되면 같은 요소를 그대로 이어 써 아래를 밀지 않는다. 카드 골격 대신 로그인 안내 높이만 비워 둔다
-  it("로그아웃 힌트면 골격은 소개 줄과 로그인 안내 자리이고, 소개 줄은 본문에서 같은 요소로 남는다", async () => {
+  // 로그인 확인 전에는 진입 화면과 목록 골격을 함께 두고 로그인 힌트(html[data-auth])로만 하나를 보인다.
+  // 힌트로 가르는 클래스는 이 단계에만 붙어, 힌트가 틀린 로그인 사용자의 실제 목록에서 제목이 사라지지 않는다
+  it("확인 전에는 진입 화면(로그아웃 힌트)과 목록 골격(그 밖)을 CSS로 가르고, 확인 뒤에는 하나만 남는다", async () => {
     let releaseMe: () => void = () => {};
     const meGate = new Promise<void>((r) => { releaseMe = r; });
     stub({ mine: 0, loggedIn: false });
@@ -232,18 +238,23 @@ describe("로딩 골격 (W29)", () => {
       return inner(input, init);
     }) as typeof fetch;
     render(<ProjectsPage />);
-    const early = screen.getByText(SITE_DESCRIPTION);
-    expect(early).toHaveClass("hidden", "signed-out:block");
-    const busy = document.querySelector("[aria-busy=true]")!;
-    expect(busy.querySelector(".hidden.signed-out\\:block.h-56")).toBeInTheDocument();
-    expect(busy.querySelector(".grid")!.parentElement).toHaveClass("signed-out:hidden");
+    const tagline = screen.getByRole("heading", { level: 1, name: SITE_TAGLINE, hidden: true });
+    expect(tagline.closest(".hidden.signed-out\\:block")).toBeInTheDocument();
+    const listTitle = screen.getByRole("heading", { level: 1, name: "프로젝트", hidden: true });
+    expect(listTitle.closest("section")).toHaveClass("signed-out:hidden");
 
     releaseMe();
-    const login = await screen.findByRole("link", { name: "CHZZK로 로그인" });
-    expect(login.parentElement).toHaveClass("h-56");
-    const late = screen.getByText(SITE_DESCRIPTION);
-    expect(late).toBe(early);
-    expect(late).not.toHaveClass("hidden");
+    await screen.findByRole("link", { name: "CHZZK로 로그인" });
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(SITE_TAGLINE);
+    expect(document.querySelector("[class*='signed-out']")).not.toBeInTheDocument();
+    expect(screen.queryByText("프로젝트", { selector: "h1" })).not.toBeInTheDocument();
+  });
+
+  it("로그인 사용자의 실제 목록에는 힌트 클래스가 없다", async () => {
+    stub({ mine: 2 });
+    render(<ProjectsPage />);
+    await screen.findByRole("link", { name: "프로젝트 0" });
+    expect(document.querySelector("[class*='signed-out']")).not.toBeInTheDocument();
   });
 
   it("첫 응답 전에는 제목과 첫 페이지 수(12)만큼의 카드 골격만 두고, 본문 줄은 한 번에 그린다", async () => {
