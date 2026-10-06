@@ -13,19 +13,15 @@ import { Pagination } from "@/components/ui/Pagination";
 import { useDebounce } from "@/hooks/useDebounce";
 import { authFetch } from "@/lib/auth-fetch";
 import { fetchMe } from "@/lib/session-me";
-import { rememberSignedIn } from "@/lib/auth-hint";
-import { buttonClassName } from "@/components/ui/Button";
+import { SignInScreen } from "@/components/layout/SignInScreen";
+import { StatePanel } from "@/components/ui/StatePanel";
 import { cn } from "@/lib/utils";
-import { SITE_DESCRIPTION } from "@/lib/site";
 import type { ApiSuccessResponse, ProjectListItem, ProjectListResponse, MeResponse, Pagination as PaginationType } from "@/types";
 
 type SortBy = "latest" | "name";
 
 /** 한 페이지의 카드 수. 로딩 골격도 이 수만큼 그려 첫 페이지와 높이가 같다 */
 const PAGE_SIZE = 12;
-
-/** 로그아웃 본문(로그인 안내)의 높이. 골격도 로그아웃 힌트면 같은 높이만 비워 두어 골격 → 본문 때 아래가 밀리지 않는다 */
-const SIGNED_OUT_BLOCK = "h-56";
 
 export default function ProjectsPage() {
   const [user, setUser] = useState<MeResponse | null>(null);
@@ -114,26 +110,29 @@ export default function ProjectsPage() {
   // 본문 버튼이 실제로 그려질 때만 숨긴다. 목록 요청이 로딩 중이거나 실패하면 본문 버튼이 없어 만들 길이 사라진다
   const hideHeaderCreate = hideSearchControls && !showForm && !loading && !error && projects.length === 0;
 
-  // 화면 모양(검색줄·만들기 버튼·소개 줄·로그인 안내)을 정하는 것을 모두 받기 전에는 제목과 골격만 그린다.
+  // 화면 모양(검색줄·만들기 버튼)을 정하는 것을 모두 받기 전에는 제목과 골격만 그린다.
   // 로그인 확인 → 목록이 따로 도착할 때마다 줄이 끼어들어 아래를 미는 대신 골격 → 본문 한 번에 바뀐다
   const ready = authChecked && (!user || listLoadedOnce);
 
+  // 목록은 로그인한 사용자의 프로젝트만 보인다. 로그아웃이면 /login과 같은 진입 화면을 같은 좌표에 그린다(같은 상황, 같은 모양)
+  if (ready && !user) return <SignInScreen next="/projects" />;
+
   return (
-    <section className={`space-y-6 ${FILL_FIRST_SCREEN}`}>
-      {/* 헤더. 제목은 처음부터 그린다. 제목 줄을 버튼 높이로 잡아 두어 버튼·소개 줄이 나중에 나타나도 제목이 움직이지 않는다 */}
+    <>
+    {/* 로그인 확인 전: 로그아웃 방문자로 보이면(html[data-auth=out], src/lib/auth-hint.ts) 진입 화면을, 그 밖에는 목록 골격을 CSS로만 골라 그린다.
+        힌트로 가르는 클래스는 이 골격 단계에만 붙인다(힌트가 틀린 로그인 사용자의 실제 목록에서 제목이 사라지지 않게) */}
+    {!ready && (
+      <div className="hidden signed-out:block">
+        <SignInScreen next="/projects" />
+      </div>
+    )}
+    <section className={cn("space-y-6", FILL_FIRST_SCREEN, !ready && "signed-out:hidden")}>
+      {/* 헤더. 제목은 처음부터 그린다. 제목 줄을 버튼 높이로 잡아 두어 버튼이 나중에 나타나도 제목이 움직이지 않는다 */}
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex min-h-10 pointer-coarse:min-h-11 items-center">
-            <h1 className="text-2xl font-bold">프로젝트</h1>
-          </div>
-          {/* 처음 온 사람이 이 서비스가 무엇인지 알 수 있게 로그아웃 상태에만 한 줄 소개를 둔다.
-              로그인 확인 전(골격)에도 로그아웃 방문자로 보이면(html[data-auth=out], src/lib/auth-hint.ts) 같은 줄을 미리 그려,
-              골격 → 본문 때 소개 줄이 끼어들어 검색줄·카드를 밀지 않게 한다. 같은 요소를 이어 쓰므로 다시 그려지지 않는다 */}
-          {(!ready || !user) && (
-            <p className={cn("text-sm text-muted-foreground", !ready && "hidden signed-out:block")}>{SITE_DESCRIPTION}</p>
-          )}
+        <div className="flex min-h-10 pointer-coarse:min-h-11 items-center">
+          <h1 className="text-2xl font-bold">프로젝트</h1>
         </div>
-        {ready && user && !hideHeaderCreate && (
+        {ready && !hideHeaderCreate && (
           <Button
             variant={showForm ? "secondary" : "primary"}
             onClick={() => setShowForm(!showForm)}
@@ -160,29 +159,10 @@ export default function ProjectsPage() {
       )}
 
       {!ready ? (
-        // 로그인 힌트면 검색줄 자리 + 첫 페이지 카드 수만큼의 골격, 로그아웃 힌트면 로그인 안내 높이만큼 비워 둔다
-        <div aria-busy="true">
-          <div className={cn("hidden signed-out:block", SIGNED_OUT_BLOCK)} />
-          <div className="space-y-6 signed-out:hidden">
-            <Skeleton className="h-10 w-full pointer-coarse:h-11" />
-            <ProjectCardGridSkeleton count={PAGE_SIZE} />
-          </div>
-        </div>
-      ) : !user ? (
-        // 목록은 로그인한 사용자의 프로젝트만 보인다. 로그아웃이면 만들 수 있다는 것과 로그인 버튼 하나만 둔다
-        <div className={cn("flex flex-col items-center justify-center text-center", SIGNED_OUT_BLOCK)}>
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-            <FolderIcon className="w-8 h-8 text-muted-foreground" />
-          </div>
-          <p className="mt-4 text-muted-foreground">로그인하면 내 타이머 프로젝트를 만들고 관리할 수 있습니다.</p>
-          {/* API 라우트로 전체 이동해야 하므로 <a>다. 로그인 화면과 같이 이동 직전에 힌트를 남겨 돌아온 첫 로드가 로그인 골격을 그린다 */}
-          <a
-            href="/api/auth/login?next=%2Fprojects"
-            onClick={() => rememberSignedIn(true)}
-            className={buttonClassName({ className: "mt-4" })}
-          >
-            CHZZK로 로그인
-          </a>
+        // 검색줄 자리 + 첫 페이지 카드 수만큼의 골격
+        <div className="space-y-6" aria-busy="true">
+          <Skeleton className="h-10 w-full pointer-coarse:h-11" />
+          <ProjectCardGridSkeleton count={PAGE_SIZE} />
         </div>
       ) : (
       <>
@@ -224,21 +204,18 @@ export default function ProjectsPage() {
               <p className="text-muted-foreground">검색 결과가 없습니다.</p>
             </div>
           ) : (
-            <div className="py-16 text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-                <FolderIcon className="w-8 h-8 text-muted-foreground" />
-              </div>
-              <p className="mt-4 text-muted-foreground">아직 프로젝트가 없습니다.</p>
-              {!showForm && (
-                <Button
-                  className="mt-4"
-                  onClick={() => setShowForm(true)}
-                >
-                  <PlusIcon className="w-4 h-4 mr-1" />
-                  첫 프로젝트 만들기
-                </Button>
-              )}
-            </div>
+            <StatePanel
+              icon={<FolderIcon />}
+              message="아직 프로젝트가 없습니다."
+              action={
+                !showForm && (
+                  <Button onClick={() => setShowForm(true)}>
+                    <PlusIcon className="w-4 h-4 mr-1" />
+                    첫 프로젝트 만들기
+                  </Button>
+                )
+              }
+            />
           )
         ) : (
           <>
@@ -260,5 +237,6 @@ export default function ProjectsPage() {
       </>
       )}
     </section>
+    </>
   );
 }

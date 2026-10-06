@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { AlertCircleIcon } from "@/components/ui/Icons";
+import { StatePanel } from "@/components/ui/StatePanel";
 import { cn } from "@/lib/utils";
 
 interface ErrorStateProps {
@@ -53,30 +54,30 @@ export function ErrorState({
       </div>
     );
   }
-  const neutral = tone === "neutral";
   return (
-    <div className={cn("flex flex-col items-center justify-center py-12 text-center", className)}>
-      <div
-        className={cn(
-          "flex h-14 w-14 items-center justify-center rounded-full",
-          neutral ? "bg-foreground/5" : "bg-red-100 dark:bg-red-950/30",
-        )}
-      >
-        <AlertCircleIcon className={cn("w-7 h-7", neutral ? "text-muted-foreground" : "text-red-500")} />
-      </div>
-      {title && <h1 className="mt-4 text-lg font-semibold text-foreground">{title}</h1>}
-      {message && <p className={cn(title ? "mt-1" : "mt-4", "text-muted-foreground")}>{message}</p>}
-      {onRetry && (
-        <Button variant="secondary" className="mt-4" onClick={onRetry}>
-          다시 시도
-        </Button>
-      )}
-      {action && (
-        // Button은 <button>이라 링크에는 같은 secondary·md 모양의 클래스를 입힌다
-        <Link href={action.href} className={buttonClassName({ variant: "secondary", className: "mt-4" })}>
-          {action.label}
-        </Link>
-      )}
-    </div>
+    <StatePanel
+      icon={<AlertCircleIcon />}
+      tone={tone}
+      title={title}
+      message={message}
+      className={className}
+      action={
+        (onRetry || action) && (
+          <>
+            {onRetry && (
+              <Button variant="secondary" onClick={onRetry}>
+                다시 시도
+              </Button>
+            )}
+            {action && (
+              // Button은 <button>이라 링크에는 같은 secondary·md 모양의 클래스를 입힌다
+              <Link href={action.href} className={buttonClassName({ variant: "secondary" })}>
+                {action.label}
+              </Link>
+            )}
+          </>
+        )
+      }
+    />
   );
 }

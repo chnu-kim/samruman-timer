@@ -11,6 +11,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EditableText } from "@/components/ui/EditableText";
 import { FormDialog } from "@/components/ui/FormDialog";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { StatePanel } from "@/components/ui/StatePanel";
 import { MoreMenu } from "@/components/ui/MoreMenu";
 import { PlusIcon, TimerIcon, LinkIcon, ChartBarIcon, SettingsIcon } from "@/components/ui/Icons";
 import { ProjectDetailSkeleton } from "@/components/ui/Skeleton";
@@ -402,23 +403,29 @@ export default function ProjectDetailPage() {
     return <ProjectDetailSkeleton />;
   }
 
+  // 못 찾음·실패 화면도 골격과 같은 첫 화면 높이를 둔다. 골격(첫 화면을 채움) 뒤에 짧은 안내만 그리면
+  // 첫 화면 밖에 있던 footer가 안으로 올라와 레이아웃 이동이 생긴다. 안내 블록 위치는 전역 404와 같다
   if (notFound) {
     return (
-      <ErrorState
-        tone="neutral"
-        title="프로젝트를 찾을 수 없습니다"
-        message="삭제되었거나 주소가 잘못되었습니다."
-        action={{ href: "/projects", label: "프로젝트 목록으로" }}
-      />
+      <section className={FILL_FIRST_SCREEN}>
+        <ErrorState
+          tone="neutral"
+          title="프로젝트를 찾을 수 없습니다"
+          message="삭제되었거나 주소가 잘못되었습니다."
+          action={{ href: "/projects", label: "프로젝트 목록으로" }}
+        />
+      </section>
     );
   }
 
   if (error || !project) {
     return (
-      <ErrorState
-        message="프로젝트를 불러오지 못했습니다."
-        onRetry={async () => { setError(false); setLoading(true); await fetchProject(); setLoading(false); }}
-      />
+      <section className={FILL_FIRST_SCREEN}>
+        <ErrorState
+          message="프로젝트를 불러오지 못했습니다."
+          onRetry={async () => { setError(false); setLoading(true); await fetchProject(); setLoading(false); }}
+        />
+      </section>
     );
   }
 
@@ -580,26 +587,23 @@ export default function ProjectDetailPage() {
           />
         ) : (
           <>
-            <div className="py-16 text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-                <TimerIcon className="w-8 h-8 text-muted-foreground" />
-              </div>
-              {/* 만들 수 있는 소유자에게는 만들면 생기는 것을, 시청자에게는 지금 상태만 한 문장으로 */}
-              <p className="mt-4 text-muted-foreground">
-                {isOwner
+            {/* 만들 수 있는 소유자에게는 만들면 생기는 것을, 시청자에게는 지금 상태만 한 문장으로 */}
+            <StatePanel
+              icon={<TimerIcon />}
+              message={
+                isOwner
                   ? "타이머를 만들면 방송 화면에 띄울 카운트다운과 OBS 주소가 생깁니다."
-                  : "아직 타이머가 없습니다."}
-              </p>
-              {isOwner && (
-                <Button
-                  className="mt-4"
-                  onClick={() => { setFormKey((k) => k + 1); setShowForm(true); }}
-                >
-                  <PlusIcon className="w-4 h-4 mr-1" />
-                  타이머 만들기
-                </Button>
-              )}
-            </div>
+                  : "아직 타이머가 없습니다."
+              }
+              action={
+                isOwner && (
+                  <Button onClick={() => { setFormKey((k) => k + 1); setShowForm(true); }}>
+                    <PlusIcon className="w-4 h-4 mr-1" />
+                    타이머 만들기
+                  </Button>
+                )
+              }
+            />
             {/* 타이머를 삭제한 뒤에도 남은 목표 기록은 볼 수 있게 목표가 있으면 보여 준다 */}
             {(goalsError || (goals?.length ?? 0) > 0) && goalSection("mt-6")}
           </>
