@@ -1,14 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDB, generateId, nowISO, withErrorHandler } from "@/lib/db";
-import { parseProjectListParams, queryProjects } from "./_shared";
 import type { CreateProjectRequest } from "@/types";
-
-export const GET = withErrorHandler(async (request: NextRequest) => {
-  const db = await getDB();
-  const params = parseProjectListParams(request.nextUrl.searchParams);
-  const result = await queryProjects(db, params);
-  return NextResponse.json({ data: result });
-});
 
 export const POST = withErrorHandler(async (request: NextRequest) => {
   const userId = request.headers.get("x-user-id");

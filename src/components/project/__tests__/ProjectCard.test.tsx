@@ -7,7 +7,6 @@ const project: ProjectListItem = {
   id: "abc123",
   name: "방송 프로젝트",
   description: null,
-  ownerNickname: "삼루먼",
   timerCount: 0,
   timerStatus: null,
   remainingSeconds: null,
@@ -58,14 +57,6 @@ describe("ProjectCard", () => {
     expect(screen.getByText("만료")).toBeInTheDocument();
   });
 
-  // C099: '내 프로젝트' 탭에서는 소유자 이름이 반복될 뿐이다
-  it("showOwner가 false면 소유자 이름을 숨긴다", () => {
-    const { rerender } = render(<ProjectCard project={project} />);
-    expect(screen.getByText("삼루먼")).toBeInTheDocument();
-    rerender(<ProjectCard project={project} showOwner={false} />);
-    expect(screen.queryByText("삼루먼")).not.toBeInTheDocument();
-  });
-
   // C100·R10: 설명이 없으면 빈 문단을 남기지 않는다(그리드 높이는 위 영역의 sm 최소 높이로 맞춘다)
   it("설명이 없으면 문단을 렌더하지 않는다", () => {
     const { container, rerender } = render(<ProjectCard project={project} />);
@@ -76,19 +67,19 @@ describe("ProjectCard", () => {
 
   // R10: 날짜만 '오늘'로 읽히지 않도록 '생성'을 붙이고, 항목 사이 '·'가 링크 설명에도 남는다
   it("메타 줄은 '생성 {날짜}'이고 <time>에 원래 시각을 싣는다", () => {
-    const { container } = render(<ProjectCard project={project} showOwner={false} />);
+    const { container } = render(<ProjectCard project={project} />);
     const time = container.querySelector("time");
     expect(time).toHaveAttribute("dateTime", project.createdAt);
     expect(screen.getByRole("link", { name: "방송 프로젝트" })).toHaveAccessibleDescription(/^생성 /);
   });
 
-  it("상태·소유자·생성일을 '·'로 구분한다", () => {
+  it("상태·생성일을 '·'로 구분한다", () => {
     render(
       <ProjectCard project={{ ...project, timerCount: 1, timerStatus: "RUNNING", remainingSeconds: 58 * 60 }} />,
     );
-    // jsdom은 요소 경계의 공백을 잘라 '·' 양옆 공백이 빠진다(Chrome 접근성 트리에서는 '실행 중 · 58분 남음 · 삼루먼 · 생성 …')
+    // jsdom은 요소 경계의 공백을 잘라 '·' 양옆 공백이 빠진다(Chrome 접근성 트리에서는 '실행 중 · 58분 남음 · 생성 …')
     expect(screen.getByRole("link", { name: "방송 프로젝트" })).toHaveAccessibleDescription(
-      /^실행 중 · 58분 남음 ?· ?삼루먼 ?· ?생성 /,
+      /^실행 중 · 58분 남음 ?· ?생성 /,
     );
   });
 

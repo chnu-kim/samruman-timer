@@ -5,8 +5,6 @@ import type { ProjectListItem } from "@/types";
 
 interface ProjectCardProps {
   project: ProjectListItem;
-  /** 소유자 이름 표시. '내 프로젝트' 탭에서는 모두 본인이라 끈다 */
-  showOwner?: boolean;
   className?: string;
 }
 
@@ -48,12 +46,11 @@ function timerStatusLine(project: ProjectListItem): React.ReactNode {
   return null;
 }
 
-export function ProjectCard({ project, showOwner = true, className }: ProjectCardProps) {
+export function ProjectCard({ project, className }: ProjectCardProps) {
   const titleId = `project-title-${project.id}`;
   const metaId = `project-meta-${project.id}`;
   const metaItems = [
     timerStatusLine(project),
-    showOwner ? <span>{project.ownerNickname}</span> : null,
     <span>
       생성 <time dateTime={project.createdAt}>{formatRelativeDate(project.createdAt)}</time>
     </span>,
