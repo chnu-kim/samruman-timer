@@ -132,7 +132,6 @@ export interface ProjectListItem {
   id: string;
   name: string;
   description: string | null;
-  ownerNickname: string;
   timerCount: number;
   /** 조회 시점에 계산한 타이머 상태. 타이머가 없으면 null */
   timerStatus: Exclude<TimerStatus, "DELETED"> | null;

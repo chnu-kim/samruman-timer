@@ -240,7 +240,6 @@ Next 16 관례상 `proxy.ts`가 표준이지만 이 프로젝트는 `middleware.
 |--------|------|------|
 | POST | `/api/projects` | 프로젝트 생성 |
 | GET | `/api/projects/mine` | 내 프로젝트 목록 |
-| GET | `/api/projects/others` | 다른 사용자 프로젝트 목록 |
 | PATCH / DELETE | `/api/projects/[id]` | 프로젝트 수정 / 삭제 |
 | POST | `/api/projects/[id]/timers` | 타이머 생성 |
 | POST | `/api/projects/[id]/goals` | 목표 생성 |

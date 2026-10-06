@@ -13,6 +13,6 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
 
   const db = await getDB();
   const params = parseProjectListParams(request.nextUrl.searchParams);
-  const result = await queryProjects(db, params, { userId, mode: "only" });
+  const result = await queryProjects(db, params, userId);
   return NextResponse.json({ data: result });
 });

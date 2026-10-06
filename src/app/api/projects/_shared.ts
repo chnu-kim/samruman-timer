@@ -10,11 +10,6 @@ interface ProjectListParams {
   sort: string;
 }
 
-interface OwnerFilter {
-  userId: string;
-  mode: "only" | "exclude";
-}
-
 export function parseProjectListParams(searchParams: URLSearchParams): ProjectListParams {
   // 이름 최대 길이(100자)보다 긴 검색어는 의미가 없고 LIKE 비용만 키우므로 자른다
   const q = searchParams.get("q")?.trim().slice(0, MAX_QUERY_LENGTH) || undefined;
@@ -57,36 +52,28 @@ export function summarizeTimer(t: TimerSnapshot): Pick<ProjectListItem, "timerSt
   return { timerStatus: "EXPIRED", remainingSeconds: 0, scheduledStartAt: null };
 }
 
+/** 소유자의 프로젝트 목록. 다른 사람의 프로젝트는 목록으로 드러내지 않는다(상세는 링크로만 연다) */
 export async function queryProjects(
   db: D1Database,
   params: ProjectListParams,
-  ownerFilter?: OwnerFilter,
+  ownerUserId: string,
 ): Promise<{ projects: ProjectListItem[]; pagination: Pagination }> {
   const { searchQuery, page, limit, sort } = params;
 
-  const conditions: string[] = ["p.status != 'DELETED'"];
-  const binds: unknown[] = [];
-
-  if (ownerFilter) {
-    conditions.push(
-      ownerFilter.mode === "only"
-        ? "p.owner_user_id = ?"
-        : "p.owner_user_id != ?",
-    );
-    binds.push(ownerFilter.userId);
-  }
+  const conditions: string[] = ["p.status != 'DELETED'", "p.owner_user_id = ?"];
+  const binds: unknown[] = [ownerUserId];
 
   if (searchQuery) {
-    conditions.push("(p.name LIKE ? OR p.description LIKE ? OR u.nickname LIKE ?)");
+    conditions.push("(p.name LIKE ? OR p.description LIKE ?)");
     const like = `%${searchQuery}%`;
-    binds.push(like, like, like);
+    binds.push(like, like);
   }
 
   const whereClause = conditions.join(" AND ");
   const orderClause = sort === "name" ? "p.name ASC" : "p.created_at DESC";
 
   // Count query
-  const countSql = `SELECT COUNT(*) AS cnt FROM projects p JOIN users u ON u.id = p.owner_user_id WHERE ${whereClause}`;
+  const countSql = `SELECT COUNT(*) AS cnt FROM projects p WHERE ${whereClause}`;
   const countResult = await db.prepare(countSql).bind(...binds).first<{ cnt: number }>();
   const total = countResult?.cnt ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / limit));
@@ -94,12 +81,11 @@ export async function queryProjects(
 
   // Data query
   const dataSql = `
-    SELECT p.id, p.name, p.description, u.nickname AS owner_nickname,
+    SELECT p.id, p.name, p.description,
            (SELECT COUNT(*) FROM timers t WHERE t.project_id = p.id AND t.status != 'DELETED') AS timer_count,
            p.created_at,
            tm.status AS timer_status, tm.base_remaining_seconds, tm.last_calculated_at, tm.scheduled_start_at
     FROM projects p
-    JOIN users u ON u.id = p.owner_user_id
     -- 프로젝트당 비삭제 타이머는 1개(idx_timers_one_per_project)라 카드가 중복되지 않는다
     LEFT JOIN timers tm ON tm.project_id = p.id AND tm.status != 'DELETED'
     WHERE ${whereClause}
@@ -113,7 +99,6 @@ export async function queryProjects(
       id: string;
       name: string;
       description: string | null;
-      owner_nickname: string;
       timer_count: number;
       created_at: string;
       timer_status: TimerStatus | null;
@@ -126,7 +111,6 @@ export async function queryProjects(
     id: r.id,
     name: r.name,
     description: r.description,
-    ownerNickname: r.owner_nickname,
     timerCount: r.timer_count,
     ...summarizeTimer({
       status: r.timer_status ?? null,

@@ -49,9 +49,8 @@ src/
         me/route.ts                     — 현재 사용자 정보
       projects/
         _shared.ts                      — 목록 조회 파라미터 파싱·쿼리 공용 로직
-        route.ts                        — 프로젝트 목록/생성
-        mine/route.ts                   — 내 프로젝트 목록
-        others/route.ts                 — 다른 사용자 프로젝트 목록
+        route.ts                        — 프로젝트 생성
+        mine/route.ts                   — 내 프로젝트 목록(목록은 이것뿐)
         [id]/
           route.ts                      — 프로젝트 상세/수정/삭제
           timers/route.ts               — 타이머 목록/생성

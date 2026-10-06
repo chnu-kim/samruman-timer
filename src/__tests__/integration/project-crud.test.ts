@@ -14,7 +14,8 @@ vi.mock("@/lib/db", async (importOriginal) => {
 });
 
 import { getDB } from "@/lib/db";
-import { POST as createProject, GET as listProjects } from "@/app/api/projects/route";
+import { POST as createProject } from "@/app/api/projects/route";
+import { GET as listProjects } from "@/app/api/projects/mine/route";
 import { GET as getProject, PATCH as patchProject, DELETE as deleteProject } from "@/app/api/projects/[id]/route";
 
 const AUTH_HEADERS = {
@@ -53,14 +54,13 @@ describe("프로젝트 CRUD 통합 테스트", () => {
           id: "proj-1",
           name: "통합테스트 프로젝트",
           description: "설명입니다",
-          owner_nickname: "테스터",
           timer_count: 0,
           created_at: "2025-01-01T00:00:00Z",
         },
       ],
     });
 
-    const req = createGetRequest("/api/projects");
+    const req = createGetRequest("/api/projects/mine", AUTH_HEADERS);
     const res = await listProjects(req as never);
     const body = await parseJson(res);
 
